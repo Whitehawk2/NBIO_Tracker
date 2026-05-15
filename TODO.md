@@ -2,7 +2,10 @@
 
 Roadmap for NBIO Tracker, in descending order of priority.
 
-## 1. Verify and merge PR #2 (UX phase 1)
+Each item is also tracked as a GitHub issue (linked below) — close the issue
+when done, and tick the item here. The two views are kept in sync manually.
+
+## 1. Verify and merge PR #2 (UX phase 1) — [#3](https://github.com/Whitehawk2/NBIO_Tracker/issues/3)
 
 Manual desktop-Chrome verification of the three UX fixes in
 **[PR #2](https://github.com/Whitehawk2/NBIO_Tracker/pull/2)**:
@@ -18,7 +21,7 @@ If acceptable: merge PR #2 into `claude/newborn-tracker-app-PoMGY` so it
 rolls into the standing **[PR #1](https://github.com/Whitehawk2/NBIO_Tracker/pull/1)**
 to `master`.
 
-## 2. Quick server startup script + faster backup setup
+## 2. Quick server startup script + faster backup setup — [#4](https://github.com/Whitehawk2/NBIO_Tracker/issues/4)
 
 Backup setup currently requires a manual `rclone authorize` then
 `rclone config create gdrive drive ...` two-step (see
@@ -35,11 +38,13 @@ Goals:
   keep secrets out of the image, make the bootstrap a single artifact
   that can later be a `Secret` / `ConfigMap`, avoid baked-in state in
   the container image.
+- Script header should note Nix users should ignore this and use
+  `nix profile install nixpkgs#nbio` / the NixOS module from item 5.
 
 Suggested shape: a tiny bash script + a `Makefile` thin wrapper. No new
 runtime deps.
 
-## 3. Tailscale defaults + one-shot `tailscale serve`
+## 3. Tailscale defaults + one-shot `tailscale serve` — [#5](https://github.com/Whitehawk2/NBIO_Tracker/issues/5)
 
 - `docker-compose.yml`: bind to `127.0.0.1:8000:8000` by default
   (Tailscale-only; no LAN exposure). Document the override for users
@@ -53,7 +58,7 @@ runtime deps.
 - Skip the serve step cleanly when Tailscale isn't installed (just
   print "Tailscale not detected; skipping HTTPS setup").
 
-## 4. Runtime-changeable settings
+## 4. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 
 Move things that currently live in env vars or first-launch onboarding
 onto a settings page editable from the running app:
@@ -68,20 +73,41 @@ truly global toggles. UI: minimal `/settings` page with HTMX form posts
 to a new `routes/settings.py`. Reuse existing `repo.upsert_device`
 where possible.
 
-## 5. Nix + flake support
+## 5. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
 
-Add a `flake.nix` (with a `shell.nix` shim for non-flake users) covering:
+Two-pronged: dev shell **and** an installable binary suitable for
+`nix profile install nixpkgs#nbio`. Nix users are assumed advanced and
+will skip the setup script entirely.
 
-- A dev shell with the right Python (3.12), uvicorn, sqlite, rclone.
-- A `packages.nbio` derivation buildable via `nix build`.
-- A NixOS module exposing `services.nbio.enable = true` so it can be
-  deployed onto NixOS hosts without Docker.
+Targets:
+- **`devShells.default`** for contributors — Python 3.12, uvicorn,
+  sqlite, rclone, node (for `node --check` of `app.js`):
+  ```bash
+  nix develop
+  ```
+- **`packages.default` / `packages.nbio`** — wraps the FastAPI app
+  behind a launcher script so:
+  ```bash
+  nix profile install github:whitehawk2/nbio_tracker
+  nbio          # uvicorn against ~/.local/share/nbio/app.db (or $NBIO_DATA_DIR)
+  ```
+  Effectively replaces the Docker container for Nix users.
+- **`nixosModules.default`** exposing `services.nbio.enable = true`
+  with options for port, data dir, timezone, baby name, and the
+  backup sidecar's rclone remote / retention. Lives alongside the
+  package so one flake input gives both the binary and the systemd
+  service.
 
 Stretch: a container image built with `dockerTools.buildLayeredImage`
 for an image-build path that's reproducible without `apt-get` —
 tangentially helpful for the k8s scenario in item 2.
 
-## 6. Two additional Catppuccin themes
+The setup script from item 2 will print a header comment pointing Nix
+users here so the two paths stay clearly separated.
+
+## 6. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
+
+(Blocked on item 4 — needs the settings UI to host the picker.)
 
 Add palettes alongside the current "warm" theme. Recommended starting
 pair from the Catppuccin family:
