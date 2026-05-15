@@ -128,11 +128,11 @@
   }
   function closeModal(backdrop) { backdrop.remove(); }
 
-  // ----- time chips
+  // ----- time chips + always-visible datetime input
   function buildTimeChips(initialOffsetMin = 0) {
-    const state = { offsetSec: initialOffsetMin * 60 };
+    const state = { offsetSec: initialOffsetMin * 60, chipSticky: initialOffsetMin === 0 ? "now" : null };
     const wrap = document.createElement("div");
-    wrap.className = "modal-section";
+    wrap.className = "modal-section time-chooser";
 
     const readout = document.createElement("div");
     readout.className = "modal-time-readout";
@@ -146,44 +146,69 @@
       { label: "-30m", add: 30 * 60 },
       { label: "-1h", add: 60 * 60 },
       { label: "-2h", add: 120 * 60 },
-      { label: "more…", more: true },
     ];
 
-    const moreInput = document.createElement("input");
-    moreInput.type = "datetime-local"; moreInput.style.marginTop = "10px"; moreInput.hidden = true;
-    moreInput.addEventListener("input", () => {
-      if (!moreInput.value) return;
-      const d = new Date(moreInput.value);
-      state.offsetSec = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
-      render();
-    });
+    const dtInput = document.createElement("input");
+    dtInput.type = "datetime-local";
+    dtInput.className = "datetime-input";
+    dtInput.step = "60";
 
     function getDate() { return new Date(Date.now() - state.offsetSec * 1000); }
-    function render() {
+
+    function toLocalInputValue(d) {
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function formatReadout(d) {
+      const dow = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+      const mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+      const today = new Date();
+      const sameDay = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+      const dateBit = sameDay ? "today" : `${dow} ${d.getDate()} ${mon}`;
+      const rel = state.offsetSec === 0 ? "now" : fmtRel(d.toISOString());
+      return `<b>${rel}</b> · ${dateBit}, ${fmtHHMM(d.toISOString())}`;
+    }
+
+    function render({ syncInput = true } = {}) {
       const d = getDate();
-      if (state.offsetSec === 0) {
-        readout.innerHTML = `<b>now</b> · ${fmtHHMM(d.toISOString())}`;
-      } else {
-        readout.innerHTML = `<b>${fmtRel(d.toISOString())}</b> · ${fmtHHMM(d.toISOString())}`;
-      }
-      $$(".chip[data-label]", chips).forEach((c) => c.classList.toggle("selected",
-        (c.dataset.label === "now" && state.offsetSec === 0)));
+      readout.innerHTML = formatReadout(d);
+      if (syncInput) dtInput.value = toLocalInputValue(d);
+      $$(".chip[data-label]", chips).forEach((c) =>
+        c.classList.toggle("selected", state.chipSticky === c.dataset.label)
+      );
     }
 
     buttons.forEach((b) => {
       const btn = document.createElement("button");
+      btn.type = "button";
       btn.className = "chip"; btn.dataset.label = b.label; btn.textContent = b.label;
       btn.addEventListener("click", () => {
         haptic(8);
-        if ("set" in b) state.offsetSec = b.set;
-        else if ("add" in b) state.offsetSec += b.add;
-        else if (b.more) { moreInput.hidden = !moreInput.hidden; if (!moreInput.hidden) moreInput.focus(); return; }
+        if ("set" in b) { state.offsetSec = b.set; state.chipSticky = b.label; }
+        else if ("add" in b) { state.offsetSec += b.add; state.chipSticky = null; }
         render();
       });
       chips.appendChild(btn);
     });
 
-    wrap.append(readout, chips, moreInput);
+    // Editing the input is the user picking a custom time — chips become unselected.
+    dtInput.addEventListener("input", () => {
+      if (!dtInput.value) return;
+      const d = new Date(dtInput.value);
+      if (isNaN(d.getTime())) return;
+      state.offsetSec = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+      state.chipSticky = null;
+      render({ syncInput: false });
+    });
+    // Tap the input on desktop to open the native picker if supported.
+    dtInput.addEventListener("click", () => {
+      if (typeof dtInput.showPicker === "function") {
+        try { dtInput.showPicker(); } catch (_) {}
+      }
+    });
+
+    wrap.append(readout, chips, dtInput);
     render();
     return { el: wrap, getDate };
   }
@@ -474,6 +499,12 @@
   }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>\"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
 
+  function localISODate(iso) {
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  }
+
   function insertOrUpdateRow(ev) {
     const list = ensureList();
     if (!list) return;
@@ -481,7 +512,13 @@
     if (!row) {
       row = document.createElement("li");
       row.className = "event-row fresh";
-      list.prepend(row);
+      const day = localISODate(ev.occurred_at);
+      const header = list.querySelector(`.day-header[data-day="${day}"]`);
+      if (header) {
+        header.insertAdjacentElement("afterend", row);
+      } else {
+        list.prepend(row);
+      }
       setTimeout(() => row.classList.remove("fresh"), 1500);
     }
     row.dataset.id = ev.id;
