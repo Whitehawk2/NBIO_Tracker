@@ -1,0 +1,23 @@
+<section class="last-days" aria-label="Last 3 days">
+  <h2 class="section-title">Last 3 days</h2>
+  <table class="last-days-table">
+    <thead>
+      <tr>
+        <th class="day-col"></th>
+        <th><span aria-hidden="true">🤱</span> feeds</th>
+        <th><span aria-hidden="true">💦</span> wees</th>
+        <th><span aria-hidden="true">💩</span> poos</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in last_days %}
+        <tr>
+          <td class="day-col">{{ row.label }}</td>
+          <td>{{ row.feed }}</td>
+          <td>{{ row.wee }}</td>
+          <td>{{ row.poo }}{% if row.poo == 0 %} <span class="hint" title="no poo logged that day">·</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>

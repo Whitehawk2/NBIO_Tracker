@@ -4,6 +4,8 @@
 
 {% include "partials/today_card.html" %}
 
+{% include "partials/last_days.html" %}
+
 <section class="tiles" aria-label="Quick log">
   {% include "partials/tile_feed.html" %}
   {% include "partials/tile_wee.html" %}
@@ -11,11 +13,14 @@
 </section>
 
 <section class="event-list-wrap" aria-label="Recent events">
-  <h2 class="section-title">Recent</h2>
-  {% if events %}
+  <h2 class="section-title">Last 3 days</h2>
+  {% if grouped_events %}
     <ul class="event-list" id="event-list">
-      {% for event in events %}
-        {% include "partials/event_row.html" %}
+      {% for group in grouped_events %}
+        <li class="day-header" data-day="{{ group.day }}" aria-label="{{ group.label }}">{{ group.label }}</li>
+        {% for event in group.events %}
+          {% include "partials/event_row.html" %}
+        {% endfor %}
       {% endfor %}
     </ul>
   {% else %}
