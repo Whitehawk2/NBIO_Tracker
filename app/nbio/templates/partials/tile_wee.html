@@ -1,0 +1,16 @@
+<button class="tile tile-wee" data-type="wee" aria-label="Log wee">
+  <div class="tile-head">
+    <span class="emoji" aria-hidden="true">💦</span>
+    <span class="label">WEE</span>
+  </div>
+  <div class="tile-ago" id="ago-wee">
+    {% if today.last.wee %}
+      <span data-rel="{{ today.last.wee.occurred_at }}">{{ today.last.wee.occurred_at | relative }}</span>
+      {% if today.last.wee.actor_color %}
+        <span class="actor-dot" style="background: {{ today.last.wee.actor_color }}" title="{{ today.last.wee.actor_name or '' }}"></span>
+      {% endif %}
+    {% else %}
+      <span class="muted">no wees yet</span>
+    {% endif %}
+  </div>
+</button>

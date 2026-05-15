@@ -1,0 +1,15 @@
+<section class="today-card" id="today-card" aria-label="Today">
+  <div class="counts">
+    <div><b>{{ today.counts.feed }}</b><span>feeds</span></div>
+    <div><b>{{ today.counts.wee }}</b><span>wees</span></div>
+    <div><b>{{ today.counts.poo }}</b><span>poos</span></div>
+  </div>
+  {% if today.last.feed %}
+    <div class="last-feed">
+      <span>last feed</span>
+      <b data-rel="{{ today.last.feed.occurred_at }}">{{ today.last.feed.occurred_at | relative }}</b>
+      {% if today.last.feed.feed_side %}· {{ today.last.feed.feed_side }}{% endif %}
+      {% if today.last.feed.feed_duration_min %}· {{ today.last.feed.feed_duration_min }} min{% endif %}
+    </div>
+  {% endif %}
+</section>

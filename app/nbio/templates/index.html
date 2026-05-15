@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block nav_home %}active{% endblock %}
+{% block content %}
+
+{% include "partials/today_card.html" %}
+
+<section class="tiles" aria-label="Quick log">
+  {% include "partials/tile_feed.html" %}
+  {% include "partials/tile_wee.html" %}
+  {% include "partials/tile_poo.html" %}
+</section>
+
+<section class="event-list-wrap" aria-label="Recent events">
+  <h2 class="section-title">Recent</h2>
+  {% if events %}
+    <ul class="event-list" id="event-list">
+      {% for event in events %}
+        {% include "partials/event_row.html" %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Quiet night. 💤</p>
+  {% endif %}
+</section>
+
+{% endblock %}

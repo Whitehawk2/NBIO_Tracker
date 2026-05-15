@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.env.local
+.idea/
+.vscode/
+
+# runtime data — never commit
+data/*
+!data/.gitkeep
