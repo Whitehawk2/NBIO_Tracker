@@ -70,20 +70,46 @@ home server is the intended deployment, but any reachable host works.
 ```bash
 git clone https://github.com/Whitehawk2/NBIO_Tracker.git
 cd NBIO_Tracker
-cp .env.example .env       # edit BABY_NAME, TZ, APP_PORT to taste
-docker compose up -d --build
+./setup.sh             # or: make setup
 ```
+
+`setup.sh` is idempotent and walks you through:
+- `.env` (timezone, baby name, port, …) — one prompt per key with sensible defaults
+- `data/` directory skeleton
+- image build
+- optional Google Drive backup bootstrap (paste the JSON blob from
+  `rclone authorize "drive"` once; the script handles the rest)
+- `docker compose up -d` + healthz poll
+
+CI / fully-automated installs: set `NBIO_NONINTERACTIVE=1` plus the relevant
+`NBIO_*` env vars (`NBIO_TZ`, `NBIO_BABY_NAME`, `NBIO_APP_PORT`,
+`NBIO_RCLONE_TOKEN`, …). See `./setup.sh --help` for the full list.
+
+> **Nix users:** `./setup.sh` is for the Docker path only. The Nix flake
+> (issue [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)) will
+> ship a `nix profile install`-ready package and a NixOS module that
+> replace this whole setup — ignore the script and use those instead.
 
 Verify it's up:
 
 ```bash
 curl http://localhost:8000/healthz     # → {"status":"ok"}
-docker compose ps                      # both nbio-app and nbio-backup healthy
-docker compose logs -f app             # follow live logs (Ctrl-C to exit)
+make status                            # both nbio-app and nbio-backup running
+make logs                              # follow live logs (Ctrl-C to exit)
 ```
 
 Then open `http://<host>:8000` in a browser. On a phone, see
 [Installing on your phone](#installing-on-your-phone).
+
+### Manual setup (if you'd rather not use the script)
+
+```bash
+cp .env.example .env       # edit BABY_NAME, TZ, APP_PORT to taste
+docker compose up -d --build
+```
+
+For Google Drive backups, see [Google Drive backups](#google-drive-backups)
+below — it's a two-step manual dance the script collapses into one paste.
 
 `.env` knobs:
 
