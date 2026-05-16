@@ -31,9 +31,7 @@ os.environ.setdefault("TZ", "UTC")
 # before the Settings singleton is created (i.e. before any
 # `from nbio.config import settings` happens) — conftest loads first, so
 # this wins.
-os.environ.setdefault(
-    "DB_PATH", str(Path(tempfile.gettempdir()) / "nbio-test-lifespan.db")
-)
+os.environ.setdefault("DB_PATH", str(Path(tempfile.gettempdir()) / "nbio-test-lifespan.db"))
 
 
 def _apply_schema(conn: sqlite3.Connection) -> None:
