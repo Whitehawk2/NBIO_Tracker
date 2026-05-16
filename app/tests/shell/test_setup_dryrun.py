@@ -3,7 +3,14 @@ setup.sh --dry-run in NBIO_NONINTERACTIVE mode.
 
 Run inside an isolated tmpdir copy of the repo so the test can't touch
 the developer's workspace.
+
+setup.sh's pre-flight checks require `docker` + `docker compose` on PATH.
+The CI `shell` job installs them; the CI `test` job does not. Each test
+declares the binaries it needs via `pytest.mark.skipif` so the suite is
+clean on either runner. The `shell` CI job also exercises setup.sh
+directly outside pytest, so this coverage isn't lost when these skip.
 """
+
 import os
 import shutil
 import subprocess
@@ -12,6 +19,11 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+requires_docker = pytest.mark.skipif(
+    shutil.which("docker") is None,
+    reason="setup.sh pre-flight needs docker on PATH",
+)
 
 
 @pytest.fixture
@@ -40,6 +52,7 @@ def _env(**extra):
     return e
 
 
+@requires_docker
 def test_dryrun_defaults_write_env(staged_repo):
     """Fresh run: APP_BIND defaults to 127.0.0.1, .env is created."""
     result = subprocess.run(
@@ -60,6 +73,7 @@ def test_dryrun_defaults_write_env(staged_repo):
     assert "APP_BIND=127.0.0.1" in text
 
 
+@requires_docker
 def test_dryrun_app_bind_override(staged_repo):
     """NBIO_APP_BIND=0.0.0.0 propagates into .env."""
     result = subprocess.run(
@@ -75,6 +89,7 @@ def test_dryrun_app_bind_override(staged_repo):
     assert "APP_BIND=0.0.0.0" in text
 
 
+@requires_docker
 def test_dryrun_is_idempotent(staged_repo):
     """Running twice doesn't clobber the existing .env keys."""
     e = _env(NBIO_BABY_NAME="Custom")
