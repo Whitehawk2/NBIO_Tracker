@@ -818,5 +818,55 @@
     });
     window.addEventListener("online", () => { flushOutbox(); connectSSE(); });
     setInterval(flushOutbox, 30 * 1000);
+
+    registerServiceWorker();
   });
+
+  /* ----- Service worker registration + "Update available" toast
+   *
+   * The server-side /static/sw.js route (routes/sw.py) returns the SW
+   * with the cache name templated to a hash of the current static
+   * tree. When the shell changes, the browser fetches the new SW,
+   * installs it, activates it — and because the cache name differs
+   * from the previously-installed SW's, the activate handler purges
+   * the old cache. The next page load fetches the fresh shell.
+   *
+   * The user-visible toast: when an UPDATE (not a first install)
+   * completes, the new SW becomes the controller via skipWaiting +
+   * clients.claim. The toast tells the user "tap to reload" so the
+   * page picks up the new JS that the new SW has now cached.
+   * navigator.serviceWorker.controller is truthy only on subsequent
+   * registrations — that's how we differentiate first install from
+   * update.  (See issue #23.)
+   */
+  function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register("/static/sw.js").then((reg) => {
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener("statechange", () => {
+          if (newWorker.state === "activated" && hadController) {
+            showUpdateAvailableToast();
+          }
+        });
+      });
+    }).catch(console.warn);
+  }
+
+  function showUpdateAvailableToast() {
+    const root = $("#toast-root");
+    if (!root) return;
+    // Don't stack multiple update toasts on the same page
+    if (root.querySelector(".toast-update")) return;
+    const t = document.createElement("div");
+    t.className = "toast toast-update";
+    t.innerHTML = `Update available · <button>Reload</button>`;
+    t.querySelector("button").addEventListener("click", () => {
+      window.location.reload();
+    });
+    root.appendChild(t);
+    // Sticky on purpose — let the user decide when to reload
+  }
 })();
