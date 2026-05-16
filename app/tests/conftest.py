@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -22,6 +23,17 @@ import pytest
 # Force UTC for every test so _local_hhmm / _group_events_by_local_day
 # are deterministic regardless of where CI runs. Set before any nbio import.
 os.environ.setdefault("TZ", "UTC")
+
+# The FastAPI lifespan calls db.init_db() which does
+# `Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)`.
+# The production default `/data/app.db` is fine inside the container but
+# raises PermissionError on a CI runner that isn't root. Point at /tmp
+# before the Settings singleton is created (i.e. before any
+# `from nbio.config import settings` happens) — conftest loads first, so
+# this wins.
+os.environ.setdefault(
+    "DB_PATH", str(Path(tempfile.gettempdir()) / "nbio-test-lifespan.db")
+)
 
 
 def _apply_schema(conn: sqlite3.Connection) -> None:
