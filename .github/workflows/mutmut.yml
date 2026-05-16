@@ -19,8 +19,8 @@ jobs:
     env:
       TZ: UTC
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -42,7 +42,7 @@ jobs:
           mutmut junitxml > mutmut-results.xml || true
       - name: Upload mutmut report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mutmut-report
           path: |
