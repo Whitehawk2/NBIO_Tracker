@@ -22,11 +22,14 @@
 #   NBIO_TZ                 timezone, e.g. Europe/London
 #   NBIO_BABY_NAME          baby's display name
 #   NBIO_APP_PORT           host port (mapped to container :8000)
+#   NBIO_APP_BIND           host interface (default 127.0.0.1; 0.0.0.0 for LAN)
 #   NBIO_RCLONE_REMOTE      rclone remote name (default: gdrive)
 #   NBIO_RCLONE_TOKEN       JSON token blob from `rclone authorize "drive"`
 #                           (unset / empty = skip remote backup setup)
 #   NBIO_RETAIN_LOCAL       local snapshots to keep
 #   NBIO_RETAIN_REMOTE_DAYS purge remote snapshots older than N days
+#   NBIO_TS_HOSTNAME        Tailscale hostname for the printed URL
+#                           (otherwise autodetected from `tailscale status`)
 #
 # Flags:
 #   --dry-run   run steps 1-3 only (no docker build / up). Useful for CI.
@@ -91,6 +94,45 @@ set_env_key() {
   fi
 }
 
+# Probe whether `tailscale` is installed AND signed in AND usable for serve.
+# Sets TS_PREFIX="" (no sudo needed) or "sudo" (escalation required).
+# Returns 1 when Tailscale is unavailable or sudo would block.
+TS_PREFIX=""
+probe_tailscale() {
+  TS_PREFIX=""
+  command -v tailscale >/dev/null 2>&1 || return 1
+  tailscale status >/dev/null 2>&1 || return 1
+  if tailscale serve status >/dev/null 2>&1; then
+    return 0
+  fi
+  command -v sudo >/dev/null 2>&1 || return 1
+  if (( NONINTERACTIVE )); then
+    sudo -n tailscale serve status >/dev/null 2>&1 || return 1
+  fi
+  TS_PREFIX="sudo"
+  return 0
+}
+
+# Autodetect Tailscale hostname for the printed URL.
+# Priority: NBIO_TS_HOSTNAME env → interactive prompt with autodetect default
+# → autodetect alone in non-interactive mode.
+ts_hostname() {
+  if [[ -n "${NBIO_TS_HOSTNAME:-}" ]]; then
+    echo "$NBIO_TS_HOSTNAME"; return
+  fi
+  local detected
+  detected=$(tailscale status --json 2>/dev/null \
+             | grep -oE '"DNSName":[[:space:]]*"[^"]+"' \
+             | head -1 | sed -E 's/.*"([^"]+)".*/\1/' \
+             | sed -E 's/\.$//' || true)
+  if (( NONINTERACTIVE )); then
+    echo "$detected"; return
+  fi
+  local val
+  read -r -p "  Tailscale hostname for the printed URL [${detected}]: " val
+  echo "${val:-$detected}"
+}
+
 # ----- 1. pre-flight ---------------------------------------------------------
 info "Pre-flight checks"
 if ! command -v docker >/dev/null 2>&1; then
@@ -120,6 +162,7 @@ fi
 current_tz=$(grep -E '^TZ='        .env | head -1 | cut -d= -f2- || echo "Europe/London")
 current_bn=$(grep -E '^BABY_NAME=' .env | head -1 | cut -d= -f2- || echo "Baby")
 current_ap=$(grep -E '^APP_PORT='  .env | head -1 | cut -d= -f2- || echo "8000")
+current_ab=$(grep -E '^APP_BIND='  .env | head -1 | cut -d= -f2- || echo "127.0.0.1")
 current_rr=$(grep -E '^RCLONE_REMOTE='     .env | head -1 | cut -d= -f2- || echo "gdrive")
 current_rl=$(grep -E '^RETAIN_LOCAL='      .env | head -1 | cut -d= -f2- || echo "7")
 current_rd=$(grep -E '^RETAIN_REMOTE_DAYS=' .env | head -1 | cut -d= -f2- || echo "30")
@@ -127,6 +170,7 @@ current_rd=$(grep -E '^RETAIN_REMOTE_DAYS=' .env | head -1 | cut -d= -f2- || ech
 set_env_key TZ                  "$(prompt TZ                  "$current_tz" "Timezone")"
 set_env_key BABY_NAME           "$(prompt BABY_NAME           "$current_bn" "Baby's display name")"
 set_env_key APP_PORT            "$(prompt APP_PORT            "$current_ap" "Host port")"
+set_env_key APP_BIND            "$(prompt APP_BIND            "$current_ab" "Host bind (127.0.0.1 = Tailscale-only; 0.0.0.0 = LAN)")"
 set_env_key RCLONE_REMOTE       "$(prompt RCLONE_REMOTE       "$current_rr" "rclone remote name")"
 set_env_key RETAIN_LOCAL        "$(prompt RETAIN_LOCAL        "$current_rl" "Local snapshots to keep")"
 set_env_key RETAIN_REMOTE_DAYS  "$(prompt RETAIN_REMOTE_DAYS  "$current_rd" "Remote retention (days)")"
@@ -193,16 +237,10 @@ EOF
   fi
 fi
 
-# ----- 6. Tailscale serve hook (issue #5) -----------------------------------
-# When #5 lands, this block will optionally run `tailscale serve --bg
-# https://localhost:${APP_PORT}` so the app is reachable on HTTPS via
-# MagicDNS. Hostname source priority: NBIO_TS_HOSTNAME env → prompt →
-# autodetect via `tailscale status --json`. For now: nothing.
-
-# ----- 7. bring up + healthz -------------------------------------------------
+# ----- 6. bring up + healthz -------------------------------------------------
 info "Starting the stack"
 docker compose up -d
-ok "containers running"
+ok "containers running (port bound to ${APP_BIND:-127.0.0.1}:${APP_PORT:-8000})"
 
 info "Waiting for /healthz (up to 30s)"
 healthy=0
@@ -218,24 +256,46 @@ else
   warn "/healthz did not respond within 30s — check 'docker compose logs app'"
 fi
 
+# ----- 7. Tailscale serve (HTTPS via MagicDNS) ------------------------------
+TS_REGISTERED=0
+TS_HOST=""
+if probe_tailscale; then
+  TS_HOST=$(ts_hostname)
+  info "Registering with tailscale serve (HTTPS via MagicDNS)"
+  if (( ${#TS_PREFIX} )); then
+    info "  (using sudo — you may be prompted for a password)"
+  fi
+  if $TS_PREFIX tailscale serve --bg --https=443 \
+       "http://localhost:${APP_PORT:-8000}" >/dev/null 2>&1; then
+    TS_REGISTERED=1
+    ok "tailscale serve registered → https://${TS_HOST:-<your-tailnet-host>}/"
+  else
+    warn "tailscale serve registration failed."
+    warn "Your tailnet may need MagicDNS + HTTPS Certificates enabled in the admin panel."
+    warn "App is still reachable locally on http://localhost:${APP_PORT:-8000}."
+  fi
+else
+  info "Tailscale not detected (or not signed in / no privileges) — skipping HTTPS setup."
+fi
+
 # ----- 8. summary ------------------------------------------------------------
 info "Done."
 echo ""
-echo "  App:       http://localhost:${APP_PORT:-8000}"
-if command -v tailscale >/dev/null 2>&1; then
-  ts_host=$(tailscale status --json 2>/dev/null \
-            | grep -oE '"DNSName":[[:space:]]*"[^"]+"' \
-            | head -1 \
-            | sed -E 's/.*"([^"]+)".*/\1/' \
-            | sed -E 's/\.$//' || true)
-  if [[ -n "${ts_host:-}" ]]; then
-    echo "  Tailscale: http://${ts_host}:${APP_PORT:-8000}"
-    echo "             (HTTPS via 'tailscale serve' will land in issue #5)"
+if (( TS_REGISTERED )); then
+  echo "  App:       https://${TS_HOST:-<your-tailnet-host>}/   (via tailscale serve)"
+elif [[ -n "$TS_HOST" ]]; then
+  echo "  App:       http://localhost:${APP_PORT:-8000}"
+  echo "  Tailscale: http://${TS_HOST}:${APP_PORT:-8000}   (LAN-bound; HTTPS setup failed)"
+else
+  echo "  App:       http://localhost:${APP_PORT:-8000}"
+  if [[ "${APP_BIND:-127.0.0.1}" == "127.0.0.1" ]]; then
+    echo "             (bound to localhost only — set APP_BIND=0.0.0.0 in .env for LAN)"
   fi
 fi
 echo ""
 echo "  Force a backup right now:   make backup"
 echo "  Live logs:                  make logs"
 echo "  Stop the stack:             make down"
+echo "  Uninstall:                  ./remove.sh"
 echo ""
 echo "  Data lives in ./data/ — back this directory up like /etc."
