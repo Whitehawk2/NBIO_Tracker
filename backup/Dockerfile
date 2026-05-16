@@ -1,4 +1,4 @@
-FROM alpine:3.20
+FROM alpine:3.23
 
 RUN apk add --no-cache sqlite rclone tzdata bash gzip coreutils
 
