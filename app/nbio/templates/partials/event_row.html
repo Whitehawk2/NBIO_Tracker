@@ -1,0 +1,17 @@
+<li class="event-row" data-id="{{ event.id }}" data-type="{{ event.type }}" data-idem="{{ event.idempotency_key }}">
+  <span class="ev-emoji" aria-hidden="true">
+    {% if event.type == 'feed' %}🤱{% elif event.type == 'wee' %}💦{% else %}💩{% endif %}
+  </span>
+  <span class="ev-time">{{ event.occurred_at | hhmm }}</span>
+  <span class="ev-rel" data-rel="{{ event.occurred_at }}">{{ event.occurred_at | relative }}</span>
+  <span class="ev-detail">
+    {% if event.type == 'feed' %}
+      {% if event.feed_side %}{{ event.feed_side }}{% endif %}
+      {% if event.feed_duration_min %} · {{ event.feed_duration_min }}m{% endif %}
+    {% elif event.type == 'poo' and event.poo_quality %}
+      type {{ event.poo_quality }}
+    {% endif %}
+    {% if event.notes %} · {{ event.notes }}{% endif %}
+  </span>
+  <span class="ev-actor" style="background: {{ event.actor_color or '#888' }}" title="{{ event.actor_name or '' }}"></span>
+</li>

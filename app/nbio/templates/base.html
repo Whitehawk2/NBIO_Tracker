@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0e0e10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#faf7f2" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="NBIO">
+  <title>{% block title %}NBIO Tracker{% endblock %}</title>
+  <link rel="manifest" href="/static/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
+  <link rel="stylesheet" href="/static/app.css">
+  <script>
+    // Bootstrap dark mode before paint to avoid flash.
+    (function () {
+      var h = new Date().getHours();
+      var nightByClock = h >= 19 || h < 7;
+      var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (nightByClock || systemDark) document.documentElement.classList.add('dark');
+    })();
+  </script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="title">
+      <span class="emoji">🍼</span>
+      <span class="name">{% block header_title %}{{ baby.name if baby else 'NBIO' }}{% endblock %}</span>
+    </div>
+    {% include "partials/sync_badge.html" %}
+  </header>
+
+  <main class="app-main">
+    {% block content %}{% endblock %}
+  </main>
+
+  <nav class="bottom-nav" aria-label="Primary">
+    <a href="/" class="nav-item {% block nav_home %}{% endblock %}" aria-label="Home">
+      <span class="ico">🏠</span><span>Home</span>
+    </a>
+    <a href="/reports" class="nav-item {% block nav_reports %}{% endblock %}" aria-label="Reports">
+      <span class="ico">📊</span><span>Reports</span>
+    </a>
+  </nav>
+
+  <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
+  <div id="modal-root"></div>
+
+  <script>
+    window.NBIO_CONFIG = {
+      babyId: 1,
+      sseUrl: "/api/stream",
+      eventsUrl: "/api/events",
+      devicesUrl: "/api/devices",
+      lastSideUrl: "/api/feeds/last-side"
+    };
+  </script>
+  <script src="/static/idb.js"></script>
+  <script src="/static/app.js" defer></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/static/sw.js').catch(console.warn);
+      });
+    }
+  </script>
+</body>
+</html>

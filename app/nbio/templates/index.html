@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block nav_home %}active{% endblock %}
+{% block content %}
+
+{% include "partials/today_card.html" %}
+
+{% include "partials/last_days.html" %}
+
+<section class="tiles" aria-label="Quick log">
+  {% include "partials/tile_feed.html" %}
+  {% include "partials/tile_wee.html" %}
+  {% include "partials/tile_poo.html" %}
+</section>
+
+<section class="event-list-wrap" aria-label="Recent events">
+  <h2 class="section-title">Last 3 days</h2>
+  {% if grouped_events %}
+    <ul class="event-list" id="event-list">
+      {% for group in grouped_events %}
+        <li class="day-header" data-day="{{ group.day }}" aria-label="{{ group.label }}">{{ group.label }}</li>
+        {% for event in group.events %}
+          {% include "partials/event_row.html" %}
+        {% endfor %}
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="empty">Quiet night. 💤</p>
+  {% endif %}
+</section>
+
+{% endblock %}

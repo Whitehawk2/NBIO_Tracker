@@ -1,0 +1,44 @@
+<section class="today-card" id="today-card" aria-label="Today">
+  <div class="counts">
+    <div><b>{{ today.counts.feed }}</b><span>feeds</span></div>
+    <div><b>{{ today.counts.wee }}</b><span>wees</span></div>
+    <div><b>{{ today.counts.poo }}</b><span>poos</span></div>
+  </div>
+  <ul class="last-of-each" aria-label="Last of each">
+    <li>
+      <span class="lbl">🤱 last feed</span>
+      {% if today.last.feed %}
+        <span>
+          <b data-rel="{{ today.last.feed.occurred_at }}">{{ today.last.feed.occurred_at | relative }}</b>
+          {% if today.last.feed.feed_side %} · {{ today.last.feed.feed_side }}{% endif %}
+          {% if today.last.feed.feed_duration_min %} · {{ today.last.feed.feed_duration_min }} min{% endif %}
+        </span>
+      {% else %}
+        <span class="muted">never</span>
+      {% endif %}
+    </li>
+    <li>
+      <span class="lbl">💦 last wee</span>
+      {% if today.last.wee %}
+        <span>
+          <b data-rel="{{ today.last.wee.occurred_at }}">{{ today.last.wee.occurred_at | relative }}</b>
+          {% if today.last.wee.notes %} · {{ today.last.wee.notes }}{% endif %}
+        </span>
+      {% else %}
+        <span class="muted">never</span>
+      {% endif %}
+    </li>
+    <li>
+      <span class="lbl">💩 last poo</span>
+      {% if today.last.poo %}
+        <span>
+          <b data-rel="{{ today.last.poo.occurred_at }}">{{ today.last.poo.occurred_at | relative }}</b>
+          {% if today.last.poo.poo_quality %} · type {{ today.last.poo.poo_quality }}{% endif %}
+          {% if today.last.poo.notes %} · {{ today.last.poo.notes }}{% endif %}
+        </span>
+      {% else %}
+        <span class="muted">never</span>
+      {% endif %}
+    </li>
+  </ul>
+</section>

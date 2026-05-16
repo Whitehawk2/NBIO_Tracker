@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Reports — NBIO{% endblock %}
+{% block nav_reports %}active{% endblock %}
+{% block content %}
+
+<section class="today-summary">
+  <h2 class="section-title">Today</h2>
+  <div class="big-numbers">
+    <div><b>{{ today.counts.feed }}</b><span>feeds</span></div>
+    <div><b>{{ today.counts.wee }}</b><span>wees</span></div>
+    <div><b>{{ today.counts.poo }}</b><span>poos</span></div>
+  </div>
+  {% if today.last.feed %}
+    <p class="muted small">
+      last feed
+      <b data-rel="{{ today.last.feed.occurred_at }}">{{ today.last.feed.occurred_at | relative }}</b>
+      {% if today.last.feed.feed_side %} · {{ today.last.feed.feed_side }}{% endif %}
+      {% if today.last.feed.feed_duration_min %} · {{ today.last.feed.feed_duration_min }} min{% endif %}
+    </p>
+  {% endif %}
+</section>
+
+<section class="timeline-strips">
+  <h2 class="section-title">Last 7 days</h2>
+  <div class="timeline-legend" aria-hidden="true">
+    <span><span class="lg-dot lg-feed"></span>feed</span>
+    <span><span class="lg-dot lg-wee"></span>wee</span>
+    <span><span class="lg-dot lg-poo"></span>poo</span>
+  </div>
+  {% for day in days_list %}
+    <div class="day-strip">
+      <div class="day-label">{{ day.label }}</div>
+      <div class="hour-axis" aria-hidden="true">
+        {% for h in range(0, 25, 3) %}<span>{{ '%02d'|format(h) }}</span>{% endfor %}
+      </div>
+      <svg viewBox="0 0 1000 56" class="timeline" preserveAspectRatio="none" aria-label="Timeline for {{ day.label }}">
+        {% for h in range(0, 25, 3) %}
+          <line x1="{{ (h/24*1000) | round(1) }}" y1="0" x2="{{ (h/24*1000) | round(1) }}" y2="56" class="hour-tick"/>
+        {% endfor %}
+        {% for m in day.marks %}
+          <rect x="{{ (m.x * 1000) | round(2) - 2 }}" y="8" width="4" height="40" rx="2"
+                class="mark mark-{{ m.type }}"/>
+        {% endfor %}
+        {% if day.is_today %}
+          <line x1="{{ (now_x * 1000) | round(2) }}" y1="0" x2="{{ (now_x * 1000) | round(2) }}" y2="56" class="now-line"/>
+        {% endif %}
+      </svg>
+    </div>
+  {% endfor %}
+</section>
+
+<section class="heatmap-section">
+  <h2 class="section-title">7-day heatmap</h2>
+  <div class="heatmap-grid" role="grid" aria-label="Event count heatmap">
+    <span class="hm-corner" aria-hidden="true"></span>
+    {% for h in range(0, 24) %}
+      <span class="hm-hour" aria-hidden="true">{{ '%02d'|format(h) }}</span>
+    {% endfor %}
+    {% for day_idx in range(7) %}
+      <span class="hm-day">{{ heatmap_day_labels[day_idx] }}</span>
+      {% for h in range(24) %}
+        {% set count = heatmap[day_idx][h] %}
+        <span class="hm-cell"
+              style="opacity: {{ ((count / heatmap_max) * 0.9 + 0.06) if count else 0.06 }};"
+              title="{{ count }} event{{ '' if count == 1 else 's' }} on {{ heatmap_day_labels[day_idx] }} at {{ '%02d'|format(h) }}:00">
+        </span>
+      {% endfor %}
+    {% endfor %}
+  </div>
+</section>
+
+<section class="totals-table">
+  <h2 class="section-title">Daily totals (last 14 days)</h2>
+  <table>
+    <thead>
+      <tr><th>Day</th><th>Feeds</th><th>Wees</th><th>Poos</th><th>Avg feed</th></tr>
+    </thead>
+    <tbody id="totals-body">
+      {% for row in totals %}
+        <tr>
+          <td>{{ row.label or row.day }}</td>
+          <td>{{ row.feed }}</td>
+          <td>{{ row.wee }}</td>
+          <td>{{ row.poo }}</td>
+          <td>{{ '%.0f min' | format(row.avg_feed_min) if row.avg_feed_min else '—' }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <button class="btn-secondary" id="copy-summary">Copy as text</button>
+</section>
+
+{% endblock %}

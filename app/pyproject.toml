@@ -1,0 +1,14 @@
+[project]
+name = "nbio"
+version = "0.1.0"
+description = "Shared newborn tracker — feeds, wees, poos"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "jinja2",
+    "pydantic-settings",
+]
+
+[tool.setuptools]
+packages = ["nbio"]
