@@ -47,6 +47,7 @@ def staged_repo(tmp_path: Path) -> Path:
     (staged / "upgrade.sh").chmod(0o755)
     # docker-compose.yml — upgrade.sh expects it
     (staged / "docker-compose.yml").write_text("services: {}\n")
+    (staged / ".gitignore").write_text("data/\n")
 
     def git(*args):
         return subprocess.run(
@@ -56,6 +57,8 @@ def staged_repo(tmp_path: Path) -> Path:
     git("init", "-q", "-b", "master")
     git("config", "user.email", "t@t")
     git("config", "user.name", "t")
+    git("config", "commit.gpgsign", "false")
+    git("config", "tag.gpgsign", "false")
     git("add", ".")
     git("commit", "-q", "-m", "v0.9.0 commit")
     git("tag", "-a", "v0.9.0", "-m", "v0.9.0")
@@ -64,6 +67,8 @@ def staged_repo(tmp_path: Path) -> Path:
     git("add", ".")
     git("commit", "-q", "-m", "v1.0.0 commit")
     git("tag", "-a", "v1.0.0", "-m", "v1.0.0")
+    # Self-remote so `git fetch origin` succeeds with no real network
+    git("remote", "add", "origin", str(staged))
     return staged
 
 

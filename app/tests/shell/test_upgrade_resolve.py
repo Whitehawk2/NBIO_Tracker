@@ -49,14 +49,21 @@ def staged_repo(tmp_path: Path) -> Path:
             ["git", *args], cwd=str(staged), check=check, capture_output=True, text=True
         )
 
+    (staged / ".gitignore").write_text("data/\n")
+
     git("init", "-q", "-b", "master")
     git("config", "user.email", "t@t")
     git("config", "user.name", "t")
-    git("commit", "--allow-empty", "-q", "-m", "v0.9.0 commit")
+    git("config", "commit.gpgsign", "false")
+    git("config", "tag.gpgsign", "false")
+    git("add", ".")
+    git("commit", "-q", "-m", "v0.9.0 commit")
     git("tag", "-a", "v0.9.0", "-m", "v0.9.0")
     git("commit", "--allow-empty", "-q", "-m", "v1.0.0 commit")
     git("tag", "-a", "v1.0.0", "-m", "v1.0.0")
     git("commit", "--allow-empty", "-q", "-m", "after the latest tag")
+    # A self-remote so `git fetch origin` is a no-op rather than an error
+    git("remote", "add", "origin", str(staged))
     return staged
 
 
@@ -101,7 +108,12 @@ def test_resolve_only_errors_when_no_tags(tmp_path):
     subprocess.run(["git", "config", "user.email", "t@t"], cwd=str(staged), check=True)
     subprocess.run(["git", "config", "user.name", "t"], cwd=str(staged), check=True)
     subprocess.run(
-        ["git", "commit", "--allow-empty", "-q", "-m", "x"],
+        ["git", "config", "commit.gpgsign", "false"], cwd=str(staged), check=True
+    )
+    (staged / ".gitignore").write_text("data/\n")
+    subprocess.run(["git", "add", "."], cwd=str(staged), check=True)
+    subprocess.run(
+        ["git", "commit", "-q", "-m", "initial"],
         cwd=str(staged),
         check=True,
     )
