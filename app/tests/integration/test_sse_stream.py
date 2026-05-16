@@ -147,3 +147,67 @@ async def test_response_has_sse_headers(conn):
     assert resp.headers.get("cache-control") == "no-cache"
     assert resp.headers.get("x-accel-buffering") == "no"
     await _drive(resp)
+
+
+# ---------------------------------------------------------------------------
+# Last-Event-ID semantics — pin the difference between "0", "", and missing.
+#
+# The review (issue #21, critical gap 5) called this out: stream.py uses
+# `if last_event_id:` which is truthy for "0" but a refactor to
+# `if last_event_id is not None:` would silently change behaviour for the
+# empty-string case. Three explicit tests below nail each path.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_last_event_id_zero_replays_from_start(conn):
+    """
+    Per SSE spec, a client sending `Last-Event-ID: 0` is signalling
+    "I have not seen any events yet — replay from the beginning."
+    int("0") == 0 → list_events_since_id(0, cap) returns everything.
+    """
+    from nbio.models import EventCreate
+    from nbio.repo import create_event
+
+    for i in range(3):
+        create_event(
+            conn,
+            EventCreate(
+                type="feed",
+                occurred_at="2026-05-16T03:00:00.000Z",
+                idempotency_key=f"idem-leid0-{i:04d}",
+                created_by_device="device-test",
+            ),
+        )
+    resp = await sse_stream(_mock_request(disconnected=True), last_event_id="0", conn=conn)
+    chunks = await _drive(resp, max_chunks=5)
+    text = "".join(chunks)
+    assert "idem-leid0-0000" in text
+    assert "idem-leid0-0001" in text
+    assert "idem-leid0-0002" in text
+
+
+@pytest.mark.asyncio
+async def test_last_event_id_empty_string_does_not_replay(conn):
+    """
+    `Last-Event-ID: ` (empty value) → the truthy check in stream.py
+    treats it as no replay. Per SSE spec, an empty Last-Event-ID is
+    invalid; this is the conservative behaviour. Pinning it so a
+    refactor to `is not None` doesn't quietly start full-replaying
+    every empty-header reconnect.
+    """
+    from nbio.models import EventCreate
+    from nbio.repo import create_event
+
+    create_event(
+        conn,
+        EventCreate(
+            type="feed",
+            occurred_at="2026-05-16T03:00:00.000Z",
+            idempotency_key="idem-empty-leid",
+            created_by_device="device-test",
+        ),
+    )
+    resp = await sse_stream(_mock_request(disconnected=True), last_event_id="", conn=conn)
+    chunks = await _drive(resp, max_chunks=1, per_chunk_timeout=0.3)
+    assert "idem-empty-leid" not in "".join(chunks)
