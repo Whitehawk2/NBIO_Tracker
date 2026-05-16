@@ -118,35 +118,25 @@ Acceptance: every command in the README runs cleanly against current
 From here on, every PR adds a failing test before the implementation; the
 90% gate enforces it.
 
-## 8. In-place upgrade flow — [#20](https://github.com/Whitehawk2/NBIO_Tracker/issues/20)
+## 8. ✅ In-place upgrade flow — [#20](https://github.com/Whitehawk2/NBIO_Tracker/issues/20)
 
-There's no documented "get a running v0.9.0 server to the latest version"
-flow. setup.sh handles the initial install but stops there.
+**Status:** Done — merged via [PR #22](https://github.com/Whitehawk2/NBIO_Tracker/pull/22).
 
-Plan (tag-aware default, build locally — both confirmed):
+- `./upgrade.sh`: tag-aware (default = latest annotated tag), `--ref` /
+  `--rollback` / `--yes` / `--pull` / `--resolve-only` / `--help`.
+- Pre-flight → fetch → resolve → changelog + `.env.example` diff →
+  confirm → backup via sidecar → record prev SHA → checkout → build →
+  up → `/healthz` poll. Healthz failure halts; rollback is operator-
+  initiated by design.
+- README "Upgrading" is dual-track (primary script path + self-
+  contained manual sequence including a hand-rolled rollback).
+- 21 new shell tests under `app/tests/shell/test_upgrade_*.py`; all
+  gated `@requires_docker` for the CI test job.
+- First PR under the live TDD rule — visible in the commit graph:
+  failing tests → implementation → docs.
 
-- New `./upgrade.sh`: defaults to the latest annotated tag; accepts
-  `--ref master` / `v1.2.3` / `--rollback` / `--yes` / `--pull` /
-  `--resolve-only`.
-- Pre-flight (docker / compose / git / clean tree) → resolve target →
-  fetch tags → show changelog + .env.example diff → confirm → **backup
-  first** via the existing sidecar → record prev SHA to
-  `data/.upgrade-prev-ref` → checkout → `compose build` → `compose up
-  -d` → healthz poll → on healthz fail, **print rollback command, halt
-  (no auto-revert)** so the operator can diagnose with logs.
-- README "Upgrading" section, dual-track: primary path uses the script,
-  manual path is the explicit `git pull` / `compose build` / `up -d`
-  sequence — including a copy-paste rollback snippet that works without
-  the script.
-- CLAUDE.md: `upgrade.sh` in the layout tree + short "Upgrading"
-  subsection covering the tag-aware default and the no-auto-rollback
-  design choice.
-- First PR under the live TDD rule: 5 shell tests land before the
-  script (resolve-ref / writes-prev-ref / rollback / shellcheck / help),
-  all gated `@requires_docker` so the CI `test` job skips them cleanly.
-
-Out of scope: GHCR pre-built images (follow-up once tags drive a publish
-workflow), destructive schema migrations, multi-host coordination.
+GHCR pre-built images filed as a follow-up; will land when release
+cadence motivates faster Pi upgrades.
 
 ## 9. Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
 
