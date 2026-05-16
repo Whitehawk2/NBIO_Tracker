@@ -124,6 +124,7 @@ below — it's a two-step manual dance the script collapses into one paste.
 | `TZ` | `Europe/London` | Timezone for both containers and cron |
 | `BABY_NAME` | `Baby` | Display name; seeded on first boot |
 | `APP_PORT` | `8000` | Host port (mapped to container `:8000`) |
+| `APP_BIND` | `127.0.0.1` | Host interface to bind. `127.0.0.1` = Tailscale-only (no LAN). `0.0.0.0` to expose on LAN. |
 | `RCLONE_REMOTE` | `gdrive` | Name of the rclone remote (see [backups](#google-drive-backups)) |
 | `RETAIN_LOCAL` | `7` | Local snapshots to keep in `data/backups/` |
 | `RETAIN_REMOTE_DAYS` | `30` | Purge remote snapshots older than N days |
@@ -252,26 +253,35 @@ a private network, but **service workers require either `https://` or
 `http://localhost`**, so Pattern A means the PWA install / offline cache only
 works if you happen to be browsing the box itself. Not what you want.
 
-### Pattern B — `tailscale serve` for HTTPS via MagicDNS (recommended)
+### Pattern B — `tailscale serve` for HTTPS via MagicDNS (recommended, automated)
 
 This gives you `https://homepi.<your-tailnet>.ts.net` with a Let's Encrypt cert
 issued automatically by Tailscale. Service workers and PWA install work
 everywhere. Both parents' phones reach the same hostname.
 
+**`./setup.sh` does this for you.** When Tailscale is installed and signed
+in, the script runs the equivalent of:
+
 ```bash
-# On the host, after `tailscale up`:
-sudo tailscale serve --bg https+insecure://localhost:8000
-# or equivalently:
 sudo tailscale serve --bg --https=443 http://localhost:8000
 ```
 
-Check status: `sudo tailscale serve status`.
+and prints the resulting `https://…ts.net/` URL in its summary. `./remove.sh`
+runs `tailscale serve reset` to clear the registration symmetrically.
 
-Then on phones open `https://homepi.<your-tailnet>.ts.net`. If the URL is long,
-either bookmark it or shorten via `tailscale serve` aliases.
+This pairs with the default `APP_BIND=127.0.0.1` in `.env` — the raw port is
+bound only to localhost, so the **only** path in from another device is
+through the Tailscale-served HTTPS endpoint.
 
-Pair this with binding the raw port to localhost only (`127.0.0.1:8000:8000`
-in compose) so the only way in is via Tailscale.
+To override the auto-detected hostname (rare; only useful for custom MagicDNS
+aliases), set `NBIO_TS_HOSTNAME=foo` before running `./setup.sh`.
+
+If you want to do it manually instead (e.g. the script can't get sudo):
+
+```bash
+sudo tailscale serve --bg --https=443 http://localhost:8000
+sudo tailscale serve status     # verify
+```
 
 ### Pattern C — `tailscale funnel` (NOT recommended)
 

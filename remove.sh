@@ -64,6 +64,23 @@ yn() {
   [[ "${val,,}" =~ ^y(es)?$ ]]
 }
 
+# Same shape as setup.sh's probe_tailscale.
+TS_PREFIX=""
+probe_tailscale() {
+  TS_PREFIX=""
+  command -v tailscale >/dev/null 2>&1 || return 1
+  tailscale status >/dev/null 2>&1 || return 1
+  if tailscale serve status >/dev/null 2>&1; then
+    return 0
+  fi
+  command -v sudo >/dev/null 2>&1 || return 1
+  if (( YES )); then
+    sudo -n tailscale serve status >/dev/null 2>&1 || return 1
+  fi
+  TS_PREFIX="sudo"
+  return 0
+}
+
 # ----- 1. containers + images ------------------------------------------------
 info "Stopping containers"
 if ! command -v docker >/dev/null 2>&1; then
@@ -135,9 +152,20 @@ else
   ok "no data to remove"
 fi
 
-# ----- 4. Tailscale serve teardown (issue #5) -------------------------------
-# When #5 lands, this block will run `tailscale serve --bg --remove` (or
-# equivalent) so the HTTPS proxy registration is also undone. No-op today.
+# ----- 4. Tailscale serve teardown ------------------------------------------
+if probe_tailscale; then
+  if $TS_PREFIX tailscale serve status 2>/dev/null | grep -q '://'; then
+    if $TS_PREFIX tailscale serve reset >/dev/null 2>&1; then
+      ok "tailscale serve registration cleared"
+    else
+      warn "tailscale serve reset failed — clear manually if needed"
+    fi
+  else
+    ok "no tailscale serve registration to clear"
+  fi
+else
+  ok "tailscale not present — nothing to clear"
+fi
 
 # ----- summary ---------------------------------------------------------------
 info "Done."
