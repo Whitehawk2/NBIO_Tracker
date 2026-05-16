@@ -1,5 +1,12 @@
-/* NBIO service worker — app shell precache + offline outbox interception. */
-const CACHE = "nbio-v1";
+/* NBIO service worker — app shell precache + offline outbox interception.
+ *
+ * The cache name is templated at response time by routes/sw.py — the
+ * `__NBIO_VERSION__` placeholder is replaced with a content-hash of
+ * everything under static/. When the shell changes the cache name
+ * changes, the `activate` handler below purges the old cache, and the
+ * fetch handlers refetch the new shell from the network. (See #23.)
+ */
+const CACHE = "nbio-__NBIO_VERSION__";
 const SHELL = [
   "/",
   "/static/app.css",

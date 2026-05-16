@@ -59,12 +59,8 @@
   </script>
   <script src="/static/idb.js"></script>
   <script src="/static/app.js" defer></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', function () {
-        navigator.serviceWorker.register('/static/sw.js').catch(console.warn);
-      });
-    }
-  </script>
+  {# Service worker registration happens inside app.js so the
+     "Update available" toast can attach to the registration's
+     updatefound + statechange events. See issue #23. #}
 </body>
 </html>

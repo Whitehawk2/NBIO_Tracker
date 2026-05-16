@@ -91,13 +91,13 @@ TODO.md                     live roadmap, linked to GitHub issues
 - **SQLite must live on a local FS** (ext4/btrfs). Never NFS / SMB.
 - **iOS PWA has no Background Sync**. Outbox flush relies on
   `visibilitychange` + page-foreground + a 30s belt-and-braces interval.
-- **Service worker caches the shell with a hardcoded `nbio-v1` name**
-  (`app/nbio/static/sw.js`). `upgrade.sh` doesn't bump it, so installed
-  PWAs keep running the old client code after a server upgrade until a
-  manual reload. Tracking the fix in
-  [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23) — the
-  plan is to inject the release version into the SW at container start
-  and bump the cache name per release.
+- **Service worker cache name is templated at response time** by
+  `routes/sw.py`: `__NBIO_VERSION__` in `sw.js` is replaced with a
+  content hash of everything under `nbio/static/`. The route owns
+  `/static/sw.js` and MUST be included before the `app.mount("/static",
+  ...)` line in `main.py` — otherwise the StaticFiles mount serves the
+  raw placeholder. Hash source: `nbio.version.static_assets_hash()`
+  (filed under #23). Also exposed at `/api/version` for diagnostics.
 - **`APP_BIND=127.0.0.1` by default** — Tailscale serve is the only
   external path in. LAN exposure is opt-in via `APP_BIND=0.0.0.0`.
 - **No auth** — the tailnet is the perimeter. `tailscale funnel` is

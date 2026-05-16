@@ -298,29 +298,31 @@ Verification after either path: `make status` (both containers Up),
 `make logs` (no traceback in the app), browse to the app and confirm
 recent events still show.
 
-#### Installed PWAs don't auto-update — manual reload required
+#### Installed PWAs pick up upgrades automatically
 
-**Known limitation, see [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23).**
-The service worker caches the app shell (HTML / JS / CSS) under a
-hardcoded cache name. Until a SW-versioning fix lands, an installed
-PWA on a parent's phone keeps running the *old* client code against
-the freshly-upgraded server. Mostly harmless for additive changes;
-breaks loudly if the API request shape changed.
+The service worker's cache name is derived from a content hash of
+`app/nbio/static/*` (served via `/static/sw.js` with `__NBIO_VERSION__`
+substituted at response time). When you upgrade, the next time a phone
+fetches `/static/sw.js` it sees a new cache name, the SW reinstalls,
+its `activate` handler purges the old cache, and the next page load
+serves the fresh shell. An "Update available · Reload" toast appears
+in the app once the new SW activates so the user can pick up the new
+JS without closing the tab.
 
-After an upgrade that touched `app/nbio/static/*` or the HTML shell:
+If for some reason a phone is stuck on the old shell:
 
-- **Android (Chrome PWA):** open the app, ⋮ menu → reload. Or close
-  it from the app switcher and re-open.
-- **iOS (Safari PWA):** open the app, address-bar pull-to-refresh.
-  Or remove the home-screen icon and re-install from Safari →
+- **Android (Chrome PWA):** open the app, ⋮ menu → reload, or close
+  from the app switcher and re-open.
+- **iOS (Safari PWA):** open the app, pull-to-refresh in the address
+  bar. Worst case: remove the home-screen icon, re-add from Safari →
   Share → Add to Home Screen.
-- **In a browser tab:** Cmd-Shift-R / Ctrl-Shift-R (hard reload bypasses
-  the SW). Or DevTools → Application → Service Workers → Unregister →
-  reload.
+- **Browser tab:** Cmd/Ctrl + Shift + R (hard reload bypasses the SW).
+  Or DevTools → Application → Service Workers → Unregister.
 
-If the app behaves strangely after an upgrade — buttons missing, API
-errors in DevTools — the most likely cause is stale client code. Try
-the reload steps above before diagnosing further.
+To check what version a client is seeing: `curl
+http://localhost:${APP_PORT:-8000}/api/version` — returns the
+12-char hash; same hash will appear in the cache name in
+`/static/sw.js`.
 
 ### Stopping cleanly
 

@@ -1,0 +1,65 @@
+"""
+GET /static/sw.js is templated: the placeholder `__NBIO_VERSION__` in
+the source is substituted with the current static-assets hash at
+response time. This fixes #23 — installed PWAs no longer keep running
+the stale shell after an upgrade, because the cache name changes on
+every static-asset change and the existing `activate` handler in sw.js
+purges non-matching caches.
+"""
+
+import re
+
+
+def test_sw_js_returns_javascript(client):
+    r = client.get("/static/sw.js")
+    assert r.status_code == 200
+    ct = r.headers["content-type"].lower()
+    assert "javascript" in ct
+
+
+def test_sw_js_substitutes_the_version_placeholder(client):
+    """The literal placeholder must not appear in the served body."""
+    r = client.get("/static/sw.js")
+    assert "__NBIO_VERSION__" not in r.text
+
+
+def test_sw_js_cache_name_includes_the_hash(client):
+    """The cache name `nbio-<hash>` is what makes the SW pick up updates."""
+    from nbio.version import static_assets_hash
+
+    expected = static_assets_hash()
+    r = client.get("/static/sw.js")
+    # Pattern: `const CACHE = "nbio-<hash>";` somewhere in the file
+    assert re.search(rf'CACHE\s*=\s*"nbio-{expected}"', r.text), (
+        f"sw.js does not contain expected cache name 'nbio-{expected}':\n{r.text[:300]}"
+    )
+
+
+def test_sw_js_response_is_not_cached_by_the_browser(client):
+    """
+    Browsers honour Cache-Control: no-cache for the SW resource and
+    revalidate every fetch. Without this, an updated SW could be ignored
+    for up to 24h (the browser default for SW revalidation).
+    """
+    r = client.get("/static/sw.js")
+    cache_control = r.headers.get("cache-control", "").lower()
+    assert "no-cache" in cache_control or "no-store" in cache_control, (
+        f"sw.js must opt out of HTTP caching; got Cache-Control: {cache_control!r}"
+    )
+
+
+def test_sw_js_route_wins_over_staticfiles_mount(client):
+    """
+    The route should take precedence over `app.mount("/static", ...)`
+    so the substitution happens — otherwise the raw placeholder would
+    leak. This test is implicit in test_sw_js_substitutes_the_version_
+    placeholder above, but pin it explicitly for the contract.
+    """
+    raw_source = (__import__("nbio.main", fromlist=["STATIC_DIR"]).STATIC_DIR / "sw.js").read_text()
+    assert "__NBIO_VERSION__" in raw_source, (
+        "test invariant: sw.js source must contain the placeholder"
+    )
+    r = client.get("/static/sw.js")
+    # Substituted body, not the raw source
+    assert r.text != raw_source
+    assert "__NBIO_VERSION__" not in r.text
