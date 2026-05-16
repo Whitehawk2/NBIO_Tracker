@@ -118,7 +118,67 @@ Acceptance: every command in the README runs cleanly against current
 From here on, every PR adds a failing test before the implementation; the
 90% gate enforces it.
 
-## 8. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
+## 8. In-place upgrade flow — [#20](https://github.com/Whitehawk2/NBIO_Tracker/issues/20)
+
+There's no documented "get a running v0.9.0 server to the latest version"
+flow. setup.sh handles the initial install but stops there.
+
+Plan (tag-aware default, build locally — both confirmed):
+
+- New `./upgrade.sh`: defaults to the latest annotated tag; accepts
+  `--ref master` / `v1.2.3` / `--rollback` / `--yes` / `--pull` /
+  `--resolve-only`.
+- Pre-flight (docker / compose / git / clean tree) → resolve target →
+  fetch tags → show changelog + .env.example diff → confirm → **backup
+  first** via the existing sidecar → record prev SHA to
+  `data/.upgrade-prev-ref` → checkout → `compose build` → `compose up
+  -d` → healthz poll → on healthz fail, **print rollback command, halt
+  (no auto-revert)** so the operator can diagnose with logs.
+- README "Upgrading" section, dual-track: primary path uses the script,
+  manual path is the explicit `git pull` / `compose build` / `up -d`
+  sequence — including a copy-paste rollback snippet that works without
+  the script.
+- CLAUDE.md: `upgrade.sh` in the layout tree + short "Upgrading"
+  subsection covering the tag-aware default and the no-auto-rollback
+  design choice.
+- First PR under the live TDD rule: 5 shell tests land before the
+  script (resolve-ref / writes-prev-ref / rollback / shellcheck / help),
+  all gated `@requires_docker` so the CI `test` job skips them cleanly.
+
+Out of scope: GHCR pre-built images (follow-up once tags drive a publish
+workflow), destructive schema migrations, multi-host coordination.
+
+## 9. Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
+
+PR #16 shipped 212 tests at 100% line + branch coverage and a 90% gate.
+An independent review surfaced that the coverage number is doing more
+rhetorical than protective work — five real regression classes would
+slip past the suite as it stands.
+
+Critical fixes (full detail in #21):
+- `test_pages_edge_branches.py` is coverage theatre — asserts only
+  `status_code == 200`. Assert on rendered fallback.
+- No page-render test inspects the body. A regression that renders
+  `reports.html` from `/` would pass today.
+- Concurrency test would pass with `BEGIN DEFERRED` — only asserts row
+  counts (which the UNIQUE index alone guarantees). Add same-row
+  contention + observed-ordering assertions.
+- No test catches dropping `ux_events_idem` — add a schema-invariant
+  test.
+- `Last-Event-ID: "0"` is silently swallowed by `if last_event_id:`
+  truthy check.
+
+Worth-fixing items: hand-padded idem keys → use `seed_event` factory,
+broken-by-design `or` in `test_repo_devices.py:42`, wall-clock
+dependency in `test_repo_reports.py`, missing API-layer assertion that
+`list_events` filters `deleted_at`, idempotency tested in 3 places.
+
+Plus add **mutation testing** (mutmut) as a `workflow_dispatch` job —
+the real quality signal, gated only after we know our baseline.
+
+Lands **after** the upgrade PR per priority ordering.
+
+## 10. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 
 Move things that currently live in env vars or first-launch onboarding
 onto a settings page editable from the running app:
@@ -133,7 +193,7 @@ truly global toggles. UI: minimal `/settings` page with HTMX form posts
 to a new `routes/settings.py`. Reuse existing `repo.upsert_device`
 where possible.
 
-## 9. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
+## 11. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
 
 Two-pronged: dev shell **and** an installable binary suitable for
 `nix profile install nixpkgs#nbio`. Nix users are assumed advanced and
@@ -165,9 +225,9 @@ tangentially helpful for the k8s scenario in item 2.
 The setup script from item 2 will print a header comment pointing Nix
 users here so the two paths stay clearly separated.
 
-## 10. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
+## 12. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
 
-(Blocked on item 8 — needs the settings UI to host the picker.)
+(Blocked on item 10 — needs the settings UI to host the picker.)
 
 Add palettes alongside the current "warm" theme. Recommended starting
 pair from the Catppuccin family:
