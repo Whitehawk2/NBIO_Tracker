@@ -85,6 +85,12 @@ CI / fully-automated installs: set `NBIO_NONINTERACTIVE=1` plus the relevant
 `NBIO_*` env vars (`NBIO_TZ`, `NBIO_BABY_NAME`, `NBIO_APP_PORT`,
 `NBIO_RCLONE_TOKEN`, …). See `./setup.sh --help` for the full list.
 
+**Undoing it:** `./remove.sh` (or `make remove`) cleanly stops the stack
+and removes the locally-built images. By default it preserves `.env` and
+`./data/` — the data directory contains the SQLite DB and every backup
+snapshot, so removing it requires `--data` plus a confirmation. Full wipe:
+`./remove.sh --env --data --yes`. See `./remove.sh --help`.
+
 > **Nix users:** `./setup.sh` is for the Docker path only. The Nix flake
 > (issue [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)) will
 > ship a `nix profile install`-ready package and a NixOS module that
