@@ -121,13 +121,20 @@ def create_event(
 
     conn.execute("BEGIN IMMEDIATE")
     try:
+        # Set created_at / updated_at explicitly via Python so the precision
+        # is consistent with patch/delete (`_now_iso()` writes microseconds;
+        # the schema DEFAULT writes milliseconds, which makes string
+        # comparison of created_at vs updated_at non-monotonic). Also lets
+        # tests pin time via freezer.
+        now = _now_iso()
         cur = conn.execute(
             """
             INSERT INTO events (
                 baby_id, type, occurred_at,
                 feed_side, feed_duration_min, poo_quality, notes,
-                idempotency_key, created_by_device
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                idempotency_key, created_by_device,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 baby_id,
@@ -139,6 +146,8 @@ def create_event(
                 payload.notes,
                 payload.idempotency_key,
                 payload.created_by_device,
+                now,
+                now,
             ),
         )
         new_id = cur.lastrowid
@@ -260,17 +269,25 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
 def daily_totals(
     conn: sqlite3.Connection, baby_id: int = 1, days: int = 14
 ) -> list[dict[str, Any]]:
+    # Compute cutoff in Python (NOT via SQLite's date('now', ...)) so tests
+    # can freeze time deterministically. ISO-8601 string compares lexically
+    # against `occurred_at` because UTC ISO timestamps share the YYYY-MM-DD
+    # prefix; a same-day event at any time of day satisfies `>= cutoff`.
+    from datetime import datetime as _dt
+    from datetime import timedelta as _td
+
+    cutoff = (_dt.now(UTC) - _td(days=days)).strftime("%Y-%m-%d")
     cur = conn.execute(
         """
         SELECT substr(occurred_at, 1, 10) AS day, type, COUNT(*) AS n,
                AVG(feed_duration_min) AS avg_feed_min
         FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
-          AND occurred_at >= date('now', ?)
+          AND substr(occurred_at, 1, 10) >= ?
         GROUP BY day, type
         ORDER BY day DESC
         """,
-        (baby_id, f"-{days} days"),
+        (baby_id, cutoff),
     )
     by_day: dict[str, dict[str, Any]] = {}
     for r in cur.fetchall():

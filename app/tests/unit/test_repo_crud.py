@@ -127,11 +127,21 @@ def test_patch_event_partial(conn):
     assert patched["occurred_at"] == ISO
 
 
-def test_patch_event_bumps_updated_at(conn):
+def test_patch_event_bumps_updated_at(conn, freezer):
+    """
+    updated_at strictly moves forward after PATCH. Freezer pins two
+    distinct moments so the inequality must actually hold (issue #21
+    worth-fixing — `!= ` would pass under microsecond drift even with
+    a regression).
+    """
+    freezer.move_to("2026-05-16T03:00:00Z")
     _, event, _ = create_event(conn, _payload())
     original_updated = event["updated_at"]
+    freezer.move_to("2026-05-16T03:30:00Z")
     patched = patch_event(conn, event["id"], EventPatch(notes="late"))
-    assert patched["updated_at"] != original_updated
+    assert patched["updated_at"] > original_updated
+    # And the strict ordering vs created_at
+    assert patched["updated_at"] >= patched["created_at"]
 
 
 def test_patch_event_empty_returns_existing(conn):
@@ -153,6 +163,10 @@ def test_soft_delete_sets_deleted_at(conn):
     deleted = soft_delete_event(conn, event["id"])
     assert deleted is not None
     assert deleted["deleted_at"] is not None
+    # Invariant: deleted_at >= created_at (issue #21 worth-fixing —
+    # detects a clock-skew write that puts deleted before created)
+    assert deleted["deleted_at"] >= deleted["created_at"]
+    assert deleted["updated_at"] >= deleted["created_at"]
 
 
 def test_soft_delete_idempotent(conn):

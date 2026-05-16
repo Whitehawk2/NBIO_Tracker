@@ -298,6 +298,30 @@ Verification after either path: `make status` (both containers Up),
 `make logs` (no traceback in the app), browse to the app and confirm
 recent events still show.
 
+#### Installed PWAs don't auto-update — manual reload required
+
+**Known limitation, see [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23).**
+The service worker caches the app shell (HTML / JS / CSS) under a
+hardcoded cache name. Until a SW-versioning fix lands, an installed
+PWA on a parent's phone keeps running the *old* client code against
+the freshly-upgraded server. Mostly harmless for additive changes;
+breaks loudly if the API request shape changed.
+
+After an upgrade that touched `app/nbio/static/*` or the HTML shell:
+
+- **Android (Chrome PWA):** open the app, ⋮ menu → reload. Or close
+  it from the app switcher and re-open.
+- **iOS (Safari PWA):** open the app, address-bar pull-to-refresh.
+  Or remove the home-screen icon and re-install from Safari →
+  Share → Add to Home Screen.
+- **In a browser tab:** Cmd-Shift-R / Ctrl-Shift-R (hard reload bypasses
+  the SW). Or DevTools → Application → Service Workers → Unregister →
+  reload.
+
+If the app behaves strangely after an upgrade — buttons missing, API
+errors in DevTools — the most likely cause is stale client code. Try
+the reload steps above before diagnosing further.
+
 ### Stopping cleanly
 
 ```bash

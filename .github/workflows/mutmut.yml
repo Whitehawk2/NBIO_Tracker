@@ -1,0 +1,51 @@
+name: mutmut
+
+# Mutation testing for the modules where the suite's weakest tests live.
+# Not gated on the merge path — coverage % doesn't track quality and
+# mutation score is the more honest signal. Run on demand from the
+# Actions tab; treat the report as a backlog of weak spots to harden.
+
+on:
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: "Paths to mutate (space-separated)"
+        required: false
+        default: "nbio/repo.py nbio/routes/pages.py nbio/routes/stream.py"
+
+jobs:
+  mutmut:
+    runs-on: ubuntu-latest
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ./app[dev]
+      - run: pip install "mutmut>=3.0"
+      - name: Run mutmut
+        working-directory: app
+        run: |
+          set -e
+          mutmut run \
+            --paths-to-mutate "${{ github.event.inputs.paths }}" \
+            --tests-dir tests \
+            || true   # non-zero = surviving mutants; that's the report, not a failure
+      - name: Show mutmut results
+        working-directory: app
+        if: always()
+        run: |
+          mutmut results || true
+          mutmut junitxml > mutmut-results.xml || true
+      - name: Upload mutmut report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutmut-report
+          path: |
+            app/mutmut-results.xml
+            app/.mutmut-cache
+          retention-days: 30

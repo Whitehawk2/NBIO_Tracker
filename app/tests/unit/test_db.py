@@ -95,3 +95,45 @@ def test_schema_creates_expected_tables(tmp_path: Path):
     }
     assert names == {"babies", "devices", "events"}
     conn.close()
+
+
+def test_schema_declares_required_indexes(conn):
+    """
+    The idempotency story depends on UNIQUE INDEX ux_events_idem catching
+    duplicate inserts under race conditions; the post-rollback recovery in
+    repo.create_event assumes this constraint exists. Pin the schema so a
+    regression that drops the index is caught at the unit-test layer
+    instead of in production.
+    """
+    indexes = {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"
+        )
+    }
+    assert "ux_events_idem" in indexes
+    assert "ix_events_baby_time" in indexes
+    assert "ix_events_dup_window" in indexes
+
+
+def test_idempotency_index_is_unique(conn):
+    """And that ux_events_idem is actually UNIQUE — not just any index."""
+    row = conn.execute(
+        "SELECT \"unique\" FROM pragma_index_list('events') WHERE name = 'ux_events_idem'"
+    ).fetchone()
+    assert row is not None
+    assert row[0] == 1, "ux_events_idem must be UNIQUE"
+
+
+def test_create_event_uses_begin_immediate():
+    """
+    Pin the BEGIN IMMEDIATE choice. The concurrency contract depends on
+    eager write-lock acquisition; a regression that downgrades to
+    BEGIN DEFERRED would still pass the row-count test in
+    integration/test_concurrency.py (the UNIQUE index alone catches
+    same-key collisions). This source-level check is weak but cheap
+    insurance against an accidental refactor.
+    """
+    repo_src = (Path(__file__).resolve().parents[2] / "nbio" / "repo.py").read_text()
+    assert "BEGIN IMMEDIATE" in repo_src
+    assert "BEGIN DEFERRED" not in repo_src

@@ -40,17 +40,26 @@ def test_create_already_exists_on_idem_replay(client):
 
 def test_create_possible_duplicate(client):
     """Two events of the same type 60s apart → second flagged."""
-    client.post(
+    first = client.post(
         "/api/events",
         json=_payload(idempotency_key="idem-dup-1", occurred_at="2026-05-16T03:00:00.000Z"),
-    )
+    ).json()
     r = client.post(
         "/api/events",
         json=_payload(idempotency_key="idem-dup-2", occurred_at="2026-05-16T03:01:00.000Z"),
     )
     body = r.json()
     assert body["status"] == "created_possible_duplicate"
-    assert "duplicate_of" in body
+    # The duplicate_of payload must be a full dict with the documented shape —
+    # not just a presence-of-key check (issue #21 worth-fixing).
+    dup = body["duplicate_of"]
+    assert isinstance(dup, dict)
+    assert dup["id"] == first["event"]["id"]
+    assert dup["occurred_at"] == "2026-05-16T03:00:00.000Z"
+    assert dup["type"] == "feed"
+    assert dup["created_by_device"] == "device-test"
+    # 60s difference between the two timestamps
+    assert abs(dup["delta_seconds"]) == 60
 
 
 def test_create_skip_dup_check(client):
@@ -143,6 +152,69 @@ def test_undelete(client):
 def test_undelete_missing_404(client):
     r = client.post("/api/events/999/undelete")
     assert r.status_code == 404
+
+
+def test_list_events_filters_deleted_at_the_api_layer(client):
+    """
+    Belt-and-braces: repo tests prove the SQL filter; this one proves
+    the route doesn't accidentally start passing include_deleted=True
+    (issue #21 worth-fixing).
+    """
+    created = client.post("/api/events", json=_payload(idempotency_key="idem-del-flt-1")).json()
+    event_id = created["event"]["id"]
+    # Sanity: present before delete
+    assert any(e["id"] == event_id for e in client.get("/api/events").json()["events"])
+    # Soft-delete it
+    client.delete(f"/api/events/{event_id}")
+    # And it's gone from the default GET
+    listed = client.get("/api/events").json()["events"]
+    assert not any(e["id"] == event_id for e in listed), "deleted event leaked into GET /api/events"
+
+
+def test_patch_updates_at_is_strictly_later_than_created_at(client, freezer):
+    """
+    Invariant: after PATCH, updated_at > created_at. Without freezer, the
+    inequality could trivially hold via microsecond drift; this version
+    pins two distinct moments so it must actually move forward
+    (issue #21 worth-fixing — no invariant assertions previously).
+    """
+    freezer.move_to("2026-05-16T03:00:00Z")
+    created = client.post("/api/events", json=_payload(idempotency_key="idem-inv-1")).json()
+    event_id = created["event"]["id"]
+    initial_created_at = created["event"]["created_at"]
+    initial_updated_at = created["event"]["updated_at"]
+    # Sanity: created_at == updated_at on initial insert
+    assert initial_created_at == initial_updated_at
+
+    freezer.move_to("2026-05-16T03:30:00Z")
+    patched = client.patch(f"/api/events/{event_id}", json={"notes": "late"}).json()
+    # Strict ordering: updated_at > created_at after a write 30 min later
+    assert patched["event"]["updated_at"] > patched["event"]["created_at"]
+    # And monotonic vs the previous state
+    assert patched["event"]["updated_at"] > initial_updated_at
+
+
+def test_delete_then_undelete_round_trip(client, freezer):
+    """
+    API contract: delete + undelete leaves the row visible again, and
+    monotonic timestamps hold across the cycle. The deeper "deleted_at >=
+    created_at" invariant is asserted at the repo layer (where the row
+    is directly inspectable). Here we verify the round-trip surfaces
+    expected updated_at progression.
+    """
+    freezer.move_to("2026-05-16T03:00:00Z")
+    created = client.post("/api/events", json=_payload(idempotency_key="idem-inv-del")).json()
+    event_id = created["event"]["id"]
+    first_updated = created["event"]["updated_at"]
+
+    freezer.move_to("2026-05-16T03:15:00Z")
+    client.delete(f"/api/events/{event_id}")
+
+    freezer.move_to("2026-05-16T03:20:00Z")
+    restored = client.post(f"/api/events/{event_id}/undelete").json()
+    assert restored["event"]["deleted_at"] is None
+    # Monotonic: each subsequent write bumps updated_at
+    assert restored["event"]["updated_at"] > first_updated
 
 
 def test_feeds_last_side(client):

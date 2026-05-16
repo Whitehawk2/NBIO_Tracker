@@ -1,11 +1,7 @@
 """
-Forced-failure ROLLBACK branches.
-
-sqlite3.Connection is immutable — we can't patch its methods. Instead we
-wrap it in a small proxy that intercepts `execute()` calls matching a SQL
-marker, raises once, then delegates. repo.py only calls `.execute(...)`
-(and `.executescript(...)` from db.py, which isn't exercised here), so
-the proxy is a sufficient stand-in.
+Forced-failure ROLLBACK branches. Uses conftest's `FailingConn` proxy
+(moved there in #21 so other tests can import it without a cross-test
+import).
 """
 
 import sqlite3
@@ -20,25 +16,7 @@ from nbio.repo import (
     undelete_event,
     upsert_device,
 )
-
-
-class FailingConn:
-    """Delegates to a real sqlite3.Connection; raises on Nth-or-first matching execute."""
-
-    def __init__(self, real, marker, exc=None):
-        self._real = real
-        self._marker = marker
-        self._exc = exc or sqlite3.OperationalError("forced failure")
-        self._fired = False
-
-    def execute(self, sql, *a, **kw):
-        if self._marker in sql and not self._fired:
-            self._fired = True
-            raise self._exc
-        return self._real.execute(sql, *a, **kw)
-
-    def __getattr__(self, name):
-        return getattr(self._real, name)
+from tests.conftest import FailingConn
 
 
 def _seed(conn):

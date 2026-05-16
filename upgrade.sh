@@ -296,3 +296,12 @@ echo ""
 echo "  Rollback if anything misbehaves:  ./upgrade.sh --rollback"
 echo "  Live logs:                        make logs"
 echo "  Status:                           make status"
+echo ""
+# Detect static-asset changes between prev and target — if any, the SW
+# cache (hardcoded nbio-v1) will keep PWAs on the OLD client code until
+# a manual reload. Tracked in issue #23.
+if ! git diff --quiet "$CURRENT_SHA" "$TARGET_SHA" -- app/nbio/static app/nbio/templates 2>/dev/null; then
+  warn "Client code changed (static/ or templates/). Installed PWAs"
+  warn "won't auto-update — see README → Upgrading → 'Installed PWAs"
+  warn "don't auto-update'. Tell users to reload the app on their phones."
+fi
