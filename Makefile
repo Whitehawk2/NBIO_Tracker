@@ -1,7 +1,7 @@
 # Thin wrapper over setup.sh + docker compose. Nothing of substance here;
 # the real script is ./setup.sh.
 
-.PHONY: help setup up down restart logs status backup restore shell remove
+.PHONY: help setup up down restart logs status backup restore shell remove upgrade rollback
 
 help:
 	@echo "NBIO Tracker — make targets"
@@ -14,6 +14,8 @@ help:
 	@echo "  make status    docker compose ps"
 	@echo "  make backup    force a backup run now"
 	@echo "  make restore   show restore instructions"
+	@echo "  make upgrade   run ./upgrade.sh (latest tag by default)"
+	@echo "  make rollback  run ./upgrade.sh --rollback"
 	@echo "  make shell     /bin/sh in the app container"
 	@echo "  make remove    run ./remove.sh (uninstall; preserves data by default)"
 
@@ -54,6 +56,12 @@ restore:
 
 shell:
 	docker compose exec app /bin/sh
+
+upgrade:
+	./upgrade.sh
+
+rollback:
+	./upgrade.sh --rollback
 
 remove:
 	./remove.sh

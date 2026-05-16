@@ -51,11 +51,13 @@ backup/
   Dockerfile, crontab, backup.sh, restore.sh
 
 setup.sh                    one-shot bootstrap (handles rclone + tailscale)
+upgrade.sh                  tag-aware in-place upgrade; --rollback symmetric
 remove.sh                   safe uninstall
-Makefile                    setup / up / down / logs / backup / status / remove
+Makefile                    setup / up / down / logs / backup / upgrade / rollback / ...
 docker-compose.yml
 .env.example                config knobs (incl. APP_BIND default 127.0.0.1)
-data/                       gitignored bind mount (app.db + backups + rclone.conf)
+data/                       gitignored bind mount (app.db + backups + rclone.conf +
+                            .upgrade-prev-ref)
 README.md                   full operations guide
 TODO.md                     live roadmap, linked to GitHub issues
 ```
@@ -136,8 +138,40 @@ Stack ops (any time):
 make logs                                 # tail app logs
 make backup                               # force a backup right now
 make down                                 # stop stack
+make upgrade                              # ./upgrade.sh — latest tag by default
+make rollback                             # ./upgrade.sh --rollback
 ./remove.sh                               # symmetric uninstall
 ```
+
+## Upgrading
+
+`./upgrade.sh` is tag-aware by default. Resolution priority: explicit
+positional tag → `--ref <branch|tag>` → latest annotated tag. Bails on
+unknown refs.
+
+Flow: pre-flight (docker / compose / git / clean tree) → fetch origin +
+tags → show changelog and `.env.example` diff → confirm → backup
+snapshot via the sidecar (refuses to proceed without one; override with
+`NBIO_SKIP_BACKUP=1` for dev) → write current SHA to
+`data/.upgrade-prev-ref` → checkout target → build → up → poll
+`/healthz` for 60s.
+
+**Healthz failure halts, doesn't auto-rollback.** Design choice: the
+broken state is left intact so the operator can `docker compose logs
+app`, then choose to `./upgrade.sh --rollback` once diagnosed. Don't
+mask failures with an automatic revert.
+
+For tests, three contract env vars short-circuit the side-effectful
+steps so the shell suite can exercise the script without a real Docker
+daemon: `NBIO_SKIP_BACKUP=1`, `NBIO_SKIP_BUILD=1`, `NBIO_SKIP_HEALTHZ=1`.
+A stubbed `docker` on PATH gets pre-flight past the version checks. See
+`app/tests/shell/test_upgrade_*.py`.
+
+The README has a self-contained "Manual upgrade (without the script)"
+section that drives the equivalent sequence with raw `git` + `docker
+compose` commands — including a manual `--rollback` using the same
+`data/.upgrade-prev-ref` file the script writes. Point users there
+when they ask "how do I upgrade without running the script".
 
 ## CI surface
 

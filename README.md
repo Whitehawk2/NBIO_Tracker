@@ -216,14 +216,87 @@ docker compose exec backup tail -f /var/log/backup.log   # backup cron output
 
 ### Upgrading
 
+`./upgrade.sh` wraps the whole flow: it takes a snapshot first, fast-forwards
+to a chosen ref, rebuilds, restarts, polls `/healthz`, and records the prior
+SHA so `./upgrade.sh --rollback` can put you back. The database is in a
+bind-mounted volume (`./data/app.db`); rebuilds never touch it. Schema
+migrations are additive and run automatically on app start.
+
 ```bash
 cd /opt/nbio
-git pull
-docker compose up -d --build
+./upgrade.sh                     # default: latest annotated git tag
+./upgrade.sh v1.0.0              # pin to a specific tag
+./upgrade.sh --ref master        # opt into branch-tracking (less safe)
+./upgrade.sh --pull              # also pull updated base images
+./upgrade.sh --resolve-only      # dry-run: print the target ref, exit
+./upgrade.sh --rollback          # revert to the SHA from the last upgrade
 ```
 
-The database is in a bind-mounted volume (`./data/app.db`); rebuilding
-containers does not touch it. Schema migrations run automatically on app start.
+Flags:
+
+| Flag / env | Effect |
+|---|---|
+| (no args) | Upgrade to the latest annotated tag |
+| `<tag>` | Upgrade to that specific tag |
+| `--ref <branch>` | Track a branch's HEAD (use `--ref master` to live on the edge) |
+| `--rollback` | Read `data/.upgrade-prev-ref`, check it out, rebuild |
+| `--yes` (or `NBIO_NONINTERACTIVE=1`) | Skip the confirmation prompt |
+| `--pull` | `docker compose build --pull` (refresh base images too) |
+| `--resolve-only` | Print the ref the script would pick, then exit |
+
+**Healthz failure halts the script** — it does not auto-rollback. The
+broken state is left intact so you can `docker compose logs app` to
+diagnose, then `./upgrade.sh --rollback` once you've decided.
+
+Find available tags with `git tag --list` after a `git fetch --tags`, or
+browse GitHub Releases.
+
+#### Manual upgrade (without the script)
+
+If you'd rather drive it yourself — or `upgrade.sh` doesn't exist in the
+version you're running — the equivalent sequence is:
+
+```bash
+cd /opt/nbio
+
+# 1. Pre-upgrade snapshot — refuse to upgrade without one
+docker compose exec backup /usr/local/bin/backup.sh
+
+# 2. Record where you are now so you can roll back
+mkdir -p data
+git rev-parse HEAD > data/.upgrade-prev-ref
+
+# 3. Fetch, pick a ref, check it out
+git fetch origin && git fetch --tags origin
+TARGET=$(git describe --tags --abbrev=0)      # latest annotated tag
+# or pin: TARGET=v1.0.0
+# or master: TARGET=origin/master
+git checkout "$TARGET"
+
+# 4. Diff .env.example — note any new keys to mirror into .env
+git diff "$(cat data/.upgrade-prev-ref)" HEAD -- .env.example
+
+# 5. Rebuild + restart (only changed containers recreate)
+docker compose build       # add --pull if you want fresh base images
+docker compose up -d
+
+# 6. Health-check
+curl -fsS http://localhost:${APP_PORT:-8000}/healthz
+```
+
+Rollback by hand (uses the same `data/.upgrade-prev-ref` the script writes,
+so `upgrade.sh --rollback` works on top of a manual upgrade too):
+
+```bash
+cd /opt/nbio
+PREV=$(tr -d '[:space:]' < data/.upgrade-prev-ref)
+git checkout "$PREV"
+docker compose build && docker compose up -d
+```
+
+Verification after either path: `make status` (both containers Up),
+`make logs` (no traceback in the app), browse to the app and confirm
+recent events still show.
 
 ### Stopping cleanly
 
