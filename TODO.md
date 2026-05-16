@@ -5,7 +5,9 @@ Roadmap for NBIO Tracker, in descending order of priority.
 Each item is also tracked as a GitHub issue (linked below) — close the issue
 when done, and tick the item here. The two views are kept in sync manually.
 
-## 1. Verify and merge PR #2 (UX phase 1) — [#3](https://github.com/Whitehawk2/NBIO_Tracker/issues/3)
+## 1. ✅ Verify and merge PR #2 (UX phase 1) — [#3](https://github.com/Whitehawk2/NBIO_Tracker/issues/3)
+
+**Status:** Done — merged and verified on the Pi server (2026-05-16).
 
 Manual desktop-Chrome verification of the three UX fixes in
 **[PR #2](https://github.com/Whitehawk2/NBIO_Tracker/pull/2)**:
@@ -21,12 +23,17 @@ If acceptable: merge PR #2 into `claude/newborn-tracker-app-PoMGY` so it
 rolls into the standing **[PR #1](https://github.com/Whitehawk2/NBIO_Tracker/pull/1)**
 to `master`.
 
-## 2. Quick server startup script + faster backup setup — [#4](https://github.com/Whitehawk2/NBIO_Tracker/issues/4)
+## 2. ✅ Quick server startup script + faster backup setup — [#4](https://github.com/Whitehawk2/NBIO_Tracker/issues/4)
 
-Backup setup currently requires a manual `rclone authorize` then
+**Status:** Done — `setup.sh` + `remove.sh` + `Makefile` merged via
+[PR #9](https://github.com/Whitehawk2/NBIO_Tracker/pull/9); tested
+end-to-end on the Pi server (2026-05-16).
+
+Backup setup previously required a manual `rclone authorize` then
 `rclone config create gdrive drive ...` two-step (see
-[README → Google Drive backups](README.md#google-drive-backups)). Make
-this scriptable and less of a hassle.
+[README → Google Drive backups](README.md#google-drive-backups)). Now
+collapsed into one prompt inside `./setup.sh`; `./remove.sh` provides a
+safe symmetric uninstall.
 
 Goals:
 - A single entry point — `./setup.sh` (or `make setup`) — that prompts
