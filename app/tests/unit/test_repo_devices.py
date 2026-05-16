@@ -39,7 +39,19 @@ def test_list_devices_ordered_by_created_at(conn):
     assert [d["id"] for d in devices] == ["dev-a", "dev-b"]
 
 
-def test_updated_at_changes_on_update(conn):
+def test_updated_at_changes_on_update(conn, freezer):
+    """
+    Bumping updated_at on every upsert is the contract. The prior version
+    of this test used `... != ... or color == "#bbbbbb"` — the or-clause
+    is unconditionally true given the test setup, so the timestamp half
+    never had to hold (issue #21 worth-fixing). Freezer pins two distinct
+    moments so the timestamps MUST differ.
+    """
+    freezer.move_to("2026-05-16T03:00:00Z")
     first = upsert_device(conn, "dev-1", DeviceUpsert(color="#aaaaaa"))
+    freezer.move_to("2026-05-16T03:30:00Z")
     second = upsert_device(conn, "dev-1", DeviceUpsert(color="#bbbbbb"))
-    assert second["updated_at"] != first["updated_at"] or second["color"] == "#bbbbbb"
+    assert second["updated_at"] != first["updated_at"]
+    assert second["color"] == "#bbbbbb"
+    # Invariant: updated_at always moves forward
+    assert second["updated_at"] > first["updated_at"]
