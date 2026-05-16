@@ -35,11 +35,15 @@ def test_distinct_idem_keys_yield_distinct_rows(conn):
     assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 2
 
 
-def test_race_loser_returns_already_exists(conn):
+def test_race_loser_returns_already_exists_branch_coverage(conn):
     """
-    Simulate the race: pre-INSERT idem lookup missed but the INSERT raised
-    IntegrityError because another writer inserted the same key in the gap.
-    The recovery branch re-fetches and returns 'already_exists'.
+    BRANCH COVERAGE — this test mocks `fetch_event_by_idem` to drive the
+    post-IntegrityError recovery branch in isolation. It verifies the
+    branch logic, NOT a real race. The behavioural test for
+    "concurrent POSTs of the same idem → 1 row, 9 already_exists" lives
+    in `tests/integration/test_concurrency.py::test_same_idem_key_yields_single_row`
+    and is the canonical proof of the property
+    (issue #21 worth-fixing — documented the limitation explicitly).
     """
     create_event(conn, _payload(idempotency_key="idem-race"))
     real_row = fetch_event_by_idem(conn, "idem-race")
@@ -59,7 +63,7 @@ def test_create_reraises_on_non_idem_integrity_error(conn):
     """
     import sqlite3
 
-    from tests.unit.test_repo_error_paths import FailingConn
+    from tests.conftest import FailingConn
 
     proxy = FailingConn(
         conn,

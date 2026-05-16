@@ -99,6 +99,50 @@ def reset_broker():
     sse.broker._subs.clear()
 
 
+@pytest.fixture(autouse=True)
+def reset_dependency_overrides():
+    """
+    Defensively clear `app.dependency_overrides` between tests. The `client`
+    fixture does this in its own teardown, but direct-call tests
+    (test_sse_stream, test_concurrency) bypass `client` — a leaked
+    override would silently couple unrelated tests
+    (issue #21 worth-fixing).
+    """
+    from nbio.main import app
+
+    app.dependency_overrides.clear()
+    yield
+    app.dependency_overrides.clear()
+
+
+class FailingConn:
+    """
+    Proxy around a real sqlite3.Connection that intercepts `execute()` calls
+    matching a SQL marker, raises once, then delegates. sqlite3.Connection
+    is immutable so we can't patch its methods directly; this proxy is the
+    workaround used by the forced-failure ROLLBACK tests.
+
+    Moved from `tests/unit/test_repo_error_paths.py` to conftest so other
+    test modules can import it without a cross-test import
+    (issue #21 nit).
+    """
+
+    def __init__(self, real, marker, exc=None):
+        self._real = real
+        self._marker = marker
+        self._exc = exc or sqlite3.OperationalError("forced failure")
+        self._fired = False
+
+    def execute(self, sql, *a, **kw):
+        if self._marker in sql and not self._fired:
+            self._fired = True
+            raise self._exc
+        return self._real.execute(sql, *a, **kw)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
 @pytest.fixture
 def client(conn):
     """
