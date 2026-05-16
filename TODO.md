@@ -138,22 +138,31 @@ From here on, every PR adds a failing test before the implementation; the
 GHCR pre-built images filed as a follow-up; will land when release
 cadence motivates faster Pi upgrades.
 
-## 9. PWA service worker doesn't pick up upgrades — [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23)
+## 9. ✅ PWA service worker doesn't pick up upgrades — [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23)
 
-`./upgrade.sh` from #20 cleanly replaces server code, but installed
-PWAs keep running the old client code because `sw.js` uses a
-hardcoded `CACHE = "nbio-v1"` that never bumps. Manual reload required
-after every release that touches static assets — discovered while
-writing the upgrade flow docs.
+**Status:** Fixed (PR pending merge).
 
-Today's mitigation: README has a "manual reload" subsection,
-`upgrade.sh` prints a warning when static assets changed, CLAUDE.md
-"Sharp edges" calls it out.
-
-Fix: inject the release version into `sw.js` at container start, use
-`nbio-${VERSION}` as the cache name (the existing `activate` handler
-already purges non-matching caches), add an in-app "Update available"
-toast wired to the SW `controllerchange` event.
+- New `nbio.version.static_assets_hash()` — sha256 of every file under
+  `nbio/static/`, truncated to 12 hex chars. Path-and-content sensitive,
+  insertion-order independent. Cheap (computed per request).
+- New `routes/sw.py` route owns `/static/sw.js` and substitutes
+  `__NBIO_VERSION__` in the source with the hash before responding;
+  `Cache-Control: no-cache` so browsers always revalidate the SW.
+- `sw.js` source now declares `CACHE = "nbio-__NBIO_VERSION__"`. The
+  existing `activate` handler already purges non-matching caches, so
+  a content change → new hash → new cache name → purge → fresh shell.
+- New `/api/version` endpoint for diagnostics (returns the hash).
+- `app.js` now registers the SW (moved from `base.html`) and listens
+  for `updatefound` → `statechange = activated` → shows an
+  "Update available · Reload" sticky toast. Differentiated from
+  first-install by checking `navigator.serviceWorker.controller`
+  was truthy at registration time.
+- README "Upgrading" rewritten — was a "known limitation, here's the
+  manual reload" caveat; is now "auto-updates, here's the fallback if
+  something gets stuck". `upgrade.sh`'s static-asset warning softened
+  from `warn:` to `info:` and tells the operator to expect the toast.
+- 13 new tests (Python only — JS is `node --check` and Pi manual);
+  full suite 261 / 100% coverage.
 
 ## 10. ✅ Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
 
