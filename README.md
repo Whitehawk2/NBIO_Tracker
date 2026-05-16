@@ -654,19 +654,24 @@ Should not happen with WAL + `busy_timeout=5000` and two writers. If it does:
 
 ## Development notes
 
-- Default branch for ongoing work: `claude/newborn-tracker-app-PoMGY`.
 - Local dev without Docker:
   ```bash
   cd app
-  pip install -e .
+  pip install -e .[dev]
   DB_PATH=/tmp/nbio.db TZ=Europe/London \
     uvicorn nbio.main:app --reload --host 0.0.0.0 --port 8000
   ```
 - The schema is created on first boot from `app/nbio/db.py`. No migrations
   framework in v1 — additive changes are safe; destructive changes need a
   manual `ALTER`.
-- Tests: none yet. The verification plan in `data/` is exercised manually
-  (two browser tabs, devtools offline toggle, force a backup, restore).
+- **Tests**: full suite at `app/tests/` — `cd app && TZ=UTC python -m pytest`.
+  Coverage gate is **90%+** (current: 100%). See
+  [`CONTRIBUTING.md`](CONTRIBUTING.md) for the TDD policy and the layout.
+- **CI**: GitHub Actions runs lint (ruff), type (mypy), test (pytest
+  matrix 3.12 + 3.13), shell (shellcheck + setup.sh dry-run), js
+  (`node --check`), and docker (buildx amd64 + compose config) on every
+  PR and push. The arm64 cross-build is gated to `workflow_dispatch`
+  and tag pushes.
 
 ---
 

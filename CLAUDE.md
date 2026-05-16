@@ -101,9 +101,9 @@ TODO.md                     live roadmap, linked to GitHub issues
 
 ## Conventions
 
-- **TDD** (live once #14 lands): failing test before the implementation,
-  same PR. Coverage cannot dip below 90%; CI gates via
-  `--cov-fail-under=90`. See `CONTRIBUTING.md` (lands with #14).
+- **TDD** (live): failing test before the implementation, same PR.
+  Coverage cannot dip below 90% (currently 100%); CI gates via
+  `--cov-fail-under=90`. See `CONTRIBUTING.md`.
 - **Branches**: `claude/<slug>`; base on `master`.
 - **Commits**: new commits, never `--amend`. Never `--no-verify`. Never
   skip signing.
@@ -117,19 +117,17 @@ TODO.md                     live roadmap, linked to GitHub issues
 
 ## Dev quickstart
 
-Pre-#14 (today): there is no Python test suite. The smoke loop is
-`./setup.sh` + manual browser testing on the Pi.
-
-Post-#14:
-
 ```bash
 pip install -e ./app[dev]
-pytest                                    # full suite + coverage
-pytest --cov-report=html                  # drill into misses
-ruff check app/nbio app/tests
-ruff format --check app/nbio app/tests
-mypy app/nbio
+cd app
+TZ=UTC python -m pytest                   # full suite (212 tests, ~30s)
+TZ=UTC python -m pytest --cov-report=html # drill into coverage misses
+ruff check nbio tests
+ruff format --check nbio tests
+mypy nbio --ignore-missing-imports
 ```
+
+`TZ=UTC` matters — the timezone-dependent helpers read the process tz.
 
 Stack ops (any time):
 
@@ -141,21 +139,22 @@ make down                                 # stop stack
 ./remove.sh                               # symmetric uninstall
 ```
 
-## CI surface (post-#14)
+## CI surface
 
-`.github/workflows/ci.yml`, six jobs:
+`.github/workflows/ci.yml`, six jobs (one gated):
 
 | Job | Trigger | What it does |
 |---|---|---|
 | `lint` | every PR / push | `ruff check` + `ruff format --check` |
-| `type` | every | `mypy app/nbio` |
-| `test` | every, matrix py 3.12 + 3.13 | `pytest --cov --cov-fail-under=90`; `TZ=UTC` |
-| `shell` | every | `shellcheck` + `bash -n` + `setup.sh --dry-run` |
+| `type` | every | `mypy app/nbio --ignore-missing-imports` |
+| `test` | every, matrix py 3.12 + 3.13 | `pytest --cov --cov-fail-under=90`; `TZ=UTC`; uploads `coverage.xml` + `htmlcov/` as artifacts |
+| `shell` | every | `shellcheck --severity=warning` + `bash -n` + `setup.sh --dry-run` in a tmpdir |
 | `js` | every | `node --check` on every `static/*.js` |
-| `docker` | every | buildx amd64 for both images + `docker compose config` |
-| `arm64` | `workflow_dispatch` + tags | QEMU cross-build for the Pi |
+| `docker` | every | buildx amd64 for both images + import smoke + `docker compose config -q` |
+| `arm64` | `workflow_dispatch` + tag pushes | QEMU cross-build for the Pi |
 
-`concurrency: cancel-in-progress` at the workflow level.
+`concurrency: cancel-in-progress` at the workflow level so stacked pushes
+to the same ref don't pile up.
 
 ## Environment quirks (Claude Code on the web)
 
@@ -184,4 +183,4 @@ audit), #6 (runtime settings), #7 (Nix), #8 (themes).
 - `README.md` — full operations guide (setup, networking, PWA install,
   offline queue, backup/restore, troubleshooting).
 - `TODO.md` — roadmap.
-- `CONTRIBUTING.md` — TDD policy + dev setup (lands with #14).
+- `CONTRIBUTING.md` — TDD policy + dev setup.
