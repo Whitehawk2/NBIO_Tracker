@@ -138,7 +138,24 @@ From here on, every PR adds a failing test before the implementation; the
 GHCR pre-built images filed as a follow-up; will land when release
 cadence motivates faster Pi upgrades.
 
-## 9. Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
+## 9. PWA service worker doesn't pick up upgrades — [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23)
+
+`./upgrade.sh` from #20 cleanly replaces server code, but installed
+PWAs keep running the old client code because `sw.js` uses a
+hardcoded `CACHE = "nbio-v1"` that never bumps. Manual reload required
+after every release that touches static assets — discovered while
+writing the upgrade flow docs.
+
+Today's mitigation: README has a "manual reload" subsection,
+`upgrade.sh` prints a warning when static assets changed, CLAUDE.md
+"Sharp edges" calls it out.
+
+Fix: inject the release version into `sw.js` at container start, use
+`nbio-${VERSION}` as the cache name (the existing `activate` handler
+already purges non-matching caches), add an in-app "Update available"
+toast wired to the SW `controllerchange` event.
+
+## 10. Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
 
 PR #16 shipped 212 tests at 100% line + branch coverage and a 90% gate.
 An independent review surfaced that the coverage number is doing more
@@ -168,7 +185,7 @@ the real quality signal, gated only after we know our baseline.
 
 Lands **after** the upgrade PR per priority ordering.
 
-## 10. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
+## 11. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 
 Move things that currently live in env vars or first-launch onboarding
 onto a settings page editable from the running app:
@@ -183,7 +200,7 @@ truly global toggles. UI: minimal `/settings` page with HTMX form posts
 to a new `routes/settings.py`. Reuse existing `repo.upsert_device`
 where possible.
 
-## 11. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
+## 12. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
 
 Two-pronged: dev shell **and** an installable binary suitable for
 `nix profile install nixpkgs#nbio`. Nix users are assumed advanced and
@@ -215,9 +232,9 @@ tangentially helpful for the k8s scenario in item 2.
 The setup script from item 2 will print a header comment pointing Nix
 users here so the two paths stay clearly separated.
 
-## 12. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
+## 13. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
 
-(Blocked on item 10 — needs the settings UI to host the picker.)
+(Blocked on item 11 — needs the settings UI to host the picker.)
 
 Add palettes alongside the current "warm" theme. Recommended starting
 pair from the Catppuccin family:
