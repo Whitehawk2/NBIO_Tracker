@@ -1,7 +1,10 @@
 """In-process SSE broker. One asyncio.Queue per connected client."""
+
 import asyncio
+import contextlib
 import json
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 
 class Broker:
@@ -19,11 +22,9 @@ class Broker:
     async def publish(self, event_name: str, event_id: int, payload: dict[str, Any]) -> None:
         msg = (event_name, event_id, payload)
         for q in list(self._subs):
-            try:
+            # slow consumer → drop; client catches up via Last-Event-ID on reconnect
+            with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait(msg)
-            except asyncio.QueueFull:
-                # slow consumer; drop. They will catch up via Last-Event-ID on reconnect.
-                pass
 
 
 broker = Broker()
@@ -31,9 +32,7 @@ broker = Broker()
 
 def format_sse(event_name: str, event_id: int, data: dict[str, Any]) -> str:
     return (
-        f"id: {event_id}\n"
-        f"event: {event_name}\n"
-        f"data: {json.dumps(data, separators=(',', ':'))}\n\n"
+        f"id: {event_id}\nevent: {event_name}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
     )
 
 
@@ -48,5 +47,5 @@ async def stream(
                 queue.get(), timeout=keepalive_seconds
             )
             yield format_sse(event_name, event_id, payload)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             yield ": ping\n\n"

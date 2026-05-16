@@ -1,5 +1,4 @@
 import sqlite3
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -13,7 +12,7 @@ router = APIRouter(prefix="/api")
 
 @router.get("/events")
 def list_events(
-    since: Optional[str] = Query(default=None),
+    since: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     conn: sqlite3.Connection = Depends(get_conn),
 ):

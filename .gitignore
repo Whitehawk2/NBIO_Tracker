@@ -9,6 +9,15 @@ venv/
 .idea/
 .vscode/
 
+# pytest / coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
 # runtime data — never commit
 data/*
 !data/.gitkeep

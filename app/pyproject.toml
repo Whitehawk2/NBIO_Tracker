@@ -10,5 +10,61 @@ dependencies = [
     "pydantic-settings",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+    "httpx>=0.27",
+    "pytest-freezer>=0.4",
+    "ruff>=0.6",
+    "mypy>=1.10",
+]
+
 [tool.setuptools]
 packages = ["nbio"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: end-to-end tests that drive the ASGI app + file DB",
+    "shell: subprocess-driven tests that exercise shell scripts",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore::DeprecationWarning:httpx.*",
+    "ignore::DeprecationWarning:websockets.*",
+]
+
+[tool.coverage.run]
+source = ["nbio"]
+branch = true
+omit = ["nbio/__init__.py"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["tests/shell"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+ignore = ["B008"]  # FastAPI's Depends() in defaults is idiomatic
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_unused_ignores = true
+files = ["nbio"]

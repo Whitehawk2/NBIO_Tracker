@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,7 @@ def _relative(occurred_at: str) -> str:
         dt = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
     except ValueError:
         return ""
-    diff = datetime.now(timezone.utc) - dt
+    diff = datetime.now(UTC) - dt
     secs = int(diff.total_seconds())
     if secs < 60:
         return "just now"
@@ -54,11 +54,10 @@ def _today_card(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 _WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-_MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+_MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-def _day_label(d: "datetime.date", today: "datetime.date") -> str:
+def _day_label(d: date, today: date) -> str:
     delta = (today - d).days
     if delta == 0:
         return "Today"
@@ -73,9 +72,7 @@ def _group_events_by_local_day(events: list[dict[str, Any]]) -> list[dict[str, A
     groups: dict[str, dict[str, Any]] = {}
     for e in events:
         try:
-            dt_local = datetime.fromisoformat(
-                e["occurred_at"].replace("Z", "+00:00")
-            ).astimezone()
+            dt_local = datetime.fromisoformat(e["occurred_at"].replace("Z", "+00:00")).astimezone()
         except ValueError:
             continue
         d = dt_local.date()
@@ -91,9 +88,7 @@ def _group_events_by_local_day(events: list[dict[str, Any]]) -> list[dict[str, A
     ]
 
 
-def _last_days_rows(
-    totals: list[dict[str, Any]], n: int = 3
-) -> list[dict[str, Any]]:
+def _last_days_rows(totals: list[dict[str, Any]], n: int = 3) -> list[dict[str, Any]]:
     """Pad the last N local days regardless of whether events were logged."""
     today_local = datetime.now().astimezone().date()
     by_day = {row["day"]: row for row in totals}
@@ -123,9 +118,7 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     events = [
         e
         for e in raw_events
-        if datetime.fromisoformat(e["occurred_at"].replace("Z", "+00:00"))
-        .astimezone()
-        .date()
+        if datetime.fromisoformat(e["occurred_at"].replace("Z", "+00:00")).astimezone().date()
         >= cutoff_local_day
     ]
     grouped_events = _group_events_by_local_day(events)

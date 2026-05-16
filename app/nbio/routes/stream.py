@@ -1,5 +1,4 @@
 import sqlite3
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import StreamingResponse
@@ -22,7 +21,7 @@ SSE_HEADERS = {
 @router.get("/stream")
 async def sse_stream(
     request: Request,
-    last_event_id: Optional[str] = Header(default=None, alias="Last-Event-ID"),
+    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     queue = broker.subscribe()

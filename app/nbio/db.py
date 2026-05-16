@@ -1,4 +1,5 @@
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 from .config import settings
@@ -72,7 +73,7 @@ def init_db() -> None:
         conn.close()
 
 
-def get_conn() -> sqlite3.Connection:
+def get_conn() -> Iterator[sqlite3.Connection]:
     """FastAPI dependency. One connection per request."""
     conn = connect()
     try:

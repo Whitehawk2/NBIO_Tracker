@@ -1,0 +1,141 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install "ruff>=0.6"
+      - run: ruff check app/nbio app/tests
+      - run: ruff format --check app/nbio app/tests
+
+  type:
+    name: type (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ./app[dev]
+      - run: mypy app/nbio --ignore-missing-imports
+
+  test:
+    name: test (py ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    env:
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: pip install -e ./app[dev]
+      - name: pytest
+        working-directory: app
+        run: |
+          python -m pytest \
+            --cov=nbio \
+            --cov-branch \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --cov-fail-under=90
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python }}
+          path: |
+            app/coverage.xml
+            app/htmlcov/
+          retention-days: 14
+
+  shell:
+    name: shell (shellcheck + dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: shellcheck
+        run: |
+          shellcheck --severity=warning setup.sh remove.sh backup/backup.sh backup/restore.sh
+      - name: bash -n
+        run: |
+          for f in setup.sh remove.sh backup/backup.sh backup/restore.sh; do
+            bash -n "$f"
+          done
+      - name: setup.sh --dry-run
+        run: |
+          tmpdir=$(mktemp -d)
+          cp setup.sh .env.example docker-compose.yml "$tmpdir/"
+          chmod +x "$tmpdir/setup.sh"
+          cd "$tmpdir"
+          NBIO_NONINTERACTIVE=1 ./setup.sh --dry-run
+          test -f .env
+          grep -q '^APP_BIND=127.0.0.1$' .env
+
+  js:
+    name: js (node --check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax-check every static JS file
+        run: |
+          set -e
+          shopt -s nullglob
+          for f in app/nbio/static/*.js; do
+            echo "checking $f"
+            node --check "$f"
+          done
+
+  docker:
+    name: docker (buildx amd64 + compose)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build app image
+        run: docker buildx build --platform linux/amd64 --load -t nbio-app:ci ./app
+      - name: Build backup image
+        run: docker buildx build --platform linux/amd64 --load -t nbio-backup:ci ./backup
+      - name: App smoke (import + healthz path)
+        run: |
+          docker run --rm nbio-app:ci python -c "import nbio.main; print(nbio.main.app.title)"
+      - name: docker compose config validates
+        run: docker compose -f docker-compose.yml config -q
+
+  arm64:
+    name: arm64 (QEMU cross-build)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - run: docker buildx build --platform linux/arm64 ./app
+      - run: docker buildx build --platform linux/arm64 ./backup

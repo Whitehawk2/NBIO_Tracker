@@ -104,28 +104,19 @@ Acceptance: every command in the README runs cleanly against current
 `master`; a non-Tailscale reader can pick a path and reach the app within
 30 seconds.
 
-## 7. Tests + GitHub Actions CI/CD — [#14](https://github.com/Whitehawk2/NBIO_Tracker/issues/14)
+## 7. ✅ Tests + GitHub Actions CI/CD — [#14](https://github.com/Whitehawk2/NBIO_Tracker/issues/14)
 
-The project has zero automated tests and no CI. Everything has been
-manually verified on a Pi — that worked for the early sprint but will
-collapse at v1+. Baseline coverage to land:
+**Status:** Done (TDD policy now live).
 
-- **pytest** against the FastAPI app (repo layer, API layer, SSE basics,
-  concurrency smoke). Target ~80% on the repo + API.
-- **Shell**: `shellcheck --severity=warning` + `bash -n` on every `*.sh`;
-  `NBIO_NONINTERACTIVE=1 ./setup.sh --dry-run` in a tmpdir.
-- **JS sanity**: `node --check` on every `app/nbio/static/*.js`.
-- **Lint**: `ruff check` + `ruff format --check` + `mypy --ignore-missing-imports`.
-- **Docker build**: `docker buildx build --platform linux/amd64 ./app` + `./backup`.
-- **ARM64**: gated to `workflow_dispatch` (slow under QEMU).
-- **GitHub Actions** workflow (`.github/workflows/ci.yml`) running all
-  four jobs on every PR and push to master.
+- 212 tests under `app/tests/` (unit / api / integration / shell).
+- **100% line + branch coverage** on `app/nbio/`; CI gate at `--cov-fail-under=90`.
+- `.github/workflows/ci.yml`: six jobs (lint / type / test (matrix 3.12+3.13)
+  / shell / js / docker), plus `arm64` gated to `workflow_dispatch` + tag pushes.
+- `.github/dependabot.yml`: weekly updates for pip / github-actions / docker.
+- `CONTRIBUTING.md`: dev setup + TDD policy + the sharp edges to know.
 
-Out of scope for this issue: Playwright E2E, release/publish CD, container
-registry — note as follow-ups.
-
-Acceptance: every PR runs CI green in <5 min; branch protection on `master`
-gates on CI; failing tests block merge.
+From here on, every PR adds a failing test before the implementation; the
+90% gate enforces it.
 
 ## 8. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 

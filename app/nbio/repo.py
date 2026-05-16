@@ -1,9 +1,10 @@
 """All SQL lives here. Plain functions over sqlite3.Connection."""
+
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from .config import settings
 from .models import DeviceUpsert, EventCreate, EventPatch
@@ -20,16 +21,16 @@ EVENT_JOIN = "events e LEFT JOIN devices d ON d.id = e.created_by_device"
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
-def _row_to_dict(row: sqlite3.Row | None) -> Optional[dict[str, Any]]:
+def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
     if row is None:
         return None
-    return {k: row[k] for k in row.keys()}
+    return {k: row[k] for k in row.keys()}  # noqa: SIM118 — sqlite3.Row needs .keys()
 
 
-def fetch_event(conn: sqlite3.Connection, event_id: int) -> Optional[dict[str, Any]]:
+def fetch_event(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | None:
     cur = conn.execute(
         f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} WHERE e.id = ?",
         (event_id,),
@@ -37,7 +38,7 @@ def fetch_event(conn: sqlite3.Connection, event_id: int) -> Optional[dict[str, A
     return _row_to_dict(cur.fetchone())
 
 
-def fetch_event_by_idem(conn: sqlite3.Connection, idem: str) -> Optional[dict[str, Any]]:
+def fetch_event_by_idem(conn: sqlite3.Connection, idem: str) -> dict[str, Any] | None:
     cur = conn.execute(
         f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} WHERE e.idempotency_key = ?",
         (idem,),
@@ -48,7 +49,7 @@ def fetch_event_by_idem(conn: sqlite3.Connection, idem: str) -> Optional[dict[st
 def list_events(
     conn: sqlite3.Connection,
     baby_id: int = 1,
-    since: Optional[str] = None,
+    since: str | None = None,
     limit: int = 200,
     include_deleted: bool = False,
 ) -> list[dict[str, Any]]:
@@ -66,7 +67,7 @@ def list_events(
         "ORDER BY e.occurred_at DESC, e.id DESC LIMIT ?",
         args,
     )
-    return [_row_to_dict(r) for r in cur.fetchall()]
+    return [d for d in (_row_to_dict(r) for r in cur.fetchall()) if d is not None]
 
 
 def list_events_since_id(
@@ -75,11 +76,10 @@ def list_events_since_id(
     limit: int,
 ) -> list[dict[str, Any]]:
     cur = conn.execute(
-        f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
-        "WHERE e.id > ? ORDER BY e.id ASC LIMIT ?",
+        f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} WHERE e.id > ? ORDER BY e.id ASC LIMIT ?",
         (last_id, limit),
     )
-    return [_row_to_dict(r) for r in cur.fetchall()]
+    return [d for d in (_row_to_dict(r) for r in cur.fetchall()) if d is not None]
 
 
 def find_duplicate_in_window(
@@ -88,7 +88,7 @@ def find_duplicate_in_window(
     event_type: str,
     occurred_at: str,
     own_id: int,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     window = settings.dup_window_seconds
     cur = conn.execute(
         """
@@ -110,7 +110,7 @@ def create_event(
     conn: sqlite3.Connection,
     payload: EventCreate,
     baby_id: int = 1,
-) -> tuple[str, dict[str, Any], Optional[dict[str, Any]]]:
+) -> tuple[str, dict[str, Any], dict[str, Any] | None]:
     """
     Returns (status, event_dict, duplicate_of_or_None).
     status ∈ {"created", "created_possible_duplicate", "already_exists"}.
@@ -142,6 +142,7 @@ def create_event(
             ),
         )
         new_id = cur.lastrowid
+        assert new_id is not None  # sqlite returns the inserted rowid for INSERT
         conn.execute("COMMIT")
     except sqlite3.IntegrityError:
         conn.execute("ROLLBACK")
@@ -151,18 +152,17 @@ def create_event(
         raise
 
     event = fetch_event(conn, new_id)
+    assert event is not None  # we just inserted it
     dup = None
     if not payload.skip_dup_check:
-        dup = find_duplicate_in_window(
-            conn, baby_id, payload.type, payload.occurred_at, new_id
-        )
+        dup = find_duplicate_in_window(conn, baby_id, payload.type, payload.occurred_at, new_id)
     status = "created_possible_duplicate" if dup else "created"
     return status, event, dup
 
 
 def patch_event(
     conn: sqlite3.Connection, event_id: int, patch: EventPatch
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     fields = patch.model_dump(exclude_unset=True)
     if not fields:
         return fetch_event(conn, event_id)
@@ -181,7 +181,7 @@ def patch_event(
     return fetch_event(conn, event_id)
 
 
-def soft_delete_event(conn: sqlite3.Connection, event_id: int) -> Optional[dict[str, Any]]:
+def soft_delete_event(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | None:
     conn.execute("BEGIN IMMEDIATE")
     try:
         conn.execute(
@@ -195,7 +195,7 @@ def soft_delete_event(conn: sqlite3.Connection, event_id: int) -> Optional[dict[
     return fetch_event(conn, event_id)
 
 
-def undelete_event(conn: sqlite3.Connection, event_id: int) -> Optional[dict[str, Any]]:
+def undelete_event(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | None:
     conn.execute("BEGIN IMMEDIATE")
     try:
         conn.execute(
@@ -209,7 +209,7 @@ def undelete_event(conn: sqlite3.Connection, event_id: int) -> Optional[dict[str
     return fetch_event(conn, event_id)
 
 
-def last_feed_side(conn: sqlite3.Connection, baby_id: int = 1) -> Optional[str]:
+def last_feed_side(conn: sqlite3.Connection, baby_id: int = 1) -> str | None:
     row = conn.execute(
         """
         SELECT feed_side FROM events
@@ -233,13 +233,15 @@ def last_event_of_each_type(
             (baby_id, t),
         ).fetchone()
         if row:
-            out[t] = _row_to_dict(row)
+            d = _row_to_dict(row)
+            assert d is not None  # row is truthy, _row_to_dict only returns None for None input
+            out[t] = d
     return out
 
 
 def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
     """Counts since local midnight today (UTC-anchored — close enough for v1)."""
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     out = {"feed": 0, "wee": 0, "poo": 0}
     cur = conn.execute(
         """
@@ -316,6 +318,6 @@ def list_devices(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return [dict(r) for r in cur.fetchall()]
 
 
-def baby(conn: sqlite3.Connection) -> Optional[dict[str, Any]]:
+def baby(conn: sqlite3.Connection) -> dict[str, Any] | None:
     r = conn.execute("SELECT id, name, dob FROM babies WHERE id = 1").fetchone()
     return dict(r) if r else None
