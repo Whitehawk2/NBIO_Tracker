@@ -155,37 +155,54 @@ Fix: inject the release version into `sw.js` at container start, use
 already purges non-matching caches), add an in-app "Update available"
 toast wired to the SW `controllerchange` event.
 
-## 10. Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
+## 10. ✅ Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
 
-PR #16 shipped 212 tests at 100% line + branch coverage and a 90% gate.
-An independent review surfaced that the coverage number is doing more
-rhetorical than protective work — five real regression classes would
-slip past the suite as it stands.
+**Status:** Done — merged via [PR #24](https://github.com/Whitehawk2/NBIO_Tracker/pull/24).
 
-Critical fixes (full detail in #21):
-- `test_pages_edge_branches.py` is coverage theatre — asserts only
-  `status_code == 200`. Assert on rendered fallback.
-- No page-render test inspects the body. A regression that renders
-  `reports.html` from `/` would pass today.
-- Concurrency test would pass with `BEGIN DEFERRED` — only asserts row
-  counts (which the UNIQUE index alone guarantees). Add same-row
-  contention + observed-ordering assertions.
-- No test catches dropping `ux_events_idem` — add a schema-invariant
-  test.
-- `Last-Event-ID: "0"` is silently swallowed by `if last_event_id:`
-  truthy check.
+- All 5 critical gaps closed: pages-edge body assertions, page-render
+  body inspection, BEGIN IMMEDIATE serialization demonstrated via same-
+  row PATCH contention, schema-invariant tests pinning `ux_events_idem`,
+  `Last-Event-ID: "0"` vs `""` vs missing all explicitly pinned.
+- Real bug uncovered during the work: `created_at` (3-digit SQLite
+  millis) lexically compared GREATER than same-instant `updated_at`
+  (6-digit Python micros) because `Z` > `4` at the 7th fractional
+  position. Fixed by Python-clocking both columns in `create_event`.
+- `daily_totals` refactored to compute its cutoff in Python (was
+  SQLite's `date('now', '-N days')` which freezer can't reach).
+- `FailingConn` moved to conftest; new `reset_dependency_overrides`
+  autouse fixture.
+- mutmut workflow added as `workflow_dispatch` — not gated, surfaces
+  surviving mutants as a backlog signal for future hardening.
+- 248 tests, 100% coverage.
 
-Worth-fixing items: hand-padded idem keys → use `seed_event` factory,
-broken-by-design `or` in `test_repo_devices.py:42`, wall-clock
-dependency in `test_repo_reports.py`, missing API-layer assertion that
-`list_events` filters `deleted_at`, idempotency tested in 3 places.
+## 11. Triage open Dependabot PRs + tighten grouping policy — [#25](https://github.com/Whitehawk2/NBIO_Tracker/issues/25)
 
-Plus add **mutation testing** (mutmut) as a `workflow_dispatch` job —
-the real quality signal, gated only after we know our baseline.
+Three open Dependabot PRs from the first weekly run of the schedule
+set up in #14. Recommendations per-PR plus a meta-fix:
 
-Lands **after** the upgrade PR per priority ordering.
+- **[#17](https://github.com/Whitehawk2/NBIO_Tracker/pull/17)** (alpine
+  3.20 → 3.23 in /backup): **merge after CI green**. Low-risk point
+  bump for the backup sidecar.
+- **[#19](https://github.com/Whitehawk2/NBIO_Tracker/pull/19)** (python
+  3.12-slim → 3.14-slim in /app): **close as-is**. Skips 3.13 entirely
+  and our CI matrix is `3.12 + 3.13`. Replace with a narrower bump to
+  3.13-slim now, then add 3.14 to the CI matrix as a follow-up before
+  ever bumping the runtime to 3.14.
+- **[#18](https://github.com/Whitehawk2/NBIO_Tracker/pull/18)** (actions
+  group, 6 updates): **close, split into per-action PRs**. The group
+  bundles 2 major-version jumps (`upload-artifact@v4→v7`,
+  `checkout@v4→v6`) with 4 routine bumps — if CI fails, you can't tell
+  which one broke.
 
-## 11. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
+Meta-fix: tighten `.github/dependabot.yml` so the actions group
+includes only `patch` + `minor` updates; majors land as individual PRs
+with their own CI signal.
+
+Order: dependabot.yml grouping tweak first → close #18 #19 → wait for
+next Dependabot run → merge per-action splits → merge #17 → file a
+"3.14 to CI matrix" follow-up.
+
+## 12. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 
 Move things that currently live in env vars or first-launch onboarding
 onto a settings page editable from the running app:
@@ -193,14 +210,14 @@ onto a settings page editable from the running app:
 - Baby name + DOB (currently env `BABY_NAME` only at boot, baked into
   `babies` row at first start).
 - Per-device name + colour (currently localStorage; allow re-edit).
-- Future: timezone override, retention days, theme (see item 10).
+- Future: timezone override, retention days, theme (see item 14).
 
 Schema: extend `babies` and `devices`; add a small `settings` table for
 truly global toggles. UI: minimal `/settings` page with HTMX form posts
 to a new `routes/settings.py`. Reuse existing `repo.upsert_device`
 where possible.
 
-## 12. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
+## 13. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
 
 Two-pronged: dev shell **and** an installable binary suitable for
 `nix profile install nixpkgs#nbio`. Nix users are assumed advanced and
@@ -232,9 +249,9 @@ tangentially helpful for the k8s scenario in item 2.
 The setup script from item 2 will print a header comment pointing Nix
 users here so the two paths stay clearly separated.
 
-## 13. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
+## 14. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
 
-(Blocked on item 11 — needs the settings UI to host the picker.)
+(Blocked on item 12 — needs the settings UI to host the picker.)
 
 Add palettes alongside the current "warm" theme. Recommended starting
 pair from the Catppuccin family:
