@@ -764,6 +764,14 @@
         const cur = parseInt(cell.textContent, 10) || 0;
         cell.textContent = String(Math.max(0, cur + delta));
       }
+      // Formula cc total — bump by the event's volume_ml (signed by delta).
+      if (ev.type === "formula" && ev.formula_volume_ml) {
+        const mlCell = document.querySelector(`#today-card [data-count="formula_ml"]`);
+        if (mlCell) {
+          const cur = parseInt(mlCell.textContent, 10) || 0;
+          mlCell.textContent = String(Math.max(0, cur + delta * ev.formula_volume_ml));
+        }
+      }
     }
 
     // last-days mini-table: bump if the day matches any visible row
@@ -783,6 +791,14 @@
         }
         // Hint dot only makes sense when count is zero; remove if it now has data
         if (hint && next > 0) hint.remove();
+      }
+      // Formula cc cell — bump by volume_ml (signed).
+      if (ev.type === "formula" && ev.formula_volume_ml) {
+        const mlTd = row.querySelector(`td[data-col="formula_ml"]`);
+        if (mlTd) {
+          const cur = parseInt(mlTd.textContent, 10) || 0;
+          mlTd.textContent = String(Math.max(0, cur + delta * ev.formula_volume_ml));
+        }
       }
     }
   }

@@ -213,6 +213,31 @@ def test_row_html_includes_notes_icon_branch():
     assert "ev.notes" in block, "the notes-icon emission in rowHTML must be conditional on ev.notes"
 
 
+def test_bump_overviews_bumps_formula_ml_for_formula_events():
+    """
+    `bumpOverviews` must bump the `formula_ml` cell by the event's
+    `formula_volume_ml` (signed by delta) when a formula event lands.
+    Otherwise the home and last-3-days cc totals fall out of sync with
+    the server after an optimistic POST or SSE delivery.
+    """
+    src = _src()
+    idx = src.find("function bumpOverviews(")
+    assert idx >= 0, "bumpOverviews() function not found in app.js"
+    block = src[idx : idx + 3000]
+    assert 'ev.type === "formula"' in block, (
+        "bumpOverviews must branch on ev.type === 'formula' to handle the cc total"
+    )
+    assert "ev.formula_volume_ml" in block, (
+        "bumpOverviews must read ev.formula_volume_ml to scale the bump"
+    )
+    assert 'data-count="formula_ml"' in block, (
+        'bumpOverviews must target the today-card `[data-count="formula_ml"]` cell'
+    )
+    assert 'data-col="formula_ml"' in block, (
+        'bumpOverviews must target the last-3-days `[data-col="formula_ml"]` cell'
+    )
+
+
 def test_formula_volume_picker_uses_only_segmented_wrap():
     """
     Volume picker chips overflow horizontally when both .segmented and
