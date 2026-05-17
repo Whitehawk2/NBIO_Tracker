@@ -635,11 +635,14 @@
     const tail = ev.notes ? (detail ? ` · ${ev.notes}` : ev.notes) : "";
     const emoji = ev.type === "breast" ? "🤱" : ev.type === "formula" ? "🍼" : ev.type === "wee" ? "💦" : "💩";
     const color = ev.actor_color || "#888";
+    const notesIcon = ev.notes
+      ? `<span class="ev-notes-icon" aria-label="has notes" title="has notes">📝</span>`
+      : "";
     return `
       <span class="ev-emoji" aria-hidden="true">${emoji}</span>
       <span class="ev-time">${fmtHHMM(ev.occurred_at)}</span>
       <span class="ev-rel" data-rel="${ev.occurred_at}">${fmtRel(ev.occurred_at)}</span>
-      <span class="ev-detail">${escapeHtml(detail + tail)}</span>
+      <span class="ev-detail">${notesIcon}${escapeHtml(detail + tail)}</span>
       <span class="ev-actor" style="background:${color}" title="${escapeHtml(ev.actor_name || "")}"></span>
     `;
   }

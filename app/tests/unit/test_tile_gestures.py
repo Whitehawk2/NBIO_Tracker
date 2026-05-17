@@ -83,6 +83,26 @@ def test_click_handler_suppresses_after_drag():
     )
 
 
+def test_row_html_includes_notes_icon_branch():
+    """
+    The client-side `rowHTML(ev)` must mirror the server template by
+    conditionally rendering the 📝 notes-exists icon. Tested at the
+    source level — the rendered row markup must contain a branch that
+    checks `ev.notes` and emits `ev-notes-icon`.
+    """
+    src = _src()
+    idx = src.find("function rowHTML(")
+    assert idx >= 0, "rowHTML function not found in app.js"
+    block = src[idx : idx + 1200]
+    assert "ev-notes-icon" in block, (
+        "rowHTML must render an `ev-notes-icon` element so client-inserted "
+        "rows match the server template"
+    )
+    assert "ev.notes" in block, (
+        "the notes-icon emission in rowHTML must be conditional on ev.notes"
+    )
+
+
 def test_formula_volume_picker_uses_only_segmented_wrap():
     """
     Volume picker chips overflow horizontally when both .segmented and

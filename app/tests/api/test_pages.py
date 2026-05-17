@@ -98,10 +98,6 @@ def test_index_with_known_device_renders_actor_color(client):
     assert 'title="Mum"' in r.text
 
 
-def test_index_empty_state_message(client):
-    """No events → the warm empty-state copy is visible."""
-    r = client.get("/")
-    assert "Quiet night" in r.text
 
 
 def test_reports_today_counts_render_in_big_numbers(client):
@@ -177,6 +173,48 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert 'data-type="formula"' in r.text
     assert "BREAST" in r.text
     assert "FORMULA" in r.text
+
+
+def test_event_row_shows_notes_icon_when_notes_present(client):
+    """
+    Event rows with non-empty notes show a small 📝 indicator inside
+    `.ev-detail`. Without this, users can't tell at a glance which rows
+    carry hidden notes (the full notes text is also rendered, but it
+    truncates at 50% width, so a deliberate icon is the at-a-glance
+    affordance).
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "notes": "loose",
+            "idempotency_key": "idem-notes-icon-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'class="ev-notes-icon"' in r.text
+    assert "📝" in r.text
+
+
+def test_event_row_omits_notes_icon_when_no_notes(client):
+    """Symmetric: rows without notes must NOT carry the icon."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-notes-icon-2",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "ev-notes-icon" not in r.text
 
 
 def test_index_empty_state_copy_actionable(client):

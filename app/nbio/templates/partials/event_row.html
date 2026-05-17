@@ -5,6 +5,7 @@
   <span class="ev-time">{{ event.occurred_at | hhmm }}</span>
   <span class="ev-rel" data-rel="{{ event.occurred_at }}">{{ event.occurred_at | relative }}</span>
   <span class="ev-detail">
+    {% if event.notes %}<span class="ev-notes-icon" aria-label="has notes" title="has notes">📝</span>{% endif %}
     {% if event.type == 'breast' %}
       {% if event.feed_side %}{{ event.feed_side }}{% endif %}
       {% if event.feed_duration_min %} · {{ event.feed_duration_min }}m{% endif %}
