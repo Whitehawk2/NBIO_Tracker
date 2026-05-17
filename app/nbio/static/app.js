@@ -583,15 +583,30 @@
     });
   }
 
-  function openEditFor(ev) {
+  async function openEditFor(ev) {
+    // Server-rendered rows hydrate __event with `notes: null` because
+    // not every field lives in a DOM attribute. Fetch the canonical
+    // row from the API before opening the modal so notes (and any
+    // other fields the row didn't expose) populate correctly.
+    // See issue #28 finding #4.
+    let full = ev;
+    if (ev.id) {
+      try {
+        const r = await fetch(`${cfg.eventsUrl}/${ev.id}`);
+        if (r.ok) {
+          const body = await r.json();
+          if (body && body.event) full = body.event;
+        }
+      } catch (_) { /* keep optimistic prefill if the fetch fails */ }
+    }
     const prefill = {
-      id: ev.id,
-      feed_side: ev.feed_side, feed_duration_min: ev.feed_duration_min,
-      poo_quality: ev.poo_quality, notes: ev.notes,
-      offsetMin: Math.max(0, Math.round((Date.now() - new Date(ev.occurred_at).getTime()) / 60000)),
+      id: full.id,
+      feed_side: full.feed_side, feed_duration_min: full.feed_duration_min,
+      poo_quality: full.poo_quality, notes: full.notes,
+      offsetMin: Math.max(0, Math.round((Date.now() - new Date(full.occurred_at).getTime()) / 60000)),
     };
-    if (ev.type === "feed") openFeedModal(prefill);
-    else if (ev.type === "wee") openWeeModal(prefill);
+    if (full.type === "feed") openFeedModal(prefill);
+    else if (full.type === "wee") openWeeModal(prefill);
     else openPooModal(prefill);
   }
 

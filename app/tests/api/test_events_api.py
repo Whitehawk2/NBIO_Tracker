@@ -240,11 +240,21 @@ def test_get_event_by_id_returns_full_row(client):
     event = body["event"]
     # Every contract field should surface — this is what the modal will read
     expected_keys = {
-        "id", "baby_id", "type", "occurred_at",
-        "feed_side", "feed_duration_min", "poo_quality", "notes",
-        "idempotency_key", "created_by_device",
-        "created_at", "updated_at", "deleted_at",
-        "actor_color", "actor_name",
+        "id",
+        "baby_id",
+        "type",
+        "occurred_at",
+        "feed_side",
+        "feed_duration_min",
+        "poo_quality",
+        "notes",
+        "idempotency_key",
+        "created_by_device",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "actor_color",
+        "actor_name",
     }
     assert expected_keys <= set(event), f"missing keys: {expected_keys - set(event)}"
     assert event["id"] == event_id
