@@ -28,7 +28,7 @@ html.dark {
   --bg-elev: #1a1a1e;
   --bg-sunk: #131316;
   --text: #ece9e3;
-  --text-muted: #8a8a93;
+  --text-muted: #a0a0a8;
   --border: #2a2a30;
   --accent: #6a9aff;
   --feed: #5fa088;
@@ -410,6 +410,21 @@ textarea, input[type="text"], input[type="datetime-local"] {
   .heatmap-grid .hm-hour:nth-child(odd) { visibility: hidden; }
   .heatmap-grid { grid-template-columns: 44px repeat(24, 1fr); font-size: 10px; }
   .heatmap-grid .hm-cell { min-height: 18px; }
+}
+
+/* ============ Focus rings ============ */
+/* Visible focus for keyboard / switch users. `var(--accent)` so the ring
+   matches the brand on both palettes. Selectors include the .tile and
+   .event-row classes because both are clickable but not native buttons
+   (they don't pick up the default UA focus ring). */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.tile:focus-visible,
+.event-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ============ Reduced motion ============ */
