@@ -288,19 +288,25 @@ def last_event_of_each_type(
 
 def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
     """
-    Counts since local midnight today (UTC-anchored — close enough for v1).
+    Counts since local midnight today, in the server-configured tz.
     Breast + formula are combined under "feed" per the today_card contract.
+
+    Local-tz bucketing avoids the issue #28 #1 bug where late-evening
+    local entries appeared in yesterday's UTC bucket.
     """
-    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    from .tz import local_offset_modifier, local_today_str
+
+    offset = local_offset_modifier(settings.tz)
+    today = local_today_str(settings.tz)
     out = {"feed": 0, "wee": 0, "poo": 0}
     cur = conn.execute(
         """
         SELECT type, COUNT(*) AS n FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
-          AND substr(occurred_at, 1, 10) = ?
+          AND substr(datetime(occurred_at, ?), 1, 10) = ?
         GROUP BY type
         """,
-        (baby_id, today),
+        (baby_id, offset, today),
     )
     for r in cur.fetchall():
         if r["type"] in ("breast", "formula"):
@@ -314,30 +320,39 @@ def daily_totals(
     conn: sqlite3.Connection, baby_id: int = 1, days: int = 14
 ) -> list[dict[str, Any]]:
     """
-    Per-day totals. The reports page wants formula vs breast broken out
-    separately; the today_card wants them combined. We expose BOTH:
+    Per-day totals, bucketed by the server-configured local tz date.
+    The reports page wants formula vs breast broken out separately;
+    the today_card wants them combined. We expose BOTH:
       row["breast"], row["formula"]  — separate counts
       row["feed"]                    — convenience sum for combined views
+
+    Local-tz bucketing (fixed via SQLite `datetime(occurred_at, ?)` with
+    the offset computed in Python) avoids the issue #28 #1 bug where
+    late-evening local entries appeared in yesterday's bucket.
     """
-    # Compute cutoff in Python (NOT via SQLite's date('now', ...)) so tests
-    # can freeze time deterministically. ISO-8601 string compares lexically
-    # against `occurred_at` because UTC ISO timestamps share the YYYY-MM-DD
-    # prefix; a same-day event at any time of day satisfies `>= cutoff`.
     from datetime import datetime as _dt
     from datetime import timedelta as _td
+    from zoneinfo import ZoneInfo
 
-    cutoff = (_dt.now(UTC) - _td(days=days)).strftime("%Y-%m-%d")
+    from .tz import local_offset_modifier
+
+    offset = local_offset_modifier(settings.tz)
+    # Cutoff is also local-tz: `days` days back from local today.
+    local_now = _dt.now(ZoneInfo(settings.tz))
+    cutoff = (local_now - _td(days=days)).strftime("%Y-%m-%d")
     cur = conn.execute(
         """
-        SELECT substr(occurred_at, 1, 10) AS day, type, COUNT(*) AS n,
+        SELECT substr(datetime(occurred_at, ?), 1, 10) AS day,
+               type,
+               COUNT(*) AS n,
                AVG(feed_duration_min) AS avg_feed_min
         FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
-          AND substr(occurred_at, 1, 10) >= ?
+          AND substr(datetime(occurred_at, ?), 1, 10) >= ?
         GROUP BY day, type
         ORDER BY day DESC
         """,
-        (baby_id, cutoff),
+        (offset, baby_id, offset, cutoff),
     )
     by_day: dict[str, dict[str, Any]] = {}
     for r in cur.fetchall():

@@ -160,9 +160,7 @@ def test_today_counts_buckets_event_at_local_midnight_correctly(conn, monkeypatc
     )
 
 
-def test_today_counts_buckets_yesterday_event_correctly_in_local_tz(
-    conn, monkeypatch, freezer
-):
+def test_today_counts_buckets_yesterday_event_correctly_in_local_tz(conn, monkeypatch, freezer):
     """Symmetric: an event at local 22:00 yesterday should NOT count as today."""
     from nbio import config
 
@@ -187,7 +185,9 @@ def test_daily_totals_buckets_event_by_local_date(conn, monkeypatch, freezer):
     create_event(conn, _evt("breast", "boundary", "2026-05-16T23:30:00.000Z"))
     rows = daily_totals(conn, days=14)
     by_day = {r["day"]: r for r in rows}
-    assert "2026-05-17" in by_day, f"expected event bucketed under 2026-05-17 (local); got days {list(by_day)}"
+    assert "2026-05-17" in by_day, (
+        f"expected event bucketed under 2026-05-17 (local); got days {list(by_day)}"
+    )
     assert by_day["2026-05-17"]["breast"] == 1
     # And NOT under 2026-05-16
     assert "2026-05-16" not in by_day or by_day["2026-05-16"].get("breast", 0) == 0
