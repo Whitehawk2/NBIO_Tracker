@@ -187,6 +187,7 @@ a { color: var(--accent); text-decoration: none; }
   border-radius: var(--radius-lg);
   padding: 18px 20px;
   display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; row-gap: 10px;
   text-align: left;
   transition: transform .12s ease, background .12s ease;
   box-shadow: var(--shadow);
@@ -205,6 +206,28 @@ a { color: var(--accent); text-decoration: none; }
 .tile-ago { display: flex; align-items: center; gap: 8px; font-size: 16px; color: var(--text); }
 .tile-ago .muted { color: var(--text-muted); }
 .actor-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+
+/* ============ Inline hints ============ */
+/* Long-press caption under each tile + the first-row hint above the
+   event list. Dismissible via the `.hint-dismiss` × button; each hint
+   stores its dismissal in localStorage so it never reappears. */
+.tile-hint, .first-row-hint {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  flex-basis: 100%;
+  margin: 0; padding: 6px 10px;
+  font-size: 12px; color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-sunk) 70%, transparent);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+.first-row-hint { margin: 0 4px 6px; }
+.hint-dismiss {
+  appearance: none; border: 0; background: transparent;
+  color: var(--text-muted); font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 2px 6px;
+  border-radius: 6px;
+}
+.hint-dismiss:hover { background: var(--bg-sunk); color: var(--text); }
 
 /* ============ Event list ============ */
 .section-title {

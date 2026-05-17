@@ -175,6 +175,43 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert "FORMULA" in r.text
 
 
+def test_tile_long_press_caption_rendered_for_each_tile(client):
+    """
+    Every tile (4 total: breast / formula / wee / poo) carries a small
+    caption hint announcing the long-press skip-modal quick-log.
+    Without this, the 3-second hold gesture is undiscoverable.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.text.count('data-hint="long-press"') == 4, (
+        "expected exactly 4 long-press hint nodes (one per tile)"
+    )
+    assert r.text.count("Hold 3s to log instantly") == 4
+
+
+def test_tile_caption_starts_hidden(client):
+    """
+    The caption renders with the `hidden` attribute by default; app.js
+    un-hides it on DOMContentLoaded only when the dismissal flag isn't
+    set. Pinned because a regression here would show the hint to every
+    parent forever.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    # Every long-press hint node should have the `hidden` attribute.
+    nodes = re.findall(
+        r'<div class="tile-hint" data-hint="long-press"([^>]*)>',
+        r.text,
+    )
+    assert len(nodes) == 4
+    for attrs in nodes:
+        assert "hidden" in attrs, (
+            f"long-press hint must carry the hidden attribute; got attrs={attrs!r}"
+        )
+
+
 def test_sync_badge_has_explainer_button(client):
     """
     The header sync dot must be a real <button> with an aria-label,

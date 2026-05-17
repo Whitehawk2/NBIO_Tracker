@@ -101,21 +101,22 @@ def test_app_js_has_hint_dismissed_helper():
 def test_sync_dot_click_handler_attached():
     """
     Tapping the header sync dot must open an explainer popover. Pin
-    that a click handler is wired to the `[data-sync-explain]` element.
+    that a `wireSyncDot` function exists and wires a click listener to
+    the `[data-sync-explain]` element.
     """
     src = _src()
-    # Click handler can be wired by querySelector or delegation; both
-    # mention the data attribute.
     assert "data-sync-explain" in src, (
-        "expected `data-sync-explain` to be referenced in app.js so the "
-        "sync-badge button has a click handler"
+        "expected `data-sync-explain` to be referenced in app.js"
     )
-    # Look for an addEventListener on click anywhere within 800 chars of
-    # the data-sync-explain reference.
-    idx = src.find("data-sync-explain")
-    window = src[max(0, idx - 400) : idx + 800]
-    assert 'addEventListener("click"' in window or 'addEventListener(\'click\'' in window, (
-        "expected a click listener wired near data-sync-explain"
+    idx = src.find("function wireSyncDot")
+    assert idx >= 0, "expected a `wireSyncDot()` function in app.js"
+    # The function body is short — look at the next ~400 chars.
+    block = src[idx : idx + 400]
+    assert "data-sync-explain" in block, (
+        "wireSyncDot must select the [data-sync-explain] element"
+    )
+    assert 'addEventListener("click"' in block or "addEventListener('click'" in block, (
+        "wireSyncDot must wire a click listener on the sync-explain element"
     )
 
 

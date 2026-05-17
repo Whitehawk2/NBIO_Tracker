@@ -70,6 +70,23 @@ def test_focus_visible_covers_tiles_and_rows():
     )
 
 
+def test_tile_hint_styled():
+    """A `.tile-hint` rule must exist styling the long-press caption."""
+    src = _src()
+    # The selector list might group .tile-hint with .first-row-hint; accept either.
+    assert re.search(r"\.tile-hint\s*[,{]", src), (
+        "expected a `.tile-hint` selector in app.css"
+    )
+
+
+def test_hint_dismiss_button_styled():
+    """The `.hint-dismiss` × button must have its own styling."""
+    src = _src()
+    assert re.search(r"\.hint-dismiss\s*\{", src), (
+        "expected a `.hint-dismiss { ... }` rule in app.css"
+    )
+
+
 def test_no_recent_class_styled_distinctly():
     """
     `.no-recent` (the tile empty-state placeholder) must be visually

@@ -955,6 +955,37 @@
     }
   }
 
+  // ----- inline hints (#11)
+  // Each `[data-hint]` element starts `hidden` server-side. On load we
+  // unhide it unless the dismissal flag is set, and bind its
+  // `.hint-dismiss` button to persist the dismissal + remove the node.
+  const HINT_KEY_BY_NAME = {
+    "long-press": HINT_KEYS.longPress,
+    "first-row": HINT_KEYS.firstRow,
+  };
+  function wireHints() {
+    $$("[data-hint]").forEach((el) => {
+      const name = el.dataset.hint;
+      const key = HINT_KEY_BY_NAME[name];
+      if (!key) return;
+      if (hintDismissed(key)) {
+        el.remove();
+        return;
+      }
+      el.hidden = false;
+      const btn = el.querySelector(".hint-dismiss");
+      if (btn) {
+        btn.addEventListener("click", (e) => {
+          // Don't let the dismiss bubble to the tile / row click.
+          e.stopPropagation();
+          e.preventDefault();
+          dismissHint(key);
+          el.remove();
+        });
+      }
+    });
+  }
+
   // ----- sync-dot tap-to-explain (#11)
   // Tapping the dot opens a small popover listing the four states so a
   // two-parent setup can learn what the colours mean. Dismissal flag
@@ -1157,6 +1188,7 @@
     wireExistingRows();
     wireCopySummary();
     wireSyncDot();
+    wireHints();
     refreshRelTimes();
     setInterval(refreshRelTimes, 60 * 1000);
 
