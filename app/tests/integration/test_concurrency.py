@@ -15,7 +15,7 @@ from httpx import ASGITransport
 
 def _payload(idem):
     return {
-        "type": "feed",
+        "type": "breast",
         "occurred_at": "2026-05-16T03:00:00.000Z",
         "idempotency_key": idem,
         "created_by_device": "device-test",

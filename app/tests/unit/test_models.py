@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from nbio.models import DeviceUpsert, EventCreate, EventPatch
 
 VALID_EVENT = {
-    "type": "feed",
+    "type": "breast",
     "occurred_at": "2026-05-16T03:00:00.000Z",
     "idempotency_key": "abcdefgh",
     "created_by_device": "device-1",
@@ -16,14 +16,14 @@ VALID_EVENT = {
 class TestEventCreate:
     def test_minimal_valid(self):
         e = EventCreate(**VALID_EVENT)
-        assert e.type == "feed"
+        assert e.type == "breast"
         assert e.feed_side is None
         assert e.feed_duration_min is None
         assert e.poo_quality is None
         assert e.notes is None
         assert e.skip_dup_check is False
 
-    @pytest.mark.parametrize("t", ["feed", "wee", "poo"])
+    @pytest.mark.parametrize("t", ["breast", "formula", "wee", "poo"])
     def test_type_literals(self, t):
         EventCreate(**{**VALID_EVENT, "type": t})
 

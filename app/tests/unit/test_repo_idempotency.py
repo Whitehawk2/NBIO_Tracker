@@ -10,7 +10,7 @@ from nbio.repo import create_event, fetch_event_by_idem
 
 def _payload(**over):
     base = {
-        "type": "feed",
+        "type": "breast",
         "occurred_at": "2026-05-16T03:00:00.000Z",
         "idempotency_key": "idem-shared",
         "created_by_device": "device-1",

@@ -67,7 +67,7 @@ async def test_replay_emits_existing_events(conn):
         create_event(
             conn,
             EventCreate(
-                type="feed",
+                type="breast",
                 occurred_at="2026-05-16T03:00:00.000Z",
                 idempotency_key=f"idem-replay-{i:04d}",
                 created_by_device="device-test",
@@ -93,7 +93,7 @@ async def test_invalid_last_event_id_treated_as_zero(conn):
     create_event(
         conn,
         EventCreate(
-            type="feed",
+            type="breast",
             occurred_at="2026-05-16T03:00:00.000Z",
             idempotency_key="idem-only-row",
             created_by_device="device-test",
@@ -115,7 +115,7 @@ async def test_no_last_event_id_no_replay(conn):
     create_event(
         conn,
         EventCreate(
-            type="feed",
+            type="breast",
             occurred_at="2026-05-16T03:00:00.000Z",
             idempotency_key="idem-noreplay-1",
             created_by_device="device-test",
@@ -134,9 +134,9 @@ async def test_publish_after_subscribe_reaches_queue(conn):
     # Find the subscribed queue
     assert len(sse.broker._subs) == 1
     q = next(iter(sse.broker._subs))
-    await sse.broker.publish("event.created", 99, {"id": 99, "type": "feed"})
+    await sse.broker.publish("event.created", 99, {"id": 99, "type": "breast"})
     msg = q.get_nowait()
-    assert msg == ("event.created", 99, {"id": 99, "type": "feed"})
+    assert msg == ("event.created", 99, {"id": 99, "type": "breast"})
     await _drive(resp)
 
 
@@ -173,7 +173,7 @@ async def test_last_event_id_zero_replays_from_start(conn):
         create_event(
             conn,
             EventCreate(
-                type="feed",
+                type="breast",
                 occurred_at="2026-05-16T03:00:00.000Z",
                 idempotency_key=f"idem-leid0-{i:04d}",
                 created_by_device="device-test",
@@ -202,7 +202,7 @@ async def test_last_event_id_empty_string_does_not_replay(conn):
     create_event(
         conn,
         EventCreate(
-            type="feed",
+            type="breast",
             occurred_at="2026-05-16T03:00:00.000Z",
             idempotency_key="idem-empty-leid",
             created_by_device="device-test",

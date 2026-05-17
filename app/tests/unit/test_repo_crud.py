@@ -18,7 +18,7 @@ ISO = "2026-05-16T03:00:00.000Z"
 
 def _payload(**over):
     base = {
-        "type": "feed",
+        "type": "breast",
         "occurred_at": ISO,
         "idempotency_key": "idem-0001",
         "created_by_device": "device-1",
@@ -32,7 +32,7 @@ def test_create_returns_created(conn):
     assert status == "created"
     assert dup is None
     assert event["id"] == 1
-    assert event["type"] == "feed"
+    assert event["type"] == "breast"
     assert event["occurred_at"] == ISO
     assert event["created_by_device"] == "device-1"
 

@@ -15,7 +15,7 @@ from nbio.models import EventCreate
 from nbio.repo import create_event
 
 
-def _payload(idem, t="feed", occurred_at="2026-05-16T03:00:00.000Z"):
+def _payload(idem, t="breast", occurred_at="2026-05-16T03:00:00.000Z"):
     return EventCreate(
         type=t,
         occurred_at=occurred_at,
@@ -82,7 +82,7 @@ def test_reports_skips_malformed_occurred_at_in_heatmap(client, conn):
         """
         INSERT INTO events (
             baby_id, type, occurred_at, idempotency_key, created_by_device
-        ) VALUES (1, 'feed', 'completely-not-iso', 'idem-malformed1', 'device-test')
+        ) VALUES (1, 'breast', 'completely-not-iso', 'idem-malformed1', 'device-test')
         """
     )
     # And one valid event today (uses real wall-clock for "today" — fine because
@@ -94,7 +94,7 @@ def test_reports_skips_malformed_occurred_at_in_heatmap(client, conn):
         """
         INSERT INTO events (
             baby_id, type, occurred_at, idempotency_key, created_by_device
-        ) VALUES (1, 'feed', ?, 'idem-validone', 'device-test')
+        ) VALUES (1, 'breast', ?, 'idem-validone', 'device-test')
         """,
         (f"{today}T03:00:00.000Z",),
     )

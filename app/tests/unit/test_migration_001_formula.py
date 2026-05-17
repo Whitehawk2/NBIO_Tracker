@@ -11,7 +11,6 @@ columns, the new CHECK constraint, and index preservation.
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
 
 import pytest
 
@@ -107,24 +106,16 @@ def test_001_migration_renames_feed_to_breast(old_db):
     apply_pending(old_db, MIGRATIONS_DIR)
 
     # No 'feed' rows remain
-    feed_count = old_db.execute(
-        "SELECT COUNT(*) FROM events WHERE type='feed'"
-    ).fetchone()[0]
+    feed_count = old_db.execute("SELECT COUNT(*) FROM events WHERE type='feed'").fetchone()[0]
     assert feed_count == 0
 
     # All previously-feed rows are now 'breast' (including soft-deleted)
-    breast_count = old_db.execute(
-        "SELECT COUNT(*) FROM events WHERE type='breast'"
-    ).fetchone()[0]
+    breast_count = old_db.execute("SELECT COUNT(*) FROM events WHERE type='breast'").fetchone()[0]
     assert breast_count == 3  # 2 active feeds + 1 deleted feed
 
     # Other types untouched
-    assert (
-        old_db.execute("SELECT COUNT(*) FROM events WHERE type='wee'").fetchone()[0] == 1
-    )
-    assert (
-        old_db.execute("SELECT COUNT(*) FROM events WHERE type='poo'").fetchone()[0] == 1
-    )
+    assert old_db.execute("SELECT COUNT(*) FROM events WHERE type='wee'").fetchone()[0] == 1
+    assert old_db.execute("SELECT COUNT(*) FROM events WHERE type='poo'").fetchone()[0] == 1
 
 
 def test_001_migration_preserves_row_count_and_ids(old_db):
@@ -187,7 +178,8 @@ def test_001_migration_expands_type_check_to_include_formula(old_db):
                    'dev-1', 'Materna', 120)""",
     )
     row = old_db.execute(
-        "SELECT type, formula_brand, formula_volume_ml FROM events WHERE idempotency_key='idem-new-formula'"
+        "SELECT type, formula_brand, formula_volume_ml FROM events "
+        "WHERE idempotency_key='idem-new-formula'"
     ).fetchone()
     assert row["type"] == "formula"
     assert row["formula_brand"] == "Materna"

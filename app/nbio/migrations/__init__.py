@@ -45,9 +45,7 @@ def current_version(conn: sqlite3.Connection) -> int:
     return int(row[0]) if row else 0
 
 
-def apply_pending(
-    conn: sqlite3.Connection, migrations_dir: Path | None = None
-) -> list[int]:
+def apply_pending(conn: sqlite3.Connection, migrations_dir: Path | None = None) -> list[int]:
     """
     Apply migrations whose number is greater than the current user_version.
     Returns the list of applied version numbers (empty if up-to-date).

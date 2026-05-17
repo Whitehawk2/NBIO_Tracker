@@ -48,7 +48,7 @@ async def test_replay_caps_at_sse_replay_cap(conn, monkeypatch):
         create_event(
             conn,
             EventCreate(
-                type="feed",
+                type="breast",
                 occurred_at="2026-05-16T03:00:00.000Z",
                 idempotency_key=f"idem-cap-{i:04d}",
                 created_by_device="device-test",
@@ -74,7 +74,7 @@ async def test_replay_with_huge_last_event_id_emits_nothing(conn):
     create_event(
         conn,
         EventCreate(
-            type="feed",
+            type="breast",
             occurred_at="2026-05-16T03:00:00.000Z",
             idempotency_key="idem-anyone",
             created_by_device="device-test",

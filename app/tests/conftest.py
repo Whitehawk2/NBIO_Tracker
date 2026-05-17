@@ -174,7 +174,7 @@ def event_payload():
 
     def make(**overrides):
         base = {
-            "type": "feed",
+            "type": "breast",
             "occurred_at": "2026-05-16T03:00:00.000Z",
             "feed_side": "L",
             "feed_duration_min": 15,
@@ -195,7 +195,7 @@ def seed_event(conn):
 
     def make(**overrides):
         defaults = {
-            "type": "feed",
+            "type": "breast",
             "occurred_at": "2026-05-16T03:00:00.000Z",
             "feed_side": "L",
             "feed_duration_min": 15,

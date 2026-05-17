@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 def _payload(**over):
     base = {
-        "type": "feed",
+        "type": "breast",
         "occurred_at": "2026-05-16T03:00:00.000Z",
         "feed_side": "L",
         "feed_duration_min": 15,

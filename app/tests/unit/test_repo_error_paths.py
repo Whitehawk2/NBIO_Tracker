@@ -21,7 +21,7 @@ from tests.conftest import FailingConn
 
 def _seed(conn):
     p = EventCreate(
-        type="feed",
+        type="breast",
         occurred_at="2026-05-16T03:00:00.000Z",
         idempotency_key="idem-seed-row",
         created_by_device="device-1",

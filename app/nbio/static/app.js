@@ -275,7 +275,7 @@
     submit.addEventListener("click", async () => {
       submit.disabled = true;
       await submitForm(backdrop, prefill, {
-        type: "feed",
+        type: "breast",
         occurred_at: time.getDate().toISOString(),
         feed_side: side,
         feed_duration_min: dur,
@@ -483,11 +483,16 @@
   }
 
   function rowHTML(ev) {
-    const detail =
-      ev.type === "feed" ? [(ev.feed_side || ""), ev.feed_duration_min ? `${ev.feed_duration_min}m` : null].filter(Boolean).join(" · ")
-      : ev.type === "poo" && ev.poo_quality ? `type ${ev.poo_quality}` : "";
+    let detail = "";
+    if (ev.type === "breast") {
+      detail = [(ev.feed_side || ""), ev.feed_duration_min ? `${ev.feed_duration_min}m` : null].filter(Boolean).join(" · ");
+    } else if (ev.type === "formula") {
+      detail = [(ev.formula_brand || ""), ev.formula_volume_ml ? `${ev.formula_volume_ml} cc` : null].filter(Boolean).join(" · ");
+    } else if (ev.type === "poo" && ev.poo_quality) {
+      detail = `type ${ev.poo_quality}`;
+    }
     const tail = ev.notes ? (detail ? ` · ${ev.notes}` : ev.notes) : "";
-    const emoji = ev.type === "feed" ? "🤱" : ev.type === "wee" ? "💦" : "💩";
+    const emoji = ev.type === "breast" ? "🤱" : ev.type === "formula" ? "🍼" : ev.type === "wee" ? "💦" : "💩";
     const color = ev.actor_color || "#888";
     return `
       <span class="ev-emoji" aria-hidden="true">${emoji}</span>
@@ -605,9 +610,10 @@
       poo_quality: full.poo_quality, notes: full.notes,
       offsetMin: Math.max(0, Math.round((Date.now() - new Date(full.occurred_at).getTime()) / 60000)),
     };
-    if (full.type === "feed") openFeedModal(prefill);
+    if (full.type === "breast") openFeedModal(prefill);
     else if (full.type === "wee") openWeeModal(prefill);
     else openPooModal(prefill);
+    // formula editing routes to its own modal — added in stage 5
   }
 
   async function doSoftDelete(row) {
@@ -766,9 +772,10 @@
 
   // ----- wire tiles (tap = modal, long-press = log now)
   function wireTiles() {
-    const map = { feed: openFeedModal, wee: openWeeModal, poo: openPooModal };
+    const map = { breast: openFeedModal, wee: openWeeModal, poo: openPooModal };
     $$(".tile").forEach((tile) => {
       const type = tile.dataset.type;
+      if (!(type in map)) return;  // formula tile gets wired in stage 5
       let pressTimer = null, longFired = false;
       const start = () => {
         longFired = false;
@@ -778,7 +785,7 @@
             type,
             occurred_at: isoNow(),
             skip_dup_check: false,
-            ...(type === "feed" ? { feed_side: null } : {}),
+            ...(type === "breast" ? { feed_side: null } : {}),
           });
         }, 600);
       };

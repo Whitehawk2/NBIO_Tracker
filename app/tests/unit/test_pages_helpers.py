@@ -83,7 +83,7 @@ class TestGroupByLocalDay:
     def test_groups_by_day(self, freezer):
         freezer.move_to("2026-05-16T12:00:00Z")
         events = [
-            {"occurred_at": "2026-05-16T08:00:00Z", "type": "feed"},
+            {"occurred_at": "2026-05-16T08:00:00Z", "type": "breast"},
             {"occurred_at": "2026-05-16T03:00:00Z", "type": "wee"},
             {"occurred_at": "2026-05-15T22:00:00Z", "type": "poo"},
         ]
@@ -99,7 +99,7 @@ class TestGroupByLocalDay:
     def test_skips_malformed_occurred_at(self, freezer):
         freezer.move_to("2026-05-16T12:00:00Z")
         events = [
-            {"occurred_at": "definitely-not-iso", "type": "feed"},
+            {"occurred_at": "definitely-not-iso", "type": "breast"},
             {"occurred_at": "2026-05-16T08:00:00Z", "type": "wee"},
         ]
         groups = pages._group_events_by_local_day(events)
@@ -137,18 +137,18 @@ class TestLastDaysRows:
 class TestTimelineMarks:
     def test_only_events_on_target_day(self):
         events = [
-            {"occurred_at": "2026-05-16T03:00:00Z", "type": "feed"},
+            {"occurred_at": "2026-05-16T03:00:00Z", "type": "breast"},
             {"occurred_at": "2026-05-15T22:00:00Z", "type": "wee"},
         ]
         marks = pages._timeline_marks(events, "2026-05-16")
         assert len(marks) == 1
-        assert marks[0]["type"] == "feed"
+        assert marks[0]["type"] == "breast"
         # 03:00 UTC → 3*3600 seconds → x = 0.125
         assert abs(marks[0]["x"] - 0.125) < 0.001
 
     def test_skips_malformed_occurred_at(self):
         events = [
-            {"occurred_at": "2026-05-16XX bad", "type": "feed"},
+            {"occurred_at": "2026-05-16XX bad", "type": "breast"},
             {"occurred_at": "2026-05-16T03:00:00Z", "type": "wee"},
         ]
         # Both startswith "2026-05-16" so the date prefix check passes.
@@ -159,7 +159,7 @@ class TestTimelineMarks:
         assert marks[0]["type"] == "wee"
 
     def test_x_position_at_midnight(self):
-        events = [{"occurred_at": "2026-05-16T00:00:00Z", "type": "feed"}]
+        events = [{"occurred_at": "2026-05-16T00:00:00Z", "type": "breast"}]
         marks = pages._timeline_marks(events, "2026-05-16")
         assert marks[0]["x"] == 0.0
 

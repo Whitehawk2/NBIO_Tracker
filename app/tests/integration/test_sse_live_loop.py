@@ -30,7 +30,7 @@ async def test_live_loop_yields_then_disconnect(conn):
     resp = await sse_stream(req, last_event_id=None, conn=conn)
 
     # Publish an event to drive the queue.get path
-    await sse.broker.publish("event.created", 1, {"id": 1, "type": "feed"})
+    await sse.broker.publish("event.created", 1, {"id": 1, "type": "breast"})
 
     out = []
     gen = resp.body_iterator
