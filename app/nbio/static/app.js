@@ -18,6 +18,22 @@
   const isoNow = () => new Date().toISOString();
   const haptic = (ms = 12) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (_) {} };
 
+  // ----- discoverability hints (#11)
+  // Each hint persists its dismissal in localStorage under
+  // `nbio.hint.<name>` = "dismissed". The settings UI (#6) will later
+  // reset them by prefix-iterating.
+  const HINT_KEYS = {
+    firstRow: "nbio.hint.first_row",
+    longPress: "nbio.hint.long_press",
+    syncDot: "nbio.hint.sync_dot",
+  };
+  function hintDismissed(key) {
+    return localStorage.getItem(key) === "dismissed";
+  }
+  function dismissHint(key) {
+    localStorage.setItem(key, "dismissed");
+  }
+
   function fmtRel(iso) {
     const dt = new Date(iso);
     const sec = Math.max(0, Math.floor((Date.now() - dt.getTime()) / 1000));
@@ -922,9 +938,60 @@
     sse.addEventListener("event.undeleted", handle("undeleted"));
     sse.addEventListener("device.updated", () => { /* future: recolour rows */ });
   }
+  const SYNC_LABELS = {
+    connecting: "Connection: connecting",
+    connected: "Connection: live",
+    offline: "Connection: offline (changes queued)",
+    error: "Connection: error",
+  };
   function setSyncState(state) {
     const dot = $("#sync-badge .sync-dot");
     if (dot) dot.dataset.state = state;
+    const btn = $("#sync-badge [data-sync-explain]");
+    if (btn) {
+      const label = SYNC_LABELS[state] || "Connection status";
+      btn.setAttribute("aria-label", label);
+      btn.setAttribute("title", label);
+    }
+  }
+
+  // ----- sync-dot tap-to-explain (#11)
+  // Tapping the dot opens a small popover listing the four states so a
+  // two-parent setup can learn what the colours mean. Dismissal flag
+  // only suppresses the auto-open-on-first-connect path; explicit
+  // taps always re-open.
+  function wireSyncDot() {
+    const btn = $("#sync-badge [data-sync-explain]");
+    if (!btn) return;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      openSyncPopover();
+    });
+  }
+  function openSyncPopover() {
+    // Reuse the modal backdrop for outside-click dismissal; the inner
+    // shell is a small top-anchored card rather than the bottom sheet.
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop sync-popover-backdrop";
+    backdrop.innerHTML = `
+      <div class="sync-popover" role="dialog" aria-modal="true" aria-label="Connection states" tabindex="-1">
+        <div class="sync-popover-title">Connection</div>
+        <ul class="sync-popover-list">
+          <li><span class="sync-dot" data-state="connected"></span> Live — events sync instantly</li>
+          <li><span class="sync-dot" data-state="connecting"></span> Connecting</li>
+          <li><span class="sync-dot" data-state="offline"></span> Offline — changes queued</li>
+          <li><span class="sync-dot" data-state="error"></span> Error — retrying</li>
+        </ul>
+        <button type="button" class="btn-secondary sync-popover-dismiss">Got it</button>
+      </div>
+    `;
+    const close = () => {
+      dismissHint(HINT_KEYS.syncDot);
+      backdrop.remove();
+    };
+    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+    backdrop.querySelector(".sync-popover-dismiss").addEventListener("click", close);
+    document.body.appendChild(backdrop);
   }
 
   // ----- outbox flush
@@ -1089,6 +1156,7 @@
     wireTiles();
     wireExistingRows();
     wireCopySummary();
+    wireSyncDot();
     refreshRelTimes();
     setInterval(refreshRelTimes, 60 * 1000);
 

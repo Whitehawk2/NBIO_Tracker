@@ -104,6 +104,11 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ============ Sync badge ============ */
 .sync-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.sync-dot-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; padding: 4px; cursor: pointer;
+  border-radius: 50%;
+}
 .sync-dot {
   width: 10px; height: 10px; border-radius: 50%;
   background: #888; box-shadow: 0 0 0 0 currentColor;
@@ -331,6 +336,24 @@ textarea, input[type="text"], input[type="datetime-local"] {
   padding: 10px 16px; background: var(--bg-sunk); border: 1px solid var(--border);
   border-radius: var(--radius); cursor: pointer; min-height: 44px;
 }
+
+/* ============ Sync popover ============ */
+/* Anchored top-right via the backdrop's align/justify; small card rather
+   than a bottom sheet because the content is reference, not action. */
+.sync-popover-backdrop { align-items: flex-start; justify-content: flex-end; padding: calc(var(--safe-top) + 60px) 12px 0; }
+.sync-popover {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  max-width: 320px;
+  box-shadow: var(--shadow);
+  animation: pop .18s ease;
+}
+.sync-popover-title { font-size: 14px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+.sync-popover-list { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.sync-popover-list li { display: flex; align-items: center; gap: 10px; }
+.sync-popover-list .sync-dot { flex: 0 0 10px; }
 
 /* ============ Toasts ============ */
 #toast-root {

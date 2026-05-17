@@ -175,6 +175,23 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert "FORMULA" in r.text
 
 
+def test_sync_badge_has_explainer_button(client):
+    """
+    The header sync dot must be a real <button> with an aria-label,
+    and carry `data-sync-explain` so the JS click handler can attach.
+    Previously a <span> with a static title="Connection" — invisible
+    to keyboard users and unhelpful for two-parent onboarding.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-sync-explain" in r.text, (
+        "expected the sync badge to expose `data-sync-explain` for JS wiring"
+    )
+    assert 'aria-label="Connection status"' in r.text, (
+        "sync badge button must declare aria-label='Connection status'"
+    )
+
+
 def test_event_row_shows_notes_icon_when_notes_present(client):
     """
     Event rows with non-empty notes show a small 📝 indicator inside

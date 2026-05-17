@@ -83,6 +83,58 @@ def test_click_handler_suppresses_after_drag():
     )
 
 
+def test_app_js_has_hint_dismissed_helper():
+    """
+    The hint-dismissal API is centralised so each hint follows the same
+    pattern. Pin that `hintDismissed` and `dismissHint` helpers exist
+    and use `localStorage`.
+    """
+    src = _src()
+    assert "function hintDismissed" in src, "missing hintDismissed() helper"
+    assert "function dismissHint" in src, "missing dismissHint() helper"
+    # Helpers must touch localStorage.
+    idx = src.find("function hintDismissed")
+    block = src[idx : idx + 400]
+    assert "localStorage" in block, "hintDismissed must read localStorage"
+
+
+def test_sync_dot_click_handler_attached():
+    """
+    Tapping the header sync dot must open an explainer popover. Pin
+    that a click handler is wired to the `[data-sync-explain]` element.
+    """
+    src = _src()
+    # Click handler can be wired by querySelector or delegation; both
+    # mention the data attribute.
+    assert "data-sync-explain" in src, (
+        "expected `data-sync-explain` to be referenced in app.js so the "
+        "sync-badge button has a click handler"
+    )
+    # Look for an addEventListener on click anywhere within 800 chars of
+    # the data-sync-explain reference.
+    idx = src.find("data-sync-explain")
+    window = src[max(0, idx - 400) : idx + 800]
+    assert 'addEventListener("click"' in window or 'addEventListener(\'click\'' in window, (
+        "expected a click listener wired near data-sync-explain"
+    )
+
+
+def test_set_sync_state_updates_aria_label():
+    """
+    The sync-dot button's aria-label / title must change with state so
+    screen-reader users hear "Connection: live" vs "Connection: offline"
+    — not just the static title="Connection".
+    """
+    src = _src()
+    idx = src.find("function setSyncState(")
+    assert idx >= 0, "setSyncState() function not found"
+    block = src[idx : idx + 600]
+    assert "aria-label" in block or "ariaLabel" in block or "setAttribute" in block, (
+        "setSyncState must mutate aria-label / title so the state is "
+        "accessible, not just visual"
+    )
+
+
 def test_row_html_includes_notes_icon_branch():
     """
     The client-side `rowHTML(ev)` must mirror the server template by
