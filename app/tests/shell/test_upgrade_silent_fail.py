@@ -257,3 +257,23 @@ def test_source_declares_err_trap():
     assert "trap " in src and "ERR" in src, (
         "upgrade.sh should declare a `trap ... ERR` so silent exits are impossible"
     )
+
+
+def test_source_tag_fetch_uses_force():
+    """
+    `git fetch --tags` without --force fails when a local tag's SHA disagrees
+    with origin's — common after retags or when someone fetched mid-rebase.
+    The Pi hit this in production. --force makes origin's tag state win,
+    which is the correct semantic for an upgrade flow.
+    """
+    src = SCRIPT.read_text()
+    # Look for the specific tag-fetch line; must include --force
+    for line in src.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if "git fetch" in stripped and "--tags" in stripped:
+            assert "--force" in stripped, (
+                "`git fetch --tags` must use --force so locally-conflicting "
+                f"tags don't abort the upgrade. Offending line: {stripped!r}"
+            )
