@@ -235,6 +235,21 @@ def last_feed_side(conn: sqlite3.Connection, baby_id: int = 1) -> str | None:
     return row["feed_side"] if row else None
 
 
+def last_feed_method(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, Any] | None:
+    """
+    Most recent breast OR formula event with enough detail for the modal
+    to pre-fill smart defaults. Returns None when there are no feeds.
+    Soft-deleted rows are skipped.
+    """
+    row = conn.execute(
+        f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
+        "WHERE e.baby_id = ? AND e.type IN ('breast', 'formula') AND e.deleted_at IS NULL "
+        "ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1",
+        (baby_id,),
+    ).fetchone()
+    return _row_to_dict(row)
+
+
 def last_event_of_each_type(
     conn: sqlite3.Connection, baby_id: int = 1
 ) -> dict[str, dict[str, Any]]:
