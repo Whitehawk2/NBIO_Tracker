@@ -137,6 +137,92 @@ def test_today_card_count_cells_have_stable_selectors(client):
     assert '<b data-count="feed">' in r.text
     assert '<b data-count="wee">' in r.text
     assert '<b data-count="poo">' in r.text
+    # Formula cc total is a 4th big-number tile.
+    assert '<b data-count="formula_ml">' in r.text
+
+
+def test_today_card_renders_formula_cc_total(client):
+    """
+    Logging two formula feeds today should sum into the formula_ml tile.
+    Pin that the integer total renders correctly.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    for i, vol in enumerate([120, 90]):
+        client.post(
+            "/api/events",
+            json={
+                "type": "formula",
+                "occurred_at": f"{today}T0{i + 1}:00:00.000Z",
+                "formula_brand": "Materna",
+                "formula_volume_ml": vol,
+                "idempotency_key": f"idem-cc-today-{i}",
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    m = re.search(r'<b data-count="formula_ml">(\d+)</b>', r.text)
+    assert m, "formula_ml big-number tile not found"
+    assert int(m.group(1)) == 210
+
+
+def test_last_days_table_has_formula_cc_column(client):
+    """
+    The Last-3-days mini-table on `/` carries a `data-col="formula_ml"`
+    cell per day so JS can target it and parents can scan cc per day.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 150,
+            "idempotency_key": "idem-cc-lastdays-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'data-col="formula_ml"' in r.text
+    # The 150cc value should render in today's row.
+    import re
+
+    m = re.search(
+        rf'<tr data-day="{today}">(.*?)</tr>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "today's row not found in last-days table"
+    assert "150" in m.group(1)
+
+
+def test_reports_totals_table_has_formula_cc_column(client):
+    """
+    The reports daily-totals table adds a 🍼 cc column alongside the
+    existing 🍼 count column — 14-day intake trend visible per day.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 180,
+            "idempotency_key": "idem-cc-rpts-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # Header marker for the new column.
+    assert 'data-col-totals="formula_ml"' in r.text
+    # The 180cc value renders in the totals row for today.
+    assert "180" in r.text
 
 
 def test_today_card_last_of_each_rows_have_stable_selectors(client):

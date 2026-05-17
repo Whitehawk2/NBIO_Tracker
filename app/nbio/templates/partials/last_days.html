@@ -5,6 +5,7 @@
       <tr>
         <th class="day-col"></th>
         <th><span aria-hidden="true">🤱</span> feeds</th>
+        <th><span aria-hidden="true">🍼</span> cc</th>
         <th><span aria-hidden="true">💦</span> wees</th>
         <th><span aria-hidden="true">💩</span> poos</th>
       </tr>
@@ -14,6 +15,7 @@
         <tr data-day="{{ row.day }}">
           <td class="day-col">{{ row.label }}</td>
           <td data-col="feed">{{ row.feed }}</td>
+          <td data-col="formula_ml">{{ row.formula_ml }}</td>
           <td data-col="wee">{{ row.wee }}</td>
           <td data-col="poo">{{ row.poo }}{% if row.poo == 0 %} <span class="hint" title="no poo logged that day">·</span>{% endif %}</td>
         </tr>

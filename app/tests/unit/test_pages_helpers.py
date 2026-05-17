@@ -128,6 +128,7 @@ class TestLastDaysRows:
             "feed": 0,
             "wee": 0,
             "poo": 0,
+            "formula_ml": 0,
         }
 
 

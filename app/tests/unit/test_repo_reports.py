@@ -54,11 +54,17 @@ def test_today_counts_aggregates_formula_volume_ml(conn):
     feeds under the `formula_ml` key. Breast feeds and rows without a
     volume don't contribute.
     """
-    create_event(conn, _evt("formula", "f1", f"{TODAY}T03:00:00.000Z", brand="Materna", volume_ml=120))
-    create_event(conn, _evt("formula", "f2", f"{TODAY}T06:00:00.000Z", brand="Materna", volume_ml=90))
+    create_event(
+        conn, _evt("formula", "f1", f"{TODAY}T03:00:00.000Z", brand="Materna", volume_ml=120)
+    )
+    create_event(
+        conn, _evt("formula", "f2", f"{TODAY}T06:00:00.000Z", brand="Materna", volume_ml=90)
+    )
     create_event(conn, _evt("breast", "b1", f"{TODAY}T09:00:00.000Z"))
     # An older formula must NOT contribute.
-    create_event(conn, _evt("formula", "f3", "2026-05-15T03:00:00.000Z", brand="Materna", volume_ml=200))
+    create_event(
+        conn, _evt("formula", "f3", "2026-05-15T03:00:00.000Z", brand="Materna", volume_ml=200)
+    )
     counts = today_counts(conn)
     assert counts["formula_ml"] == 210
     assert counts["feed"] == 3  # 2 formula + 1 breast
@@ -114,9 +120,15 @@ def test_daily_totals_sums_formula_volume_ml_per_day(conn):
     table and the last-3-days mini-table can show per-day intake at a
     glance. Volume_ml NULLs are treated as 0.
     """
-    create_event(conn, _evt("formula", "f1", f"{TODAY}T03:00:00.000Z", brand="Materna", volume_ml=120))
-    create_event(conn, _evt("formula", "f2", f"{TODAY}T06:00:00.000Z", brand="Materna", volume_ml=90))
-    create_event(conn, _evt("formula", "f3", f"{TODAY}T09:00:00.000Z", brand="Materna"))  # NULL volume
+    create_event(
+        conn, _evt("formula", "f1", f"{TODAY}T03:00:00.000Z", brand="Materna", volume_ml=120)
+    )
+    create_event(
+        conn, _evt("formula", "f2", f"{TODAY}T06:00:00.000Z", brand="Materna", volume_ml=90)
+    )
+    create_event(
+        conn, _evt("formula", "f3", f"{TODAY}T09:00:00.000Z", brand="Materna")
+    )  # NULL volume
     rows = daily_totals(conn, days=14)
     assert len(rows) == 1
     assert rows[0]["formula_ml"] == 210

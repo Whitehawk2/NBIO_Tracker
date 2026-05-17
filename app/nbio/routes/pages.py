@@ -96,7 +96,7 @@ def _last_days_rows(totals: list[dict[str, Any]], n: int = 3) -> list[dict[str, 
     for i in range(n):
         d = today_local - timedelta(days=i)
         key = d.isoformat()
-        row = by_day.get(key, {"day": key, "feed": 0, "wee": 0, "poo": 0})
+        row = by_day.get(key, {"day": key, "feed": 0, "wee": 0, "poo": 0, "formula_ml": 0})
         rows.append(
             {
                 "day": key,
@@ -104,6 +104,7 @@ def _last_days_rows(totals: list[dict[str, Any]], n: int = 3) -> list[dict[str, 
                 "feed": row.get("feed", 0),
                 "wee": row.get("wee", 0),
                 "poo": row.get("poo", 0),
+                "formula_ml": row.get("formula_ml", 0),
             }
         )
     return rows
