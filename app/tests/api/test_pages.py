@@ -137,8 +137,102 @@ def test_today_card_count_cells_have_stable_selectors(client):
     assert '<b data-count="feed">' in r.text
     assert '<b data-count="wee">' in r.text
     assert '<b data-count="poo">' in r.text
-    # Formula cc total is a 4th big-number tile.
-    assert '<b data-count="formula_ml">' in r.text
+    # Formula cc total now lives in the today-formula-strip below the
+    # 3-count grid. The cell is `<b data-count="formula_ml">` in the
+    # populated branch and `<b data-count="formula_ml" hidden>0</b>` in
+    # the empty branch — match either via a regex.
+    import re
+
+    assert re.search(r'<b data-count="formula_ml"[^>]*>', r.text), (
+        "expected `<b data-count='formula_ml'>` somewhere in today-card "
+        "(empty or populated branch of today-formula-strip)"
+    )
+
+
+def test_today_card_uses_3_column_counts_not_counts_4(client):
+    """
+    Negative pin: after the v1.1.0 layout redesign, the counts grid is
+    back to 3 columns. The 4-tile `counts-4` class was dropped because
+    it wrapped to a "3 on top, 1 below-left" layout on phone widths.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'class="counts counts-4"' not in r.text, (
+        "today-card must NOT use the counts-4 class — its 4-tile grid "
+        "wraps badly on phones (v1.1.0 regression)"
+    )
+    assert 'class="counts"' in r.text
+
+
+def test_today_card_has_formula_strip(client):
+    """
+    Today-card has a dedicated `today-formula-strip` element below the
+    3-count grid carrying the daily cc total. Pin its presence and
+    its stable `data-formula-strip` selector for JS targeting.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-formula-strip" in r.text
+    assert "today-formula-strip" in r.text
+
+
+def test_today_card_formula_strip_populated_when_formula_logged(client):
+    """The strip shows the cc total when at least one formula is logged today."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 120,
+            "idempotency_key": "idem-strip-pop-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    # Extract the strip block and assert it contains both the number and
+    # the unit / context language.
+    m = re.search(
+        r'<div class="today-formula-strip"[^>]*>(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "today-formula-strip not found"
+    block = m.group(1)
+    assert "120" in block, f"cc total 120 not in strip: {block!r}"
+    assert "cc formula" in block or "cc" in block
+
+
+def test_today_card_formula_strip_empty_branch_preserves_selector(client):
+    """
+    Empty-state branch (no formula today) must STILL include the
+    `<b data-count="formula_ml">` cell so `bumpOverviews` can find it
+    when an optimistic POST lands. The cell is `hidden` in this branch
+    so it doesn't visually show "0 cc formula".
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    # Strip is present even on empty state.
+    m = re.search(
+        r'<div class="today-formula-strip"[^>]*>(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "today-formula-strip must render even with no formula logged"
+    block = m.group(1)
+    # The data-count cell must exist (hidden) so JS can find + un-hide it.
+    assert 'data-count="formula_ml"' in block, (
+        "even in empty state, the data-count='formula_ml' cell must be "
+        "present (hidden) so bumpOverviews can update it on an optimistic POST"
+    )
+    # And the empty-state copy must be readable.
+    assert "no formula" in block.lower()
 
 
 def test_today_card_renders_formula_cc_total(client):

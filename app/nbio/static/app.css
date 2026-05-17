@@ -139,17 +139,31 @@ a { color: var(--accent); text-decoration: none; }
 .today-card .counts {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
 }
-.today-card .counts-4 { grid-template-columns: repeat(4, 1fr); }
 .today-card .counts > div {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .today-card .counts b { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-/* On narrow phones the 4th cc tile would squeeze the others; shrink the
-   number slightly on small viewports so all four fit cleanly. */
-@media (max-width: 380px) {
-  .today-card .counts-4 b { font-size: 24px; }
-}
 .today-card .counts span { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+
+/* Daily formula strip: a horizontal row below the 3-count grid showing
+   today's cc total. Previously a 4th tile in the counts grid (v1.1.0)
+   but that wrapped badly on phone widths. This shape gives the cc
+   number its own at-a-glance line. */
+.today-formula-strip {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 10px 0 0; padding: 8px 10px;
+  background: var(--bg-sunk);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.today-formula-strip .emoji { font-size: 18px; }
+.today-formula-strip .label { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.today-formula-strip b {
+  font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+.today-formula-strip .unit { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.today-formula-strip .muted { margin-left: auto; }
 .today-card .last-of-each {
   list-style: none; margin: 12px 0 0; padding: 0;
   display: flex; flex-direction: column; gap: 6px;

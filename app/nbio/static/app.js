@@ -750,6 +750,27 @@
     return `${y}-${m}-${day}`;
   }
 
+  // The today-formula-strip has two rendering branches: populated
+  // (when cc total > 0) and empty (`no formula today`). When an
+  // optimistic POST crosses the zero boundary in either direction,
+  // we have to swap branches — not just edit a number.
+  function renderFormulaStrip(totalCC) {
+    const strip = document.querySelector("[data-formula-strip]");
+    if (!strip) return;
+    if (totalCC > 0) {
+      strip.innerHTML =
+        `<span class="emoji" aria-hidden="true">🍼</span>` +
+        `<span class="label">Today</span>` +
+        `<b data-count="formula_ml">${totalCC}</b>` +
+        `<span class="unit">cc formula</span>`;
+    } else {
+      strip.innerHTML =
+        `<span class="emoji" aria-hidden="true">🍼</span>` +
+        `<span class="muted">no formula today</span>` +
+        `<b data-count="formula_ml" hidden>0</b>`;
+    }
+  }
+
   function bumpOverviews(ev, delta) {
     const key = countKey(ev?.type);
     if (!key) return;
@@ -769,7 +790,8 @@
         const mlCell = document.querySelector(`#today-card [data-count="formula_ml"]`);
         if (mlCell) {
           const cur = parseInt(mlCell.textContent, 10) || 0;
-          mlCell.textContent = String(Math.max(0, cur + delta * ev.formula_volume_ml));
+          const next = Math.max(0, cur + delta * ev.formula_volume_ml);
+          renderFormulaStrip(next);
         }
       }
     }
