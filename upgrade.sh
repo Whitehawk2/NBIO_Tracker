@@ -174,6 +174,7 @@ do_rollback() {
   fi
 
   healthz_or_warn
+  mark_deployed
   ok "rollback complete."
 }
 
@@ -196,6 +197,14 @@ healthz_or_warn() {
   err "Inspect: docker compose logs app"
   err "Rollback: ./upgrade.sh --rollback"
   exit 1
+}
+
+# ----- post-deploy: record what's actually running -------------------------
+# Source of truth for "is the container at this SHA". Written after a
+# successful healthz so a half-failed upgrade doesn't get marked as deployed.
+mark_deployed() {
+  mkdir -p data
+  git rev-parse HEAD > data/.upgrade-current-ref
 }
 
 # ----- main ------------------------------------------------------------------
@@ -222,18 +231,31 @@ resolve_target
 TARGET_SHA=$(git rev-parse "$TARGET_REF^{commit}")
 CURRENT_SHA=$(git rev-parse HEAD)
 
+# Source of truth for "what's actually running in the container" is the
+# data/.upgrade-current-ref file (written after a successful healthz at
+# the end of an upgrade or rollback). If it's missing or stale we MUST
+# proceed even when HEAD already matches the target — an advanced user
+# may have `git pull`ed the working tree without rebuilding the stack.
+DEPLOYED_SHA=""
+if [[ -f data/.upgrade-current-ref ]]; then
+  DEPLOYED_SHA=$(tr -d '[:space:]' < data/.upgrade-current-ref)
+fi
+
 if (( RESOLVE_ONLY )); then
   info "Target ref: $TARGET_REF ($TARGET_KIND)"
   info "Target SHA: $TARGET_SHA"
   info "Current SHA: $CURRENT_SHA"
-  if [[ "$TARGET_SHA" == "$CURRENT_SHA" ]]; then
-    info "Already on target — no upgrade needed."
+  info "Deployed SHA: ${DEPLOYED_SHA:-unknown (no data/.upgrade-current-ref)}"
+  if [[ -n "$DEPLOYED_SHA" && "$TARGET_SHA" == "$DEPLOYED_SHA" ]]; then
+    info "Container is already at target — no upgrade needed."
   fi
   exit 0
 fi
 
-if [[ "$TARGET_SHA" == "$CURRENT_SHA" ]]; then
-  ok "Already on $TARGET_REF — nothing to do."
+# Short-circuit ONLY when the container is verifiably at the target SHA.
+# A bare-HEAD-match isn't enough — see the comment above DEPLOYED_SHA.
+if [[ -n "$DEPLOYED_SHA" && "$TARGET_SHA" == "$DEPLOYED_SHA" ]]; then
+  ok "Container already running $TARGET_REF — nothing to do."
   exit 0
 fi
 
@@ -310,6 +332,7 @@ else
 fi
 
 healthz_or_warn
+mark_deployed
 
 # ----- summary ---------------------------------------------------------------
 echo ""
