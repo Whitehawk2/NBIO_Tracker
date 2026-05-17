@@ -227,30 +227,33 @@ cadence motivates faster Pi upgrades.
 
 ## 12. Triage open Dependabot PRs + tighten grouping policy — [#25](https://github.com/Whitehawk2/NBIO_Tracker/issues/25)
 
-Three open Dependabot PRs from the first weekly run of the schedule
-set up in #14. Recommendations per-PR plus a meta-fix:
+**Status:** Meta-fix shipped; per-action splits parked as accepted risk
+until v1.1.0 cycle (2026-05-17).
 
+Progress so far:
+- **Meta-fix** — `.github/dependabot.yml` grouping tightened so only
+  `patch` + `minor` updates bundle; majors land alone. Merged via
+  [PR #29](https://github.com/Whitehawk2/NBIO_Tracker/pull/29).
 - **[#17](https://github.com/Whitehawk2/NBIO_Tracker/pull/17)** (alpine
-  3.20 → 3.23 in /backup): **merge after CI green**. Low-risk point
-  bump for the backup sidecar.
-- **[#19](https://github.com/Whitehawk2/NBIO_Tracker/pull/19)** (python
-  3.12-slim → 3.14-slim in /app): **close as-is**. Skips 3.13 entirely
-  and our CI matrix is `3.12 + 3.13`. Replace with a narrower bump to
-  3.13-slim now, then add 3.14 to the CI matrix as a follow-up before
-  ever bumping the runtime to 3.14.
-- **[#18](https://github.com/Whitehawk2/NBIO_Tracker/pull/18)** (actions
-  group, 6 updates): **close, split into per-action PRs**. The group
-  bundles 2 major-version jumps (`upload-artifact@v4→v7`,
-  `checkout@v4→v6`) with 4 routine bumps — if CI fails, you can't tell
-  which one broke.
+  3.20 → 3.23 in /backup): merged.
+- **[#18](https://github.com/Whitehawk2/NBIO_Tracker/pull/18) /
+  [#19](https://github.com/Whitehawk2/NBIO_Tracker/pull/19)** —
+  superseded by Dependabot's next run; closed.
 
-Meta-fix: tighten `.github/dependabot.yml` so the actions group
-includes only `patch` + `minor` updates; majors land as individual PRs
-with their own CI signal.
+Carried over (accepted risk, revisit in v1.1.0 cycle):
+- **[#30](https://github.com/Whitehawk2/NBIO_Tracker/pull/30)**
+  `actions/setup-python` 5→6 — minor; safest to merge first.
+- **[#31](https://github.com/Whitehawk2/NBIO_Tracker/pull/31)**
+  `docker/setup-buildx-action` 3→4 — major.
+- **[#32](https://github.com/Whitehawk2/NBIO_Tracker/pull/32)**
+  `actions/upload-artifact` 4→7 — three majors at once; riskiest.
+- **[#33](https://github.com/Whitehawk2/NBIO_Tracker/pull/33)**
+  `actions/setup-node` 4→6 — two majors.
+- **[#34](https://github.com/Whitehawk2/NBIO_Tracker/pull/34)**
+  `docker/setup-qemu-action` 3→4 — major.
 
-Order: dependabot.yml grouping tweak first → close #18 #19 → wait for
-next Dependabot run → merge per-action splits → merge #17 → file a
-"3.14 to CI matrix" follow-up.
+Also still owed: **"add Python 3.14 to CI matrix"** follow-up before
+ever bumping the runtime to 3.14-slim.
 
 ## 13. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 
