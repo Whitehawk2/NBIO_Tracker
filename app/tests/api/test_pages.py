@@ -98,8 +98,6 @@ def test_index_with_known_device_renders_actor_color(client):
     assert 'title="Mum"' in r.text
 
 
-
-
 def test_reports_today_counts_render_in_big_numbers(client):
     """today.counts.feed renders inside the .big-numbers block."""
     today = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -175,6 +173,49 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert "FORMULA" in r.text
 
 
+def test_event_row_has_row_menu_button(client):
+    """
+    Every event row carries a trailing-edge `⋯` button (`data-row-menu`)
+    that opens an Edit/Delete sheet. Discoverable alternative to swipe.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-row-menu-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-row-menu" in r.text
+    assert 'aria-label="Row actions"' in r.text
+    # And the trailing-edge glyph.
+    assert "⋯" in r.text
+
+
+def test_event_row_has_aria_label(client):
+    """
+    Each row gets an aria-label describing both gestures, so SR users
+    know the row is interactive AND know about swipe.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-row-aria-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'aria-label="Tap to edit; swipe left to delete"' in r.text
+
+
 def test_first_row_hint_rendered_when_events_present(client):
     """
     With at least one event logged, a dismissible 'Tap to edit · swipe
@@ -215,7 +256,7 @@ def test_first_row_hint_emitted_only_once(client):
             "/api/events",
             json={
                 "type": "wee",
-                "occurred_at": f"{today}T0{i+1}:00:00.000Z",
+                "occurred_at": f"{today}T0{i + 1}:00:00.000Z",
                 "idempotency_key": f"idem-frh-multi-{i}",
                 "created_by_device": "device-test",
             },

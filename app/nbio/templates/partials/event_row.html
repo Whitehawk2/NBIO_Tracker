@@ -1,4 +1,4 @@
-<li class="event-row" data-id="{{ event.id }}" data-type="{{ event.type }}" data-idem="{{ event.idempotency_key }}">
+<li class="event-row" data-id="{{ event.id }}" data-type="{{ event.type }}" data-idem="{{ event.idempotency_key }}" aria-label="Tap to edit; swipe left to delete">
   <span class="ev-emoji" aria-hidden="true">
     {% if event.type == 'breast' %}🤱{% elif event.type == 'formula' %}🍼{% elif event.type == 'wee' %}💦{% else %}💩{% endif %}
   </span>
@@ -18,4 +18,5 @@
     {% if event.notes %} · {{ event.notes }}{% endif %}
   </span>
   <span class="ev-actor" style="background: {{ event.actor_color or '#888' }}" title="{{ event.actor_name or '' }}"></span>
+  <button type="button" class="row-menu" data-row-menu aria-label="Row actions">⋯</button>
 </li>

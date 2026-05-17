@@ -42,10 +42,7 @@ def test_hint_keys_use_nbio_hint_prefix():
     # Find every "nbio.hint.<word>" literal.
     found = set(re.findall(r'"(nbio\.hint\.[a-z_]+)"', src))
     missing = EXPECTED_KEYS - found
-    assert not missing, (
-        f"app.js is missing hint-key literals: {missing}. "
-        f"Found: {found}"
-    )
+    assert not missing, f"app.js is missing hint-key literals: {missing}. Found: {found}"
     # Reject stray keys outside the expected set so the future settings
     # UI can prefix-filter without surprises.
     extras = found - EXPECTED_KEYS
@@ -74,7 +71,7 @@ def test_hint_dismiss_value_is_literal_dismissed():
     )
     has_comparison = '=== "dismissed"' in src
     assert (has_set or has_set_via_var) and has_comparison, (
-        "expected `localStorage.setItem(<key>, \"dismissed\")` AND "
+        'expected `localStorage.setItem(<key>, "dismissed")` AND '
         '`=== "dismissed"` comparison in app.js'
     )
 

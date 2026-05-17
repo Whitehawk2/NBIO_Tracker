@@ -50,33 +50,38 @@ def test_focus_visible_covers_tiles_and_rows():
     """
     Tab navigation must surface the focused tile or event row — not just
     buttons / inputs / links. Pin that `.tile` and `.event-row` are in
-    the selector list of the focus-visible rule.
+    the global focus-visible selector list (a rule that lists both
+    among its selectors).
     """
     src = _src()
-    # Look at the selector list (everything before the first `{` after
-    # we've located the focus-visible block).
-    idx = src.find(":focus-visible")
-    assert idx >= 0
-    # The block starts at the FIRST { after the selector list begins.
-    # Selectors before this { include all `:focus-visible` instances
-    # for this rule.
-    block_open = src.find("{", idx)
-    selectors = src[max(0, idx - 200) : block_open]
-    assert ".tile:focus-visible" in selectors, (
-        ".tile must appear in the :focus-visible selector list"
+    # Find every `:focus-visible` rule and look for one whose selector
+    # list contains both `.tile:focus-visible` and `.event-row:focus-visible`.
+    # Component-specific rules (e.g. `.row-menu:focus-visible`) match a
+    # single selector and don't cover the contract.
+    matched = False
+    for m in re.finditer(r"([^{}]*?:focus-visible[^{}]*?)\{", src):
+        selectors = m.group(1)
+        if ".tile:focus-visible" in selectors and ".event-row:focus-visible" in selectors:
+            matched = True
+            break
+    assert matched, (
+        "expected a :focus-visible rule listing both `.tile` and "
+        "`.event-row` so keyboard focus is visible on both clickable "
+        "but non-native-button elements"
     )
-    assert ".event-row:focus-visible" in selectors, (
-        ".event-row must appear in the :focus-visible selector list"
-    )
+
+
+def test_row_menu_styled():
+    """A `.row-menu` rule must exist styling the trailing-edge button."""
+    src = _src()
+    assert re.search(r"\.row-menu\s*\{", src), "expected a `.row-menu { ... }` rule in app.css"
 
 
 def test_tile_hint_styled():
     """A `.tile-hint` rule must exist styling the long-press caption."""
     src = _src()
     # The selector list might group .tile-hint with .first-row-hint; accept either.
-    assert re.search(r"\.tile-hint\s*[,{]", src), (
-        "expected a `.tile-hint` selector in app.css"
-    )
+    assert re.search(r"\.tile-hint\s*[,{]", src), "expected a `.tile-hint` selector in app.css"
 
 
 def test_hint_dismiss_button_styled():
@@ -122,12 +127,10 @@ def test_dark_mode_text_muted_bumped():
     assert muted, "html.dark must declare --text-muted"
     value = muted.group(1).lower()
     assert value != "#8a8a93", (
-        "dark-mode --text-muted must be bumped from the borderline-AA "
-        "value #8a8a93"
+        "dark-mode --text-muted must be bumped from the borderline-AA value #8a8a93"
     )
     # Allow a small window: the colour should be visibly lighter than
     # #8a8a93 (so each channel ~>= 0x95).
     assert re.match(r"#[9-f][0-9a-f]{5}$", value), (
-        f"dark-mode --text-muted should be >= #909090-ish for AA on --bg-elev; "
-        f"got {value}"
+        f"dark-mode --text-muted should be >= #909090-ish for AA on --bg-elev; got {value}"
     )

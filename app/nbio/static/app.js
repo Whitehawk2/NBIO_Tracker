@@ -660,6 +660,7 @@
       <span class="ev-rel" data-rel="${ev.occurred_at}">${fmtRel(ev.occurred_at)}</span>
       <span class="ev-detail">${notesIcon}${escapeHtml(detail + tail)}</span>
       <span class="ev-actor" style="background:${color}" title="${escapeHtml(ev.actor_name || "")}"></span>
+      <button type="button" class="row-menu" data-row-menu aria-label="Row actions">⋯</button>
     `;
   }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>\"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
@@ -786,15 +787,25 @@
     }
   }
 
-  // ----- row gestures: tap = edit, swipe-left = delete
+  // ----- row gestures: tap = edit, swipe-left = delete, ⋯ = action sheet
   function attachRowGestures(row) {
     if (row.__gesturesAttached) return;
     row.__gesturesAttached = true;
 
     let startX = null, dx = 0;
-    row.addEventListener("touchstart", (e) => { startX = e.touches[0].clientX; dx = 0; }, { passive: true });
+    // Touches that start on the `.row-menu` button must not initiate a
+    // swipe — otherwise the button can never be tapped on a touch
+    // device (the row would eat the gesture).
+    row.addEventListener("touchstart", (e) => {
+      if (e.target && e.target.closest && e.target.closest(".row-menu")) {
+        startX = null;
+        return;
+      }
+      startX = e.touches[0].clientX; dx = 0;
+    }, { passive: true });
     row.addEventListener("touchmove", (e) => {
       if (startX == null) return;
+      if (e.target && e.target.closest && e.target.closest(".row-menu")) return;
       dx = e.touches[0].clientX - startX;
       if (dx < -10) {
         row.classList.add("swiping");
@@ -808,11 +819,58 @@
       startX = null; dx = 0;
     });
 
-    row.addEventListener("click", () => {
+    row.addEventListener("click", (e) => {
+      // The `⋯` button has its own click handler — let it run, not us.
+      if (e.target && e.target.closest && e.target.closest(".row-menu")) return;
       const ev = row.__event;
       if (!ev || !ev.id || String(ev.id).startsWith("local:")) return;
       openEditFor(ev);
     });
+
+    wireRowMenu(row);
+  }
+
+  function wireRowMenu(row) {
+    const btn = row && row.querySelector ? row.querySelector(".row-menu") : null;
+    if (!btn) return;
+    btn.addEventListener("click", (e) => {
+      // The `.row-menu` button is inside the row, so its click bubbles
+      // up to the row's tap-to-edit handler. stopPropagation() prevents
+      // both that AND any future delegated handlers from firing.
+      e.stopPropagation();
+      e.preventDefault();
+      const ev = row.__event;
+      if (!ev) return;
+      openRowActionSheet(row, ev);
+    });
+  }
+
+  function openRowActionSheet(row, ev) {
+    const backdrop = makeModalShell("Actions");
+    const body = backdrop.querySelector(".modal-body");
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn-secondary";
+    editBtn.textContent = "Edit";
+    editBtn.style.width = "100%";
+    editBtn.style.marginBottom = "10px";
+    editBtn.addEventListener("click", () => {
+      closeModal(backdrop);
+      openEditFor(ev);
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-secondary";
+    delBtn.textContent = "Delete";
+    delBtn.style.width = "100%";
+    delBtn.style.color = "#c95757";
+    delBtn.addEventListener("click", () => {
+      closeModal(backdrop);
+      doSoftDelete(row);
+    });
+
+    body.append(editBtn, delBtn);
+    document.body.appendChild(backdrop);
   }
 
   async function openEditFor(ev) {
