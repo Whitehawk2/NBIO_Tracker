@@ -213,6 +213,106 @@ def test_row_html_includes_notes_icon_branch():
     assert "ev.notes" in block, "the notes-icon emission in rowHTML must be conditional on ev.notes"
 
 
+def test_timeline_marks_wired_for_tap_to_show_detail():
+    """
+    On Android Chrome the SVG `<title>` element only renders on hover
+    (which touch devices don't have). User: 'feedings on reports
+    timeline still not clickable, no way to know per-feeding cc amount.'
+
+    Fix: a `wireTimelineMarks()` function binds click handlers to each
+    `.timeline .mark` rect. On click it reads the `<title>` text and
+    surfaces it via the existing toast.
+    """
+    src = _src()
+    assert "function wireTimelineMarks" in src, (
+        "expected a `wireTimelineMarks()` function in app.js so timeline "
+        "marks are tappable on touch devices"
+    )
+    idx = src.find("function wireTimelineMarks")
+    block = src[idx : idx + 600]
+    assert ".timeline .mark" in block or "timeline .mark" in block, (
+        "wireTimelineMarks must target `.timeline .mark` rects"
+    )
+    assert "showToast" in block, (
+        "wireTimelineMarks must call showToast() with the mark's title text"
+    )
+
+
+def test_sse_deleted_handler_suppresses_own_echo():
+    """
+    Critical reactive-refresh bug: `doSoftDelete` calls
+    `bumpOverviews(deleted, -1)` immediately, then the SSE
+    `event.deleted` echo arrives ~50ms later while the row is still
+    in the DOM (250ms `removing` animation). The SSE handler then
+    bumps AGAIN, double-decrementing the cc total. With clamp at 0,
+    a 245→0 jump is what the user reported.
+
+    Fix mirrors the existing own-echo pattern for `created`: track
+    own deletes in `ownDeletes` and skip the SSE bump when matched.
+    """
+    src = _src()
+    # An ownDeletes container exists.
+    assert "ownDeletes" in src, (
+        "expected an `ownDeletes` Set/Map matching the ownIdems pattern for created events"
+    )
+    # The SSE deleted handler checks it before bumping.
+    idx = src.find('kind === "deleted"')
+    assert idx >= 0
+    block = src[idx : idx + 600]
+    assert "ownDeletes" in block, (
+        "SSE event.deleted handler must check ownDeletes before bumping — "
+        "otherwise the user's own delete double-decrements the cc total"
+    )
+
+
+def test_wire_existing_rows_hydrates_formula_volume_ml():
+    """
+    Second half of the reactive-refresh regression: when the user
+    DELETES a server-rendered formula row, `doSoftDelete` reads
+    `row.__event` and passes it to `bumpOverviews`. `wireExistingRows`
+    sets up `__event` from DOM data — but pre-fix it only stored id,
+    type, occurred_at, and notes. With no `formula_volume_ml`, the
+    formula branch in `bumpOverviews` skipped and the cc total stayed
+    stale until reload.
+    """
+    src = _src()
+    idx = src.find("function wireExistingRows")
+    assert idx >= 0, "wireExistingRows function not found"
+    block = src[idx : idx + 800]
+    assert "formula_volume_ml" in block, (
+        "wireExistingRows must hydrate `formula_volume_ml` into `row.__event` "
+        "so deletions of server-rendered formula rows bump the cc total"
+    )
+
+
+def test_optimistic_dict_includes_formula_fields():
+    """
+    Critical regression: `submitCreate`'s optimistic event-row dict
+    copies feed_side / feed_duration_min / poo_quality / notes from the
+    payload, but pre-fix it forgot `formula_brand` and
+    `formula_volume_ml`. The result: `bumpOverviews(optimistic, +1)`'s
+    formula branch checked `ev.formula_volume_ml` and silently fell
+    through because the field was undefined. The today-card cc total
+    and the last-3-days cc cell didn't refresh on a POST — only on a
+    page reload (when the server-rendered HTML had the values).
+
+    Pin the two fields explicitly so the regression can't return.
+    """
+    src = _src()
+    idx = src.find("const optimistic = {")
+    assert idx >= 0, "optimistic dict not found in app.js"
+    # Look at the full literal block (~30 lines after).
+    block = src[idx : idx + 800]
+    assert "formula_brand:" in block, (
+        "submitCreate's optimistic dict must include `formula_brand:` so "
+        "the optimistic row + bumpOverviews receive the brand"
+    )
+    assert "formula_volume_ml:" in block, (
+        "submitCreate's optimistic dict must include `formula_volume_ml:` "
+        "so bumpOverviews' formula branch can sum the cc total"
+    )
+
+
 def test_bump_overviews_bumps_formula_ml_for_formula_events():
     """
     `bumpOverviews` must bump the `formula_ml` cell by the event's

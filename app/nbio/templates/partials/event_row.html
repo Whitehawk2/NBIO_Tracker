@@ -1,10 +1,13 @@
-<li class="event-row" data-id="{{ event.id }}" data-type="{{ event.type }}" data-idem="{{ event.idempotency_key }}" aria-label="Tap to edit; swipe left to delete">
+<li class="event-row" data-id="{{ event.id }}" data-type="{{ event.type }}" data-idem="{{ event.idempotency_key }}"{% if event.formula_volume_ml %} data-formula-volume-ml="{{ event.formula_volume_ml }}"{% endif %} aria-label="Tap to edit; swipe left to delete">
   <span class="ev-emoji" aria-hidden="true">
     {% if event.type == 'breast' %}🤱{% elif event.type == 'formula' %}🍼{% elif event.type == 'wee' %}💦{% else %}💩{% endif %}
   </span>
   <span class="ev-time">{{ event.occurred_at | hhmm }}</span>
   <span class="ev-rel" data-rel="{{ event.occurred_at }}">{{ event.occurred_at | relative }}</span>
   <span class="ev-detail">
+    {# 📝 icon signals notes exist; full notes are revealed in the edit
+       modal on tap. Inline notes text was dropped because long comments
+       overflowed and overlapped the relative-time column (v1.1.0). #}
     {% if event.notes %}<span class="ev-notes-icon" aria-label="has notes" title="has notes">📝</span>{% endif %}
     {% if event.type == 'breast' %}
       {% if event.feed_side %}{{ event.feed_side }}{% endif %}
@@ -15,7 +18,6 @@
     {% elif event.type == 'poo' and event.poo_quality %}
       type {{ event.poo_quality }}
     {% endif %}
-    {% if event.notes %} · {{ event.notes }}{% endif %}
   </span>
   <span class="ev-actor" style="background: {{ event.actor_color or '#888' }}" title="{{ event.actor_name or '' }}"></span>
   <button type="button" class="row-menu" data-row-menu aria-label="Row actions">⋯</button>

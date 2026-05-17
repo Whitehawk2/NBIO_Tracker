@@ -31,7 +31,7 @@ html.dark {
   --text-muted: #a0a0a8;
   --border: #2a2a30;
   --accent: #6a9aff;
-  --feed: #5fa088;
+  --feed: #7fc8ad;
   --feed-bg: #1d3a30;
   --wee: #5894c2;
   --wee-bg: #1c3548;
@@ -106,8 +106,9 @@ a { color: var(--accent); text-decoration: none; }
 .sync-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .sync-dot-btn {
   display: inline-flex; align-items: center; justify-content: center;
+  appearance: none; -webkit-appearance: none;
   background: transparent; border: 0; padding: 4px; cursor: pointer;
-  border-radius: 50%;
+  border-radius: 50%; color: inherit; font: inherit;
 }
 .sync-dot {
   width: 10px; height: 10px; border-radius: 50%;
@@ -138,17 +139,31 @@ a { color: var(--accent); text-decoration: none; }
 .today-card .counts {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
 }
-.today-card .counts-4 { grid-template-columns: repeat(4, 1fr); }
 .today-card .counts > div {
   display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 .today-card .counts b { font-size: 28px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-/* On narrow phones the 4th cc tile would squeeze the others; shrink the
-   number slightly on small viewports so all four fit cleanly. */
-@media (max-width: 380px) {
-  .today-card .counts-4 b { font-size: 24px; }
-}
 .today-card .counts span { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+
+/* Daily formula strip: a horizontal row below the 3-count grid showing
+   today's cc total. Previously a 4th tile in the counts grid (v1.1.0)
+   but that wrapped badly on phone widths. This shape gives the cc
+   number its own at-a-glance line. */
+.today-formula-strip {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 10px 0 0; padding: 8px 10px;
+  background: var(--bg-sunk);
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.today-formula-strip .emoji { font-size: 18px; }
+.today-formula-strip .label { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.today-formula-strip b {
+  font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+.today-formula-strip .unit { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.today-formula-strip .muted { margin-left: auto; }
 .today-card .last-of-each {
   list-style: none; margin: 12px 0 0; padding: 0;
   display: flex; flex-direction: column; gap: 6px;
@@ -186,6 +201,11 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ============ Tiles ============ */
 .tiles { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 18px; }
+/* Each tile + its long-press hint is wrapped so the hint can sit as a
+   SIBLING of the <button class="tile">, not a child. Nested interactive
+   elements are HTML5-illegal and Chrome silently swallowed the hint's
+   dismiss × click (it bubbled to the outer tile button instead). */
+.tile-wrap { display: flex; flex-direction: column; gap: 6px; }
 .tile {
   appearance: none; border: 1px solid var(--border); cursor: pointer;
   width: 100%; min-height: 110px;
@@ -193,7 +213,6 @@ a { color: var(--accent); text-decoration: none; }
   border-radius: var(--radius-lg);
   padding: 18px 20px;
   display: flex; align-items: center; justify-content: space-between;
-  flex-wrap: wrap; row-gap: 10px;
   text-align: left;
   transition: transform .12s ease, background .12s ease;
   box-shadow: var(--shadow);
@@ -219,17 +238,21 @@ a { color: var(--accent); text-decoration: none; }
    stores its dismissal in localStorage so it never reappears. */
 .tile-hint, .first-row-hint {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  flex-basis: 100%;
   margin: 0; padding: 6px 10px;
   font-size: 12px; color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-sunk) 70%, transparent);
+  /* Solid background — color-mix(... transparent) was correct on Chrome
+     111+ but failed soft on any cascade glitch and rendered the hint
+     as a white rectangle (v1.0.1 production regression). Solid is safer. */
+  background: var(--bg-sunk);
   border: 1px dashed var(--border);
   border-radius: 8px;
 }
 .first-row-hint { margin: 0 4px 6px; }
 .hint-dismiss {
-  appearance: none; border: 0; background: transparent;
-  color: var(--text-muted); font-size: 18px; line-height: 1;
+  appearance: none; -webkit-appearance: none;
+  border: 0; background: transparent;
+  color: var(--text-muted); font-family: inherit;
+  font-size: 18px; line-height: 1;
   cursor: pointer; padding: 2px 6px;
   border-radius: 6px;
 }
@@ -255,7 +278,12 @@ a { color: var(--accent); text-decoration: none; }
 .event-list .day-header:first-child { margin-top: 0; }
 .event-row {
   display: grid;
-  grid-template-columns: 28px 56px 1fr auto 10px 32px;
+  /* Columns: emoji | time | ago (only what it needs) | detail (flexible)
+     | actor dot | menu. Previously col 3 was 1fr (greedy) and col 4 was
+     auto-capped-at-50%, which truncated 'Materna · 120 cc' to 'Mater...'
+     once the 32px menu column was added (v1.1.0 regression). Detail
+     now gets the flexible 1fr; ago column sizes to content. */
+  grid-template-columns: 28px 56px max-content minmax(0, 1fr) 10px 32px;
   align-items: center; gap: 10px;
   padding: 12px 14px;
   background: var(--bg-elev);
@@ -268,8 +296,10 @@ a { color: var(--accent); text-decoration: none; }
 }
 .event-row:hover { background: color-mix(in srgb, var(--accent) 6%, var(--bg-elev)); }
 .row-menu {
-  appearance: none; border: 0; background: transparent;
-  color: var(--text-muted); font-size: 18px; line-height: 1;
+  appearance: none; -webkit-appearance: none;
+  border: 0; background: transparent;
+  color: var(--text-muted); font-family: inherit;
+  font-size: 18px; line-height: 1;
   cursor: pointer; padding: 6px; border-radius: 6px;
   min-width: 32px; min-height: 32px;
 }
@@ -279,8 +309,13 @@ a { color: var(--accent); text-decoration: none; }
 .event-row.fresh { background: color-mix(in srgb, var(--accent) 18%, var(--bg-elev)); }
 .ev-emoji { font-size: 20px; }
 .ev-time { font-variant-numeric: tabular-nums; font-weight: 600; }
-.ev-rel  { color: var(--text-muted); font-size: 14px; }
-.ev-detail { color: var(--text-muted); font-size: 14px; justify-self: end; max-width: 50%; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-rel  { color: var(--text-muted); font-size: 14px; white-space: nowrap; }
+.ev-detail {
+  color: var(--text-muted); font-size: 14px;
+  justify-self: end; text-align: right;
+  min-width: 0; /* allow shrinking inside the minmax(0,1fr) grid track */
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .ev-actor { width: 8px; height: 8px; border-radius: 50%; }
 .ev-notes-icon { font-size: 12px; margin-right: 4px; opacity: .8; }
 .event-row.swiping { background: #c9574733; }
@@ -420,6 +455,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 
 .day-strip { margin: 14px 0; }
 .day-label { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.day-label .day-cc { font-weight: 500; color: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .hour-axis {
   display: grid; grid-template-columns: repeat(9, 1fr);
   font-size: 11px; color: var(--text-muted);
@@ -434,6 +470,9 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline .mark-feed { fill: var(--feed); }
 .timeline .mark-wee  { fill: var(--wee); }
 .timeline .mark-poo  { fill: var(--poo); }
+/* Tap target — wireTimelineMarks binds click on .mark to show details. */
+.timeline .mark { cursor: pointer; }
+.timeline .mark:hover, .timeline .mark:active { opacity: 0.8; }
 .timeline .now-line  { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 3 3; }
 .timeline-legend {
   display: flex; gap: 14px; font-size: 12px; color: var(--text-muted);
@@ -445,6 +484,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline-legend .lg-poo  { background: var(--poo); }
 
 .heatmap-section { margin-top: 22px; }
+.heatmap-caption { margin: 0 4px 8px; line-height: 1.4; }
 .heatmap-grid {
   display: grid;
   grid-template-columns: 56px repeat(24, 1fr);

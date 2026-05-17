@@ -1,9 +1,24 @@
 <section class="today-card" id="today-card" aria-label="Today">
-  <div class="counts counts-4">
+  <div class="counts">
     <div><b data-count="feed">{{ today.counts.feed }}</b><span>feeds</span></div>
     <div><b data-count="wee">{{ today.counts.wee }}</b><span>wees</span></div>
     <div><b data-count="poo">{{ today.counts.poo }}</b><span>poos</span></div>
-    <div><b data-count="formula_ml">{{ today.counts.formula_ml }}</b><span>cc formula</span></div>
+  </div>
+  {# Dedicated daily-formula strip — sits below the 3-count grid as a
+     prominent line rather than fighting for space as a cramped 4th tile.
+     Both branches expose `<b data-count="formula_ml">` so JS bumpOverviews
+     can find the cell to update on an optimistic POST or SSE event. #}
+  <div class="today-formula-strip" data-formula-strip>
+    {% if today.counts.formula_ml > 0 %}
+      <span class="emoji" aria-hidden="true">🍼</span>
+      <span class="label">Today</span>
+      <b data-count="formula_ml">{{ today.counts.formula_ml }}</b>
+      <span class="unit">cc formula</span>
+    {% else %}
+      <span class="emoji" aria-hidden="true">🍼</span>
+      <span class="muted">no formula today</span>
+      <b data-count="formula_ml" hidden>0</b>
+    {% endif %}
   </div>
   <ul class="last-of-each" aria-label="Last of each">
     <li data-last="feed">

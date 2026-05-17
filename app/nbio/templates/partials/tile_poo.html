@@ -1,20 +1,22 @@
-<button class="tile tile-poo" data-type="poo" aria-label="Log poo">
-  <div class="tile-head">
-    <span class="emoji" aria-hidden="true">💩</span>
-    <span class="label">POO</span>
-  </div>
-  <div class="tile-ago" id="ago-poo">
-    {% if today.last.poo %}
-      <span data-rel="{{ today.last.poo.occurred_at }}">{{ today.last.poo.occurred_at | relative }}</span>
-      {% if today.last.poo.actor_color %}
-        <span class="actor-dot" style="background: {{ today.last.poo.actor_color }}" title="{{ today.last.poo.actor_name or '' }}"></span>
+<div class="tile-wrap">
+  <button class="tile tile-poo" data-type="poo" aria-label="Log poo">
+    <div class="tile-head">
+      <span class="emoji" aria-hidden="true">💩</span>
+      <span class="label">POO</span>
+    </div>
+    <div class="tile-ago" id="ago-poo">
+      {% if today.last.poo %}
+        <span data-rel="{{ today.last.poo.occurred_at }}">{{ today.last.poo.occurred_at | relative }}</span>
+        {% if today.last.poo.actor_color %}
+          <span class="actor-dot" style="background: {{ today.last.poo.actor_color }}" title="{{ today.last.poo.actor_name or '' }}"></span>
+        {% endif %}
+      {% else %}
+        <span class="no-recent">no poos yet</span>
       {% endif %}
-    {% else %}
-      <span class="no-recent">no poos yet</span>
-    {% endif %}
-  </div>
+    </div>
+  </button>
   <div class="tile-hint" data-hint="long-press" hidden>
     <span>Hold 3s to log instantly</span>
     <button type="button" class="hint-dismiss" aria-label="Dismiss hint">×</button>
   </div>
-</button>
+</div>

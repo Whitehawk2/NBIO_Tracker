@@ -113,6 +113,128 @@ def test_no_recent_class_styled_distinctly():
     )
 
 
+def test_event_row_grid_gives_detail_the_flexible_column():
+    """
+    The event row's grid was `28px 56px 1fr auto 10px 32px` — meaning
+    the .ev-rel ("13 min ago") column took 1fr (greedy) while .ev-detail
+    was `auto` (only as wide as content but capped at 50%). After the
+    new 32px row-menu column ate ~50px, .ev-detail's column shrank
+    below "Materna · 120 cc" width and the brand was truncated.
+
+    New layout: `28px 56px max-content minmax(0, 1fr) 10px 32px`. The
+    .ev-rel column gets `max-content` (only what it needs); .ev-detail
+    becomes the flexible 1fr column. Detail now has room to show
+    "Materna · 120 cc" without ellipsis.
+    """
+    src = _src()
+    m = re.search(
+        r"\.event-row\s*\{[^}]*grid-template-columns\s*:\s*([^;]+);",
+        src,
+        flags=re.DOTALL,
+    )
+    assert m, "expected .event-row grid-template-columns declaration"
+    grid = m.group(1).strip()
+    assert "max-content" in grid, (
+        f".event-row grid must give .ev-rel (3rd col) `max-content` width "
+        f"so it doesn't eat .ev-detail's space; got grid={grid!r}"
+    )
+    assert "minmax(0, 1fr)" in grid, (
+        f".event-row grid must give .ev-detail (4th col) `minmax(0, 1fr)` "
+        f"so it takes the remaining space; got grid={grid!r}"
+    )
+
+
+def test_ev_detail_has_no_50_percent_max_width():
+    """
+    Negative pin: `.ev-detail` must NOT cap itself at `max-width: 50%`.
+    That cap (combined with the new 32px row-menu column) is what
+    truncated 'Materna · 120 cc' to 'Mater...' on Pixel 9.
+    """
+    src = _src()
+    m = re.search(r"\.ev-detail\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "expected .ev-detail rule in app.css"
+    body = m.group(1)
+    # Comments allowed to mention max-width; check declarations only.
+    body_no_comments = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    assert "max-width: 50%" not in body_no_comments, (
+        ".ev-detail must not cap at max-width:50% (v1.1.0 regression). "
+        "Let it take the flexible 1fr column or use a higher cap."
+    )
+
+
+def test_sync_dot_btn_neutralises_default_button_appearance():
+    """
+    Without `appearance: none`, Android Chrome renders a bare <button>
+    with its UA default `ButtonFace` background — a light-grey
+    rectangle that's especially jarring in dark mode. The sync-dot
+    button must explicitly neutralise that.
+
+    Pinned because the v1.0.1 → v1.1.0 production regression had a
+    visible white rectangle in the header where the sync dot lived;
+    root cause was the missing `appearance: none` on `.sync-dot-btn`.
+    """
+    src = _src()
+    m = re.search(r"\.sync-dot-btn\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "expected a `.sync-dot-btn { ... }` rule in app.css"
+    body = m.group(1)
+    # `appearance: none` (the shorthand) covers webkit too on Chrome 84+,
+    # but we want both forms to be defensive across browsers.
+    assert re.search(r"\bappearance\s*:\s*none", body), (
+        "`.sync-dot-btn` must declare `appearance: none` to neutralise "
+        "the Chrome UA <button> default ButtonFace background"
+    )
+
+
+def test_tile_hint_background_uses_solid_color():
+    """
+    `.tile-hint` / `.first-row-hint` previously used
+    `color-mix(in srgb, var(--bg-sunk) 70%, transparent)` for the
+    background — fine on Chrome 111+, but any cascade or specificity
+    miss falls through to "no background" → renders white. Solid
+    `var(--bg-sunk)` is one less thing that can fail open.
+
+    Only the `background:` declaration's value is inspected (comments
+    in the rule body are allowed to mention color-mix for context).
+    """
+    src = _src()
+    m = re.search(r"\.tile-hint[^{]*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "expected a `.tile-hint` rule in app.css"
+    body = m.group(1)
+    # Strip CSS comments before inspecting declarations.
+    body_no_comments = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    bg = re.search(r"\bbackground\s*:\s*([^;]+);", body_no_comments)
+    assert bg, "`.tile-hint` rule must declare a `background:`"
+    bg_value = bg.group(1).strip()
+    assert "color-mix" not in bg_value, (
+        f"`.tile-hint` background must NOT use color-mix(... transparent); "
+        f"got {bg_value!r}. Use a solid `var(--bg-sunk)` / `var(--bg-elev)` so "
+        f"any cascade failure doesn't fall through to a white background."
+    )
+    assert "var(--" in bg_value, f".tile-hint background must use a CSS variable; got {bg_value!r}"
+
+
+def test_dark_mode_feed_color_brightened():
+    """
+    The reports timeline feed marks were `#5fa088` in dark mode —
+    technically WCAG AA contrast on `--bg-sunk`, but at the 4px SVG
+    rect width (rendered ~1.6 CSS px on Pixel 9's high DPI) the marks
+    were perceptually invisible. Pair the wider-mark fix in reports.html
+    with a brighter dark-mode feed colour for better salience.
+    """
+    src = _src()
+    m = re.search(r"html\.dark\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "html.dark token block not found"
+    block = m.group(1)
+    feed = re.search(r"--feed\s*:\s*([#0-9a-fA-F]+)", block)
+    assert feed, "html.dark must declare --feed"
+    value = feed.group(1).lower()
+    assert value != "#5fa088", "dark-mode --feed must be bumped from the low-salience value #5fa088"
+    # New value should be visibly brighter: each channel ~>= 0x70.
+    assert re.match(r"#[7-f][0-9a-f]{5}$", value), (
+        f"dark-mode --feed should be visibly brighter (>= ~#707070 per channel); got {value}"
+    )
+
+
 def test_dark_mode_text_muted_bumped():
     """
     `html.dark` `--text-muted` must be the bumped contrast value

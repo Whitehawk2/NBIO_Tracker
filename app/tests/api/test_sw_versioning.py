@@ -63,3 +63,35 @@ def test_sw_js_route_wins_over_staticfiles_mount(client):
     # Substituted body, not the raw source
     assert r.text != raw_source
     assert "__NBIO_VERSION__" not in r.text
+
+
+def test_sw_install_calls_skip_waiting(client):
+    """
+    The SW must call `skipWaiting()` so a new version doesn't wait for
+    all open tabs to close before activating. Without this, on a
+    re-deploy with a new static-asset hash, users would keep seeing the
+    OLD CSS until they fully closed and reopened the PWA — which on
+    Android Chrome means the new HTML (network-fetched) and the old CSS
+    (cached by the still-active old SW) co-exist and produce visual
+    regressions (see v1.0.1 → v1.1.0 production feedback).
+    """
+    r = client.get("/static/sw.js")
+    assert "self.skipWaiting()" in r.text, (
+        "sw.js install handler must call self.skipWaiting() so the new "
+        "SW activates immediately on next page visit, not after all tabs close"
+    )
+
+
+def test_sw_activate_claims_clients(client):
+    """
+    Symmetric to skipWaiting: the activate handler must call
+    `clients.claim()` so the newly-activated SW takes control of any
+    already-open tab. Without it, a freshly-installed SW will only
+    control the NEXT navigation, leaving the current page on the old
+    SW until the user manually reloads.
+    """
+    r = client.get("/static/sw.js")
+    assert "clients.claim()" in r.text, (
+        "sw.js activate handler must call self.clients.claim() so the "
+        "new SW takes over the open tab"
+    )

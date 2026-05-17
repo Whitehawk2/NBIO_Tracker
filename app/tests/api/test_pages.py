@@ -130,6 +130,67 @@ def test_reports_today_counts_render_in_big_numbers(client):
 # ---------------------------------------------------------------------------
 
 
+def test_event_row_exposes_formula_volume_ml_data_attr(client):
+    """
+    Server-rendered event rows must expose `formula_volume_ml` as a
+    `data-` attribute so JS `wireExistingRows` can hydrate it into
+    `row.__event` for the reactive-refresh path.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 240,
+            "idempotency_key": "idem-row-data-attr-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    assert re.search(r'data-formula-volume-ml="240"', r.text), (
+        "formula rows must carry data-formula-volume-ml='<n>' so JS can "
+        "hydrate __event for reactive cc updates on deletion"
+    )
+
+
+def test_tile_hint_rendered_outside_tile_button(client):
+    """
+    Critical accessibility bug in PR #46: tile-hint with its <button
+    class='hint-dismiss'> was nested INSIDE <button class='tile'>.
+    Nested interactive elements are HTML5-illegal and browsers
+    (specifically Android Chrome) silently dropped the inner click —
+    so the × button was unclickable and hints couldn't be dismissed.
+
+    Fix: each tile + hint is wrapped in a `<div class='tile-wrap'>`;
+    the tile-hint is a SIBLING of <button class='tile'>, not a child.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    for tile_type in ("breast", "formula", "wee", "poo"):
+        assert f'data-type="{tile_type}"' in r.text
+        m = re.search(
+            rf'<button[^>]+data-type="{tile_type}"[^>]*>(.*?)</button>',
+            r.text,
+            flags=re.DOTALL,
+        )
+        assert m, f"{tile_type} tile button not found"
+        inner = m.group(1)
+        assert 'data-hint="long-press"' not in inner, (
+            f"{tile_type} tile must NOT have a nested data-hint long-press "
+            f"element — clicks on the inner hint-dismiss × get swallowed by "
+            f"the outer <button class='tile'>. Render the hint as a sibling."
+        )
+    # All four long-press hints still render (just outside their tiles now).
+    assert r.text.count('data-hint="long-press"') == 4
+
+
 def test_today_card_count_cells_have_stable_selectors(client):
     """today-card has `<b data-count="feed">…</b>` etc. on each count."""
     r = client.get("/")
@@ -137,8 +198,310 @@ def test_today_card_count_cells_have_stable_selectors(client):
     assert '<b data-count="feed">' in r.text
     assert '<b data-count="wee">' in r.text
     assert '<b data-count="poo">' in r.text
-    # Formula cc total is a 4th big-number tile.
-    assert '<b data-count="formula_ml">' in r.text
+    # Formula cc total now lives in the today-formula-strip below the
+    # 3-count grid. The cell is `<b data-count="formula_ml">` in the
+    # populated branch and `<b data-count="formula_ml" hidden>0</b>` in
+    # the empty branch — match either via a regex.
+    import re
+
+    assert re.search(r'<b data-count="formula_ml"[^>]*>', r.text), (
+        "expected `<b data-count='formula_ml'>` somewhere in today-card "
+        "(empty or populated branch of today-formula-strip)"
+    )
+
+
+def test_today_card_uses_3_column_counts_not_counts_4(client):
+    """
+    Negative pin: after the v1.1.0 layout redesign, the counts grid is
+    back to 3 columns. The 4-tile `counts-4` class was dropped because
+    it wrapped to a "3 on top, 1 below-left" layout on phone widths.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'class="counts counts-4"' not in r.text, (
+        "today-card must NOT use the counts-4 class — its 4-tile grid "
+        "wraps badly on phones (v1.1.0 regression)"
+    )
+    assert 'class="counts"' in r.text
+
+
+def test_reports_heatmap_carries_explainer_text(client):
+    """
+    The 7-day heatmap had a title but no caption explaining what the
+    shading meant — user reported they didn't understand it. Add a
+    short legend so it reads as a pattern-finding tool, not a mystery.
+    """
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The explainer text mentions what darker cells mean.
+    assert "darker" in r.text.lower() or "more events" in r.text.lower(), (
+        "heatmap section must carry a short explainer caption"
+    )
+
+
+def test_reports_day_strip_shows_per_day_cc_total(client):
+    """
+    Each day-strip on the reports page shows the day's formula CC total
+    inline with the day label (e.g. 'Today · 240 cc'). Without this,
+    parents have to scroll all the way down to the totals table.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    for i, vol in enumerate([120, 90]):
+        client.post(
+            "/api/events",
+            json={
+                "type": "formula",
+                "occurred_at": f"{today}T0{i + 1}:00:00.000Z",
+                "formula_brand": "Materna",
+                "formula_volume_ml": vol,
+                "idempotency_key": f"idem-day-strip-cc-{i}",
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The day-strip's day-label area must include 'cc' for the today row.
+    import re
+
+    m = re.search(
+        r'<div class="day-label">[^<]*Today[^<]*<span class="day-cc"[^>]*>([^<]+)</span>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "expected `<span class='day-cc'>...</span>` on today's day-label"
+    assert "210" in m.group(1) and "cc" in m.group(1)
+
+
+def test_reports_day_strip_omits_cc_when_no_formula(client):
+    """A day with no formula logged shows the day label without the cc span."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "idempotency_key": "idem-no-cc-day",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # No `day-cc` span on a day with no formula.
+    import re
+
+    # Search for the today strip's day-label.
+    m = re.search(
+        r'<div class="day-label">[^<]*Today[^<]*(<span class="day-cc"[^>]*>)?',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "today's day-label not found"
+    # The day-cc span shouldn't be present (group 1 is None).
+    assert m.group(1) is None, (
+        f"day-cc span must NOT render on days with no formula logged; got: {m.group(0)!r}"
+    )
+
+
+def test_reports_timeline_marks_have_title_tooltips(client):
+    """
+    Each timeline mark must carry a <title> element for hover/long-press
+    tooltip. For formula events the title includes the cc value; for
+    breast it includes side + duration.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 240,
+            "idempotency_key": "idem-tooltip-f",
+            "created_by_device": "device-test",
+        },
+    )
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T05:00:00.000Z",
+            "feed_side": "R",
+            "feed_duration_min": 12,
+            "idempotency_key": "idem-tooltip-b",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # Formula tooltip must include cc value and brand.
+    assert "<title>" in r.text
+    assert "240 cc" in r.text
+    assert "Materna" in r.text
+    # Breast tooltip must include side + duration.
+    assert "12m" in r.text
+
+
+def test_reports_timeline_breast_event_renders_feed_class(client):
+    """
+    The timeline mark for a breast event must use the `.mark-feed` CSS
+    class — that's the one with `fill: var(--feed)`. Previously the
+    `_timeline_marks` helper emitted `m.type = "breast"`, generating
+    `class='mark mark-breast'` with no matching CSS rule → mark rendered
+    BLACK (SVG default fill).
+
+    Same applies to formula. Both are conceptually "feeds" in the
+    reports view.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "idempotency_key": "idem-timeline-feed-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The mark class must be `mark-feed`, NOT `mark-breast`.
+    assert "mark-feed" in r.text, (
+        "breast events must render `class='mark mark-feed'` in the timeline "
+        "(maps to fill: var(--feed)). Without this they render BLACK."
+    )
+    assert "mark-breast" not in r.text, (
+        "timeline should not emit `mark-breast` — that class has no CSS "
+        "rule and renders BLACK. Map breast → feed in _timeline_marks."
+    )
+
+
+def test_reports_timeline_formula_event_renders_feed_class(client):
+    """Symmetric: formula events also map to mark-feed."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 120,
+            "idempotency_key": "idem-timeline-feed-2",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "mark-feed" in r.text
+    assert "mark-formula" not in r.text
+
+
+def test_reports_timeline_marks_use_wider_width(client):
+    """
+    The reports timeline marks were `<rect width="4">` — at Pixel 9's
+    high DPI that renders ~1.6 CSS px and the user couldn't see feed
+    marks at all. Widen to 6 (~2.4 CSS px) so events are visible at
+    arm's length without changing the timeline density.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "idempotency_key": "idem-timeline-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # No `width="4"` marks (the old too-thin value).
+    import re
+
+    assert not re.search(r'<rect[^>]*\bwidth="4"', r.text), (
+        "reports timeline marks must NOT use width='4' (too thin to see "
+        "on high-DPI phones); use width='6' instead"
+    )
+    # At least one `width="6"` mark for the logged event.
+    assert re.search(r'<rect[^>]*\bwidth="6"', r.text), (
+        "reports timeline must use width='6' marks for visibility"
+    )
+
+
+def test_today_card_has_formula_strip(client):
+    """
+    Today-card has a dedicated `today-formula-strip` element below the
+    3-count grid carrying the daily cc total. Pin its presence and
+    its stable `data-formula-strip` selector for JS targeting.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-formula-strip" in r.text
+    assert "today-formula-strip" in r.text
+
+
+def test_today_card_formula_strip_populated_when_formula_logged(client):
+    """The strip shows the cc total when at least one formula is logged today."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 120,
+            "idempotency_key": "idem-strip-pop-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    # Extract the strip block and assert it contains both the number and
+    # the unit / context language.
+    m = re.search(
+        r'<div class="today-formula-strip"[^>]*>(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "today-formula-strip not found"
+    block = m.group(1)
+    assert "120" in block, f"cc total 120 not in strip: {block!r}"
+    assert "cc formula" in block or "cc" in block
+
+
+def test_today_card_formula_strip_empty_branch_preserves_selector(client):
+    """
+    Empty-state branch (no formula today) must STILL include the
+    `<b data-count="formula_ml">` cell so `bumpOverviews` can find it
+    when an optimistic POST lands. The cell is `hidden` in this branch
+    so it doesn't visually show "0 cc formula".
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    # Strip is present even on empty state.
+    m = re.search(
+        r'<div class="today-formula-strip"[^>]*>(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "today-formula-strip must render even with no formula logged"
+    block = m.group(1)
+    # The data-count cell must exist (hidden) so JS can find + un-hide it.
+    assert 'data-count="formula_ml"' in block, (
+        "even in empty state, the data-count='formula_ml' cell must be "
+        "present (hidden) so bumpOverviews can update it on an optimistic POST"
+    )
+    # And the empty-state copy must be readable.
+    assert "no formula" in block.lower()
 
 
 def test_today_card_renders_formula_cc_total(client):
@@ -424,6 +787,41 @@ def test_sync_badge_has_explainer_button(client):
     )
     assert 'aria-label="Connection status"' in r.text, (
         "sync badge button must declare aria-label='Connection status'"
+    )
+
+
+def test_event_row_does_not_render_long_notes_inline(client):
+    """
+    Inline notes text in `.ev-detail` overlapped the relative-time
+    column on long notes (v1.1.0 production feedback). The 📝 icon
+    is the at-a-glance signal that notes exist; the full notes are
+    visible in the edit modal on tap. Pin that the inline notes
+    text is NOT rendered in the row at all.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    long_note = "this-is-a-deliberately-long-unique-comment-marker-XYZ123"
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "notes": long_note,
+            "idempotency_key": "idem-no-inline-notes-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    # The 📝 icon is present.
+    assert "📝" in r.text
+    # But the literal note text is NOT rendered anywhere in the page —
+    # the icon is the existence indicator; full notes only show in modal.
+    assert long_note not in r.text, (
+        "event row must NOT include the inline notes text — long notes "
+        "overlapped the relative-time column. Show only the 📝 icon; "
+        "full notes appear in the edit modal on tap."
     )
 
 

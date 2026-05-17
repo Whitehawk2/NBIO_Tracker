@@ -551,6 +551,11 @@
       feed_duration_min: payload.feed_duration_min ?? null,
       poo_quality: payload.poo_quality ?? null,
       notes: payload.notes ?? null,
+      // Formula fields need to propagate to bumpOverviews so the
+      // today-formula-strip + last-3-days cc cell can update without
+      // a reload. (v1.1.0 regression — pre-fix these were missing.)
+      formula_brand: payload.formula_brand ?? null,
+      formula_volume_ml: payload.formula_volume_ml ?? null,
       actor_color: getDeviceColor() || "#888",
       actor_name: getDeviceName(),
       idempotency_key: idem,
@@ -610,11 +615,21 @@
     }
   }
 
-  // ----- own-idem memory (suppress SSE echoes)
+  // ----- own-echo memory (suppress SSE echoes on the page that
+  // initiated the action — we've already updated the UI optimistically).
   const ownIdems = new Map();
   function rememberOwnIdem(idem) {
     ownIdems.set(idem, Date.now());
     setTimeout(() => ownIdems.delete(idem), 60 * 1000);
+  }
+  // ownDeletes: ids we just deleted locally. The SSE event.deleted echo
+  // would otherwise bump bumpOverviews a SECOND time, double-decrementing
+  // the cc total (v1.1.0 regression: 245 → 125 → 5 → clamp at 0).
+  const ownDeletes = new Map();
+  function rememberOwnDelete(id) {
+    if (!id) return;
+    ownDeletes.set(String(id), Date.now());
+    setTimeout(() => ownDeletes.delete(String(id)), 60 * 1000);
   }
 
   // ----- row insert / update / remove
@@ -648,7 +663,9 @@
     } else if (ev.type === "poo" && ev.poo_quality) {
       detail = `type ${ev.poo_quality}`;
     }
-    const tail = ev.notes ? (detail ? ` · ${ev.notes}` : ev.notes) : "";
+    // 📝 icon signals notes exist; the full text is revealed in the
+    // edit modal. Inline notes text was dropped (long notes overlapped
+    // the relative-time column on phones — v1.1.0 regression).
     const emoji = ev.type === "breast" ? "🤱" : ev.type === "formula" ? "🍼" : ev.type === "wee" ? "💦" : "💩";
     const color = ev.actor_color || "#888";
     const notesIcon = ev.notes
@@ -658,7 +675,7 @@
       <span class="ev-emoji" aria-hidden="true">${emoji}</span>
       <span class="ev-time">${fmtHHMM(ev.occurred_at)}</span>
       <span class="ev-rel" data-rel="${ev.occurred_at}">${fmtRel(ev.occurred_at)}</span>
-      <span class="ev-detail">${notesIcon}${escapeHtml(detail + tail)}</span>
+      <span class="ev-detail">${notesIcon}${escapeHtml(detail)}</span>
       <span class="ev-actor" style="background:${color}" title="${escapeHtml(ev.actor_name || "")}"></span>
       <button type="button" class="row-menu" data-row-menu aria-label="Row actions">⋯</button>
     `;
@@ -750,6 +767,27 @@
     return `${y}-${m}-${day}`;
   }
 
+  // The today-formula-strip has two rendering branches: populated
+  // (when cc total > 0) and empty (`no formula today`). When an
+  // optimistic POST crosses the zero boundary in either direction,
+  // we have to swap branches — not just edit a number.
+  function renderFormulaStrip(totalCC) {
+    const strip = document.querySelector("[data-formula-strip]");
+    if (!strip) return;
+    if (totalCC > 0) {
+      strip.innerHTML =
+        `<span class="emoji" aria-hidden="true">🍼</span>` +
+        `<span class="label">Today</span>` +
+        `<b data-count="formula_ml">${totalCC}</b>` +
+        `<span class="unit">cc formula</span>`;
+    } else {
+      strip.innerHTML =
+        `<span class="emoji" aria-hidden="true">🍼</span>` +
+        `<span class="muted">no formula today</span>` +
+        `<b data-count="formula_ml" hidden>0</b>`;
+    }
+  }
+
   function bumpOverviews(ev, delta) {
     const key = countKey(ev?.type);
     if (!key) return;
@@ -769,7 +807,8 @@
         const mlCell = document.querySelector(`#today-card [data-count="formula_ml"]`);
         if (mlCell) {
           const cur = parseInt(mlCell.textContent, 10) || 0;
-          mlCell.textContent = String(Math.max(0, cur + delta * ev.formula_volume_ml));
+          const next = Math.max(0, cur + delta * ev.formula_volume_ml);
+          renderFormulaStrip(next);
         }
       }
     }
@@ -923,6 +962,8 @@
     if (!id || id.startsWith("local:")) return;
     haptic(20);
     const deleted = row.__event;  // capture before removal for the undo path
+    // Remember BEFORE we bump locally — the SSE echo may race us back.
+    rememberOwnDelete(id);
     row.classList.add("removing");
     setTimeout(() => row.remove(), 250);
     if (deleted) bumpOverviews(deleted, -1);
@@ -993,9 +1034,13 @@
         sseLastId = Math.max(sseLastId, +msg.lastEventId || 0);
         const data = JSON.parse(msg.data);
         if (kind === "deleted") {
-          // We only have the id here; the row knows its type for the bump
+          // Suppress own-echo: if the current page initiated this delete,
+          // doSoftDelete already bumped + animated the row out. Bumping
+          // again here would double-decrement the cc total (v1.1.0
+          // regression).
+          const ownEchoDel = data.id && ownDeletes.has(String(data.id));
           const row = document.querySelector(`.event-row[data-id="${data.id}"]`);
-          if (row?.__event) bumpOverviews(row.__event, -1);
+          if (!ownEchoDel && row?.__event) bumpOverviews(row.__event, -1);
           removeRow(data.id);
           return;
         }
@@ -1163,6 +1208,23 @@
     });
   }
 
+  // Tap-to-show-detail on reports timeline marks (#11.2 follow-up).
+  // SVG <title> children only render on hover, so touch devices saw no
+  // tooltip. Bind click handlers; on tap we read the rect's <title>
+  // text and surface it in a transient toast.
+  function wireTimelineMarks() {
+    $$(".timeline .mark").forEach((rect) => {
+      const title = rect.querySelector("title");
+      if (!title) return;
+      rect.style.cursor = "pointer";
+      rect.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const text = title.textContent.trim();
+        if (text) showToast(text, 4000);
+      });
+    });
+  }
+
   // ----- wire tiles (tap = modal, long-press = log now)
   function wireTiles() {
     const map = {
@@ -1242,13 +1304,19 @@
   function wireExistingRows() {
     $$("#event-list .event-row").forEach((row) => {
       const id = row.dataset.id;
-      // hydrate minimal __event from DOM for editing
-      const detailText = row.querySelector(".ev-detail")?.textContent || "";
+      // hydrate minimal __event from DOM for editing + delete-bump
+      const volRaw = row.dataset.formulaVolumeMl;
+      const volume_ml = volRaw ? parseInt(volRaw, 10) : null;
       row.__event = {
         id,
         type: row.dataset.type,
         occurred_at: row.querySelector(".ev-rel")?.dataset.rel,
         notes: null,
+        // formula_volume_ml needs to be present so bumpOverviews can
+        // decrement the cc total when this row is deleted. Without it
+        // (pre-fix), deleting a server-rendered formula row left the
+        // today-formula-strip stale until reload.
+        formula_volume_ml: volume_ml,
         // Fields below are unknown without a fetch; refetch on edit if needed.
       };
       attachRowGestures(row);
@@ -1261,6 +1329,7 @@
     wireTiles();
     wireExistingRows();
     wireCopySummary();
+    wireTimelineMarks();
     wireSyncDot();
     wireHints();
     refreshRelTimes();
