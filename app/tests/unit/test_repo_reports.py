@@ -117,8 +117,11 @@ def test_last_event_of_each_type_picks_latest_per_type(conn):
     create_event(conn, _evt("breast", "i2", "2026-05-16T05:00:00.000Z"))
     create_event(conn, _evt("wee", "i3", "2026-05-16T03:00:00.000Z"))
     out = last_event_of_each_type(conn)
-    assert set(out) == {"feed", "wee"}
+    # `breast` is also present (per-type key) alongside the combined `feed`.
+    assert set(out) == {"breast", "feed", "wee"}
     assert out["feed"]["occurred_at"] == "2026-05-16T05:00:00.000Z"
+    assert out["breast"]["occurred_at"] == "2026-05-16T05:00:00.000Z"
+    assert "formula" not in out
     assert "poo" not in out
 
 
@@ -126,6 +129,32 @@ def test_last_event_of_each_type_ignores_deleted(conn):
     _, e, _ = create_event(conn, _evt("breast", "i1", "2026-05-16T03:00:00.000Z"))
     soft_delete_event(conn, e["id"])
     assert last_event_of_each_type(conn) == {}
+
+
+def test_last_event_of_each_type_exposes_breast_and_formula_separately(conn):
+    """
+    Tile rows for breast and formula each show "last X" — they can't be
+    driven from the combined `feed` key alone, otherwise whichever tile
+    isn't the most-recent feed type shows "no recent" even when an event
+    of its kind was logged earlier (production bug, May 2026).
+    """
+    create_event(conn, _evt("formula", "i1", "2026-05-16T02:00:00.000Z"))
+    create_event(conn, _evt("breast", "i2", "2026-05-16T05:00:00.000Z"))
+    out = last_event_of_each_type(conn)
+    assert "breast" in out and "formula" in out
+    assert out["breast"]["occurred_at"] == "2026-05-16T05:00:00.000Z"
+    assert out["formula"]["occurred_at"] == "2026-05-16T02:00:00.000Z"
+    # The combined `feed` key still reflects whichever was most recent.
+    assert out["feed"]["occurred_at"] == "2026-05-16T05:00:00.000Z"
+
+
+def test_last_event_of_each_type_omits_breast_or_formula_when_none_exist(conn):
+    """Per-type keys are absent (not None) when no event of that type exists."""
+    create_event(conn, _evt("breast", "i1", "2026-05-16T05:00:00.000Z"))
+    out = last_event_of_each_type(conn)
+    assert "breast" in out
+    assert "formula" not in out
+    assert out["feed"]["type"] == "breast"
 
 
 # ---------------------------------------------------------------------------
