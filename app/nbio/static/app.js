@@ -541,6 +541,7 @@
       _pending: true,
     };
     insertOrUpdateRow(optimistic);
+    bumpOverviews(optimistic, +1);
     rememberOwnIdem(idem);
     closeModal(backdrop);
     haptic(12);
@@ -699,6 +700,73 @@
     }
   }
 
+  // ----- reactive overview refresh (issue #28 #2)
+  //
+  // After a successful POST or an `event.created` SSE message, increment the
+  // matching count in the today-card and the last-3-days mini-table cell.
+  // Decrement on `event.deleted`, increment back on undelete. Pure DOM —
+  // no API roundtrip; the server's authoritative aggregations land on the
+  // next page load and override these.
+  //
+  // Local-tz aware: we bucket each event by the BROWSER's local date so
+  // the optimistic update matches the server-rendered local-date bucketing
+  // in pages._group_events_by_local_day / repo.daily_totals.
+
+  // Map event type → today-card count key (breast+formula combined as "feed")
+  function countKey(eventType) {
+    if (eventType === "breast" || eventType === "formula") return "feed";
+    if (eventType === "wee" || eventType === "poo") return eventType;
+    return null;
+  }
+
+  // YYYY-MM-DD in the browser's local time. Mirrors the server's
+  // local-tz bucketing semantics.
+  function localDay(isoUtc) {
+    const d = new Date(isoUtc);
+    if (isNaN(d.getTime())) return null;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function bumpOverviews(ev, delta) {
+    const key = countKey(ev?.type);
+    if (!key) return;
+    const eventDay = localDay(ev.occurred_at);
+    if (!eventDay) return;
+    const todayDay = localDay(new Date().toISOString());
+
+    // today-card: only bump if the event belongs to local-today
+    if (eventDay === todayDay) {
+      const cell = document.querySelector(`#today-card [data-count="${key}"]`);
+      if (cell) {
+        const cur = parseInt(cell.textContent, 10) || 0;
+        cell.textContent = String(Math.max(0, cur + delta));
+      }
+    }
+
+    // last-days mini-table: bump if the day matches any visible row
+    const row = document.querySelector(`.last-days-table tr[data-day="${eventDay}"]`);
+    if (row) {
+      const td = row.querySelector(`td[data-col="${key}"]`);
+      if (td) {
+        // Strip any trailing whitespace/markup (the poo column has a hint span)
+        const hint = td.querySelector(".hint");
+        const cur = parseInt(td.firstChild?.textContent || td.textContent, 10) || 0;
+        const next = Math.max(0, cur + delta);
+        // Rewrite first text node so we preserve sibling spans (hint, etc.)
+        if (td.firstChild && td.firstChild.nodeType === Node.TEXT_NODE) {
+          td.firstChild.nodeValue = String(next);
+        } else {
+          td.insertBefore(document.createTextNode(String(next)), td.firstChild);
+        }
+        // Hint dot only makes sense when count is zero; remove if it now has data
+        if (hint && next > 0) hint.remove();
+      }
+    }
+  }
+
   // ----- row gestures: tap = edit, swipe-left = delete
   function attachRowGestures(row) {
     if (row.__gesturesAttached) return;
@@ -761,19 +829,21 @@
     const id = row.dataset.id;
     if (!id || id.startsWith("local:")) return;
     haptic(20);
+    const deleted = row.__event;  // capture before removal for the undo path
     row.classList.add("removing");
     setTimeout(() => row.remove(), 250);
+    if (deleted) bumpOverviews(deleted, -1);
     try {
       const r = await fetch(`${cfg.eventsUrl}/${id}`, { method: "DELETE" });
       if (!r.ok) throw 0;
-      showUndoToast(id);
+      showUndoToast(id, deleted);
     } catch (_) {
       showToast("Offline — delete will retry");
       // Best-effort: leave the row removed locally; SSE/refresh will reconcile if delete actually failed.
     }
   }
 
-  function showUndoToast(id) {
+  function showUndoToast(id, deleted) {
     const t = document.createElement("div");
     t.className = "toast";
     t.innerHTML = `Deleted · <button>Undo</button>`;
@@ -786,6 +856,7 @@
         if (r.ok) {
           const data = await r.json();
           insertOrUpdateRow(data.event);
+          bumpOverviews(data.event || deleted, +1);
         }
       } catch (_) { /* SSE will reconcile */ }
       t.remove();
@@ -828,18 +899,24 @@
       try {
         sseLastId = Math.max(sseLastId, +msg.lastEventId || 0);
         const data = JSON.parse(msg.data);
-        if (kind === "deleted") { removeRow(data.id); return; }
-        // suppress own echo for created events
-        if (kind === "created" && data.idempotency_key && ownIdems.has(data.idempotency_key)) {
-          insertOrUpdateRow(data); return;
+        if (kind === "deleted") {
+          // We only have the id here; the row knows its type for the bump
+          const row = document.querySelector(`.event-row[data-id="${data.id}"]`);
+          if (row?.__event) bumpOverviews(row.__event, -1);
+          removeRow(data.id);
+          return;
         }
+        // suppress own-echo bump for created events (we already bumped on POST)
+        const ownEcho = kind === "created" && data.idempotency_key && ownIdems.has(data.idempotency_key);
+        if (kind === "created" && !ownEcho) bumpOverviews(data, +1);
+        if (kind === "undeleted") bumpOverviews(data, +1);
         insertOrUpdateRow(data);
       } catch (_) {}
     };
     sse.addEventListener("event.created",   handle("created"));
     sse.addEventListener("event.updated",   handle("updated"));
     sse.addEventListener("event.deleted",   handle("deleted"));
-    sse.addEventListener("event.undeleted", handle("created"));
+    sse.addEventListener("event.undeleted", handle("undeleted"));
     sse.addEventListener("device.updated", () => { /* future: recolour rows */ });
   }
   function setSyncState(state) {

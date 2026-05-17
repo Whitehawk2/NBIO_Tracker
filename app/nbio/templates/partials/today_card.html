@@ -1,11 +1,11 @@
 <section class="today-card" id="today-card" aria-label="Today">
   <div class="counts">
-    <div><b>{{ today.counts.feed }}</b><span>feeds</span></div>
-    <div><b>{{ today.counts.wee }}</b><span>wees</span></div>
-    <div><b>{{ today.counts.poo }}</b><span>poos</span></div>
+    <div><b data-count="feed">{{ today.counts.feed }}</b><span>feeds</span></div>
+    <div><b data-count="wee">{{ today.counts.wee }}</b><span>wees</span></div>
+    <div><b data-count="poo">{{ today.counts.poo }}</b><span>poos</span></div>
   </div>
   <ul class="last-of-each" aria-label="Last of each">
-    <li>
+    <li data-last="feed">
       <span class="lbl">🤱 last feed</span>
       {% if today.last.feed %}
         <span>
@@ -17,7 +17,7 @@
         <span class="muted">never</span>
       {% endif %}
     </li>
-    <li>
+    <li data-last="wee">
       <span class="lbl">💦 last wee</span>
       {% if today.last.wee %}
         <span>
@@ -28,7 +28,7 @@
         <span class="muted">never</span>
       {% endif %}
     </li>
-    <li>
+    <li data-last="poo">
       <span class="lbl">💩 last poo</span>
       {% if today.last.poo %}
         <span>
