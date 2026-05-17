@@ -12,8 +12,10 @@ updates:
           - "uvicorn*"
           - "jinja2"
           - "pydantic*"
+        update-types: ["patch", "minor"]
       python-dev:
         dependency-type: development
+        update-types: ["patch", "minor"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -23,6 +25,9 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+        # Group only safe bumps; majors land alone so a single CI failure
+        # points at a single action. See issue #25.
+        update-types: ["patch", "minor"]
 
   - package-ecosystem: docker
     directory: /app

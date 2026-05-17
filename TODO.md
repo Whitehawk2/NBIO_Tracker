@@ -44,7 +44,30 @@ on the Pi server (2026-05-16).
 - Hostname source: `NBIO_TS_HOSTNAME` env → prompt → autodetect from
   `tailscale status --json`.
 
-## 4. Nicer UI/UX hints for hidden affordances — [#11](https://github.com/Whitehawk2/NBIO_Tracker/issues/11)
+## 4. Production-use findings — first 12 hours — [#28](https://github.com/Whitehawk2/NBIO_Tracker/issues/28)
+
+Five fixes/features surfaced after real two-parent use of the Pi
+stack post-#26. Tracked as one inbox issue (#28); planned per-fix
+before each lands.
+
+- **#4 in the issue body** — notes/comments invisible after refresh
+  (the "has note" banner shows, modal opens empty). Major; probably
+  client-side bug, not data loss.
+- **#5** — formula vs breastfeeding needs first-class buttons; 3am
+  parents can't use the notes field as a workaround. Major UX gap.
+- **#1** — "Last 3 days" overview buckets late-evening entries under
+  the wrong day (UTC vs local-time mismatch in `repo.daily_totals`).
+  Major-ish — display inconsistent with the event list below it.
+- **#3** — `./upgrade.sh --ref master` failed silently with exit 1
+  on the first real Pi exercise. Bug. Investigate root cause +
+  audit error paths so silent exit becomes impossible.
+- **#2** — overviews don't reactively refresh when an entry is
+  logged. Minor; user explicitly OK with deferring.
+
+Tackle ordering (subject to per-fix planning): #4 → #5 → #1 → #3 →
+#2. Lands after Bucket A (#25).
+
+## 5. Nicer UI/UX hints for hidden affordances — [#11](https://github.com/Whitehawk2/NBIO_Tracker/issues/11)
 
 Several gestures in the app are undiscoverable without being told —
 swipe-left to delete, tap-to-edit on rows, long-press on a tile for
@@ -58,12 +81,12 @@ fallbacks and one-time inline hints:
 - Tile long-press caption visible for the first ~3 sessions.
 - `aria-label` + tap-to-toggle popover on the header sync dot.
 - Warmer empty-state copy: "Tap a tile above to log your first entry."
-- "Reset onboarding hints" button (lands once item 8 / #6 brings settings UI).
+- "Reset onboarding hints" button (lands once item 13 / #6 brings settings UI).
 
 Acceptance: every primary gesture is discoverable in a fresh install's
 first session; dismissed hints stay gone per-device.
 
-## 5. Clearer Tailscale troubleshooting — [#12](https://github.com/Whitehawk2/NBIO_Tracker/issues/12)
+## 6. Clearer Tailscale troubleshooting — [#12](https://github.com/Whitehawk2/NBIO_Tracker/issues/12)
 
 Follow-up to item 3 (#5). The new `setup.sh` Tailscale path is opaque
 when it goes wrong: the user can't see _what_ command was run, and
@@ -81,7 +104,7 @@ Plan:
 Acceptance: a failed Tailscale setup tells you what failed, why, and the
 three commands to recover — without leaving the script output.
 
-## 6. Validate setup + networking docs — [#13](https://github.com/Whitehawk2/NBIO_Tracker/issues/13)
+## 7. Validate setup + networking docs — [#13](https://github.com/Whitehawk2/NBIO_Tracker/issues/13)
 
 Documentation has accreted across PRs #1, #9, #10 without an end-to-end
 re-read. Two specific failure modes:
@@ -104,7 +127,7 @@ Acceptance: every command in the README runs cleanly against current
 `master`; a non-Tailscale reader can pick a path and reach the app within
 30 seconds.
 
-## 7. ✅ Tests + GitHub Actions CI/CD — [#14](https://github.com/Whitehawk2/NBIO_Tracker/issues/14)
+## 8. ✅ Tests + GitHub Actions CI/CD — [#14](https://github.com/Whitehawk2/NBIO_Tracker/issues/14)
 
 **Status:** Done (TDD policy now live).
 
@@ -118,7 +141,7 @@ Acceptance: every command in the README runs cleanly against current
 From here on, every PR adds a failing test before the implementation; the
 90% gate enforces it.
 
-## 8. ✅ In-place upgrade flow — [#20](https://github.com/Whitehawk2/NBIO_Tracker/issues/20)
+## 9. ✅ In-place upgrade flow — [#20](https://github.com/Whitehawk2/NBIO_Tracker/issues/20)
 
 **Status:** Done — merged via [PR #22](https://github.com/Whitehawk2/NBIO_Tracker/pull/22).
 
@@ -138,7 +161,7 @@ From here on, every PR adds a failing test before the implementation; the
 GHCR pre-built images filed as a follow-up; will land when release
 cadence motivates faster Pi upgrades.
 
-## 9. ✅ PWA service worker doesn't pick up upgrades — [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23)
+## 10. ✅ PWA service worker doesn't pick up upgrades — [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23)
 
 **Status:** Fixed (PR pending merge).
 
@@ -164,7 +187,7 @@ cadence motivates faster Pi upgrades.
 - 13 new tests (Python only — JS is `node --check` and Pi manual);
   full suite 261 / 100% coverage.
 
-## 10. ✅ Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
+## 11. ✅ Test-quality pass (close 5 critical gaps from the post-#14 review) — [#21](https://github.com/Whitehawk2/NBIO_Tracker/issues/21)
 
 **Status:** Done — merged via [PR #24](https://github.com/Whitehawk2/NBIO_Tracker/pull/24).
 
@@ -184,7 +207,7 @@ cadence motivates faster Pi upgrades.
   surviving mutants as a backlog signal for future hardening.
 - 248 tests, 100% coverage.
 
-## 11. Triage open Dependabot PRs + tighten grouping policy — [#25](https://github.com/Whitehawk2/NBIO_Tracker/issues/25)
+## 12. Triage open Dependabot PRs + tighten grouping policy — [#25](https://github.com/Whitehawk2/NBIO_Tracker/issues/25)
 
 Three open Dependabot PRs from the first weekly run of the schedule
 set up in #14. Recommendations per-PR plus a meta-fix:
@@ -211,7 +234,7 @@ Order: dependabot.yml grouping tweak first → close #18 #19 → wait for
 next Dependabot run → merge per-action splits → merge #17 → file a
 "3.14 to CI matrix" follow-up.
 
-## 12. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
+## 13. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 
 Move things that currently live in env vars or first-launch onboarding
 onto a settings page editable from the running app:
@@ -219,14 +242,14 @@ onto a settings page editable from the running app:
 - Baby name + DOB (currently env `BABY_NAME` only at boot, baked into
   `babies` row at first start).
 - Per-device name + colour (currently localStorage; allow re-edit).
-- Future: timezone override, retention days, theme (see item 14).
+- Future: timezone override, retention days, theme (see item 15).
 
 Schema: extend `babies` and `devices`; add a small `settings` table for
 truly global toggles. UI: minimal `/settings` page with HTMX form posts
 to a new `routes/settings.py`. Reuse existing `repo.upsert_device`
 where possible.
 
-## 13. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
+## 14. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
 
 Two-pronged: dev shell **and** an installable binary suitable for
 `nix profile install nixpkgs#nbio`. Nix users are assumed advanced and
@@ -258,9 +281,9 @@ tangentially helpful for the k8s scenario in item 2.
 The setup script from item 2 will print a header comment pointing Nix
 users here so the two paths stay clearly separated.
 
-## 14. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
+## 15. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
 
-(Blocked on item 12 — needs the settings UI to host the picker.)
+(Blocked on item 13 — needs the settings UI to host the picker.)
 
 Add palettes alongside the current "warm" theme. Recommended starting
 pair from the Catppuccin family:
