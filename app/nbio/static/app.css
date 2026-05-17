@@ -106,8 +106,9 @@ a { color: var(--accent); text-decoration: none; }
 .sync-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .sync-dot-btn {
   display: inline-flex; align-items: center; justify-content: center;
+  appearance: none; -webkit-appearance: none;
   background: transparent; border: 0; padding: 4px; cursor: pointer;
-  border-radius: 50%;
+  border-radius: 50%; color: inherit; font: inherit;
 }
 .sync-dot {
   width: 10px; height: 10px; border-radius: 50%;
@@ -222,14 +223,19 @@ a { color: var(--accent); text-decoration: none; }
   flex-basis: 100%;
   margin: 0; padding: 6px 10px;
   font-size: 12px; color: var(--text-muted);
-  background: color-mix(in srgb, var(--bg-sunk) 70%, transparent);
+  /* Solid background — color-mix(... transparent) was correct on Chrome
+     111+ but failed soft on any cascade glitch and rendered the hint
+     as a white rectangle (v1.0.1 production regression). Solid is safer. */
+  background: var(--bg-sunk);
   border: 1px dashed var(--border);
   border-radius: 8px;
 }
 .first-row-hint { margin: 0 4px 6px; }
 .hint-dismiss {
-  appearance: none; border: 0; background: transparent;
-  color: var(--text-muted); font-size: 18px; line-height: 1;
+  appearance: none; -webkit-appearance: none;
+  border: 0; background: transparent;
+  color: var(--text-muted); font-family: inherit;
+  font-size: 18px; line-height: 1;
   cursor: pointer; padding: 2px 6px;
   border-radius: 6px;
 }
@@ -268,8 +274,10 @@ a { color: var(--accent); text-decoration: none; }
 }
 .event-row:hover { background: color-mix(in srgb, var(--accent) 6%, var(--bg-elev)); }
 .row-menu {
-  appearance: none; border: 0; background: transparent;
-  color: var(--text-muted); font-size: 18px; line-height: 1;
+  appearance: none; -webkit-appearance: none;
+  border: 0; background: transparent;
+  color: var(--text-muted); font-family: inherit;
+  font-size: 18px; line-height: 1;
   cursor: pointer; padding: 6px; border-radius: 6px;
   min-width: 32px; min-height: 32px;
 }

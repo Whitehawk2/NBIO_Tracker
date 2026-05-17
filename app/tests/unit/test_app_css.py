@@ -113,6 +113,59 @@ def test_no_recent_class_styled_distinctly():
     )
 
 
+def test_sync_dot_btn_neutralises_default_button_appearance():
+    """
+    Without `appearance: none`, Android Chrome renders a bare <button>
+    with its UA default `ButtonFace` background — a light-grey
+    rectangle that's especially jarring in dark mode. The sync-dot
+    button must explicitly neutralise that.
+
+    Pinned because the v1.0.1 → v1.1.0 production regression had a
+    visible white rectangle in the header where the sync dot lived;
+    root cause was the missing `appearance: none` on `.sync-dot-btn`.
+    """
+    src = _src()
+    m = re.search(r"\.sync-dot-btn\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "expected a `.sync-dot-btn { ... }` rule in app.css"
+    body = m.group(1)
+    # `appearance: none` (the shorthand) covers webkit too on Chrome 84+,
+    # but we want both forms to be defensive across browsers.
+    assert re.search(r"\bappearance\s*:\s*none", body), (
+        "`.sync-dot-btn` must declare `appearance: none` to neutralise "
+        "the Chrome UA <button> default ButtonFace background"
+    )
+
+
+def test_tile_hint_background_uses_solid_color():
+    """
+    `.tile-hint` / `.first-row-hint` previously used
+    `color-mix(in srgb, var(--bg-sunk) 70%, transparent)` for the
+    background — fine on Chrome 111+, but any cascade or specificity
+    miss falls through to "no background" → renders white. Solid
+    `var(--bg-sunk)` is one less thing that can fail open.
+
+    Only the `background:` declaration's value is inspected (comments
+    in the rule body are allowed to mention color-mix for context).
+    """
+    src = _src()
+    m = re.search(r"\.tile-hint[^{]*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "expected a `.tile-hint` rule in app.css"
+    body = m.group(1)
+    # Strip CSS comments before inspecting declarations.
+    body_no_comments = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    bg = re.search(r"\bbackground\s*:\s*([^;]+);", body_no_comments)
+    assert bg, "`.tile-hint` rule must declare a `background:`"
+    bg_value = bg.group(1).strip()
+    assert "color-mix" not in bg_value, (
+        f"`.tile-hint` background must NOT use color-mix(... transparent); "
+        f"got {bg_value!r}. Use a solid `var(--bg-sunk)` / `var(--bg-elev)` so "
+        f"any cascade failure doesn't fall through to a white background."
+    )
+    assert "var(--" in bg_value, (
+        f".tile-hint background must use a CSS variable; got {bg_value!r}"
+    )
+
+
 def test_dark_mode_text_muted_bumped():
     """
     `html.dark` `--text-muted` must be the bumped contrast value
