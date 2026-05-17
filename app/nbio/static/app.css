@@ -56,6 +56,14 @@ button { font: inherit; color: inherit; }
 a { color: var(--accent); text-decoration: none; }
 .muted { color: var(--text-muted); }
 .small { font-size: 14px; }
+/* Distinct from .muted — used for tile empty-state placeholders so
+   "no recent" can't be mistaken for real metadata (formula brand,
+   feed side, etc.). Italic + softer colour mix gives it a clearly
+   placeholder feel. */
+.no-recent {
+  color: color-mix(in srgb, var(--text-muted) 75%, transparent);
+  font-style: italic;
+}
 
 /* ============ Layout ============ */
 .app-header {

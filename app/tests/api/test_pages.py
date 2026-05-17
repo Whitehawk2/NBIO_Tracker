@@ -179,6 +179,62 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert "FORMULA" in r.text
 
 
+def test_tile_no_recent_uses_dedicated_class(client):
+    """
+    Tiles with no recent event must use a dedicated `.no-recent` class
+    rather than the generic `.muted` so the placeholder is visually
+    distinct from real muted metadata (formula brand, feed side, etc.).
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    # Fresh DB — every tile-ago region should show the dedicated class.
+    assert r.text.count('class="no-recent"') >= 4, (
+        "expected `.no-recent` on every tile's empty-state placeholder "
+        "(breast/formula/wee/poo when no event of that type exists)"
+    )
+
+
+def test_tile_no_recent_absent_when_recent_event_exists(client):
+    """
+    The `.no-recent` placeholder must disappear from a tile once an
+    event of that type is logged. Belt-and-braces — symmetric to the
+    presence test above.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-norec-w-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    m = re.search(
+        r'<div class="tile-ago" id="ago-wee">(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "wee tile-ago region not found"
+    assert "no-recent" not in m.group(1), (
+        "wee tile must drop the .no-recent placeholder once a wee is logged"
+    )
+    # Other tiles still show it (no breast/formula/poo logged).
+    for tile_id in ("ago-breast", "ago-formula", "ago-poo"):
+        m = re.search(
+            rf'<div class="tile-ago" id="{tile_id}">(.*?)</div>',
+            r.text,
+            flags=re.DOTALL,
+        )
+        assert m and "no-recent" in m.group(1), (
+            f"{tile_id} should still carry .no-recent (no event of that type)"
+        )
+
+
 def test_formula_tile_shows_recent_when_breast_is_more_recent(client):
     """
     Production bug (May 2026): with a formula logged earlier and a breast

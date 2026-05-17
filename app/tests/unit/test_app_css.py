@@ -70,6 +70,27 @@ def test_focus_visible_covers_tiles_and_rows():
     )
 
 
+def test_no_recent_class_styled_distinctly():
+    """
+    `.no-recent` (the tile empty-state placeholder) must be visually
+    distinct from `.muted` so users can't confuse it with real
+    metadata. We pin: a `.no-recent` rule exists, AND its body differs
+    from a bare `color: var(--text-muted)` (must add at least font-style
+    or a stronger colour).
+    """
+    src = _src()
+    m = re.search(r"\.no-recent\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "expected a `.no-recent { ... }` rule in app.css"
+    body = m.group(1)
+    # Must have some visual differentiation beyond bare muted colour.
+    has_italic = "font-style" in body and "italic" in body
+    has_stronger_color = "color-mix" in body or "opacity" in body
+    assert has_italic or has_stronger_color, (
+        ".no-recent must add italic OR a stronger colour-mix/opacity so "
+        f"it's distinct from `.muted`; got body={body!r}"
+    )
+
+
 def test_dark_mode_text_muted_bumped():
     """
     `html.dark` `--text-muted` must be the bumped contrast value
