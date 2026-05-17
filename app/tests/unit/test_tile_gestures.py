@@ -253,8 +253,7 @@ def test_sse_deleted_handler_suppresses_own_echo():
     src = _src()
     # An ownDeletes container exists.
     assert "ownDeletes" in src, (
-        "expected an `ownDeletes` Set/Map matching the ownIdems pattern "
-        "for created events"
+        "expected an `ownDeletes` Set/Map matching the ownIdems pattern for created events"
     )
     # The SSE deleted handler checks it before bumping.
     idx = src.find('kind === "deleted"')

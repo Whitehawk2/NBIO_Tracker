@@ -225,6 +225,20 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
     assert 'class="counts"' in r.text
 
 
+def test_reports_heatmap_carries_explainer_text(client):
+    """
+    The 7-day heatmap had a title but no caption explaining what the
+    shading meant — user reported they didn't understand it. Add a
+    short legend so it reads as a pattern-finding tool, not a mystery.
+    """
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The explainer text mentions what darker cells mean.
+    assert "darker" in r.text.lower() or "more events" in r.text.lower(), (
+        "heatmap section must carry a short explainer caption"
+    )
+
+
 def test_reports_day_strip_shows_per_day_cc_total(client):
     """
     Each day-strip on the reports page shows the day's formula CC total
