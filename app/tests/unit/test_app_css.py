@@ -113,6 +113,55 @@ def test_no_recent_class_styled_distinctly():
     )
 
 
+def test_event_row_grid_gives_detail_the_flexible_column():
+    """
+    The event row's grid was `28px 56px 1fr auto 10px 32px` — meaning
+    the .ev-rel ("13 min ago") column took 1fr (greedy) while .ev-detail
+    was `auto` (only as wide as content but capped at 50%). After the
+    new 32px row-menu column ate ~50px, .ev-detail's column shrank
+    below "Materna · 120 cc" width and the brand was truncated.
+
+    New layout: `28px 56px max-content minmax(0, 1fr) 10px 32px`. The
+    .ev-rel column gets `max-content` (only what it needs); .ev-detail
+    becomes the flexible 1fr column. Detail now has room to show
+    "Materna · 120 cc" without ellipsis.
+    """
+    src = _src()
+    m = re.search(
+        r"\.event-row\s*\{[^}]*grid-template-columns\s*:\s*([^;]+);",
+        src,
+        flags=re.DOTALL,
+    )
+    assert m, "expected .event-row grid-template-columns declaration"
+    grid = m.group(1).strip()
+    assert "max-content" in grid, (
+        f".event-row grid must give .ev-rel (3rd col) `max-content` width "
+        f"so it doesn't eat .ev-detail's space; got grid={grid!r}"
+    )
+    assert "minmax(0, 1fr)" in grid, (
+        f".event-row grid must give .ev-detail (4th col) `minmax(0, 1fr)` "
+        f"so it takes the remaining space; got grid={grid!r}"
+    )
+
+
+def test_ev_detail_has_no_50_percent_max_width():
+    """
+    Negative pin: `.ev-detail` must NOT cap itself at `max-width: 50%`.
+    That cap (combined with the new 32px row-menu column) is what
+    truncated 'Materna · 120 cc' to 'Mater...' on Pixel 9.
+    """
+    src = _src()
+    m = re.search(r"\.ev-detail\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "expected .ev-detail rule in app.css"
+    body = m.group(1)
+    # Comments allowed to mention max-width; check declarations only.
+    body_no_comments = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    assert "max-width: 50%" not in body_no_comments, (
+        ".ev-detail must not cap at max-width:50% (v1.1.0 regression). "
+        "Let it take the flexible 1fr column or use a higher cap."
+    )
+
+
 def test_sync_dot_btn_neutralises_default_button_appearance():
     """
     Without `appearance: none`, Android Chrome renders a bare <button>
