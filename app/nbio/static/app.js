@@ -615,11 +615,21 @@
     }
   }
 
-  // ----- own-idem memory (suppress SSE echoes)
+  // ----- own-echo memory (suppress SSE echoes on the page that
+  // initiated the action — we've already updated the UI optimistically).
   const ownIdems = new Map();
   function rememberOwnIdem(idem) {
     ownIdems.set(idem, Date.now());
     setTimeout(() => ownIdems.delete(idem), 60 * 1000);
+  }
+  // ownDeletes: ids we just deleted locally. The SSE event.deleted echo
+  // would otherwise bump bumpOverviews a SECOND time, double-decrementing
+  // the cc total (v1.1.0 regression: 245 → 125 → 5 → clamp at 0).
+  const ownDeletes = new Map();
+  function rememberOwnDelete(id) {
+    if (!id) return;
+    ownDeletes.set(String(id), Date.now());
+    setTimeout(() => ownDeletes.delete(String(id)), 60 * 1000);
   }
 
   // ----- row insert / update / remove
@@ -952,6 +962,8 @@
     if (!id || id.startsWith("local:")) return;
     haptic(20);
     const deleted = row.__event;  // capture before removal for the undo path
+    // Remember BEFORE we bump locally — the SSE echo may race us back.
+    rememberOwnDelete(id);
     row.classList.add("removing");
     setTimeout(() => row.remove(), 250);
     if (deleted) bumpOverviews(deleted, -1);
@@ -1022,9 +1034,13 @@
         sseLastId = Math.max(sseLastId, +msg.lastEventId || 0);
         const data = JSON.parse(msg.data);
         if (kind === "deleted") {
-          // We only have the id here; the row knows its type for the bump
+          // Suppress own-echo: if the current page initiated this delete,
+          // doSoftDelete already bumped + animated the row out. Bumping
+          // again here would double-decrement the cc total (v1.1.0
+          // regression).
+          const ownEchoDel = data.id && ownDeletes.has(String(data.id));
           const row = document.querySelector(`.event-row[data-id="${data.id}"]`);
-          if (row?.__event) bumpOverviews(row.__event, -1);
+          if (!ownEchoDel && row?.__event) bumpOverviews(row.__event, -1);
           removeRow(data.id);
           return;
         }

@@ -213,6 +213,34 @@ def test_row_html_includes_notes_icon_branch():
     assert "ev.notes" in block, "the notes-icon emission in rowHTML must be conditional on ev.notes"
 
 
+def test_sse_deleted_handler_suppresses_own_echo():
+    """
+    Critical reactive-refresh bug: `doSoftDelete` calls
+    `bumpOverviews(deleted, -1)` immediately, then the SSE
+    `event.deleted` echo arrives ~50ms later while the row is still
+    in the DOM (250ms `removing` animation). The SSE handler then
+    bumps AGAIN, double-decrementing the cc total. With clamp at 0,
+    a 245→0 jump is what the user reported.
+
+    Fix mirrors the existing own-echo pattern for `created`: track
+    own deletes in `ownDeletes` and skip the SSE bump when matched.
+    """
+    src = _src()
+    # An ownDeletes container exists.
+    assert "ownDeletes" in src, (
+        "expected an `ownDeletes` Set/Map matching the ownIdems pattern "
+        "for created events"
+    )
+    # The SSE deleted handler checks it before bumping.
+    idx = src.find('kind === "deleted"')
+    assert idx >= 0
+    block = src[idx : idx + 600]
+    assert "ownDeletes" in block, (
+        "SSE event.deleted handler must check ownDeletes before bumping — "
+        "otherwise the user's own delete double-decrements the cc total"
+    )
+
+
 def test_wire_existing_rows_hydrates_formula_volume_ml():
     """
     Second half of the reactive-refresh regression: when the user
