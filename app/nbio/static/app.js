@@ -1269,13 +1269,19 @@
   function wireExistingRows() {
     $$("#event-list .event-row").forEach((row) => {
       const id = row.dataset.id;
-      // hydrate minimal __event from DOM for editing
-      const detailText = row.querySelector(".ev-detail")?.textContent || "";
+      // hydrate minimal __event from DOM for editing + delete-bump
+      const volRaw = row.dataset.formulaVolumeMl;
+      const volume_ml = volRaw ? parseInt(volRaw, 10) : null;
       row.__event = {
         id,
         type: row.dataset.type,
         occurred_at: row.querySelector(".ev-rel")?.dataset.rel,
         notes: null,
+        // formula_volume_ml needs to be present so bumpOverviews can
+        // decrement the cc total when this row is deleted. Without it
+        // (pre-fix), deleting a server-rendered formula row left the
+        // today-formula-strip stale until reload.
+        formula_volume_ml: volume_ml,
         // Fields below are unknown without a fetch; refetch on edit if needed.
       };
       attachRowGestures(row);

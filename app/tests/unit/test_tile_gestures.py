@@ -213,6 +213,26 @@ def test_row_html_includes_notes_icon_branch():
     assert "ev.notes" in block, "the notes-icon emission in rowHTML must be conditional on ev.notes"
 
 
+def test_wire_existing_rows_hydrates_formula_volume_ml():
+    """
+    Second half of the reactive-refresh regression: when the user
+    DELETES a server-rendered formula row, `doSoftDelete` reads
+    `row.__event` and passes it to `bumpOverviews`. `wireExistingRows`
+    sets up `__event` from DOM data — but pre-fix it only stored id,
+    type, occurred_at, and notes. With no `formula_volume_ml`, the
+    formula branch in `bumpOverviews` skipped and the cc total stayed
+    stale until reload.
+    """
+    src = _src()
+    idx = src.find("function wireExistingRows")
+    assert idx >= 0, "wireExistingRows function not found"
+    block = src[idx : idx + 800]
+    assert "formula_volume_ml" in block, (
+        "wireExistingRows must hydrate `formula_volume_ml` into `row.__event` "
+        "so deletions of server-rendered formula rows bump the cc total"
+    )
+
+
 def test_optimistic_dict_includes_formula_fields():
     """
     Critical regression: `submitCreate`'s optimistic event-row dict

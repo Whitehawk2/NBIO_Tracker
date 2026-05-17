@@ -130,6 +130,34 @@ def test_reports_today_counts_render_in_big_numbers(client):
 # ---------------------------------------------------------------------------
 
 
+def test_event_row_exposes_formula_volume_ml_data_attr(client):
+    """
+    Server-rendered event rows must expose `formula_volume_ml` as a
+    `data-` attribute so JS `wireExistingRows` can hydrate it into
+    `row.__event` for the reactive-refresh path.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 240,
+            "idempotency_key": "idem-row-data-attr-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    assert re.search(r'data-formula-volume-ml="240"', r.text), (
+        "formula rows must carry data-formula-volume-ml='<n>' so JS can "
+        "hydrate __event for reactive cc updates on deletion"
+    )
+
+
 def test_tile_hint_rendered_outside_tile_button(client):
     """
     Critical accessibility bug in PR #46: tile-hint with its <button
