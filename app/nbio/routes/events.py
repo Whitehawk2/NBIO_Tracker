@@ -19,6 +19,25 @@ def list_events(
     return {"events": repo.list_events(conn, since=since, limit=limit)}
 
 
+@router.get("/events/{event_id}")
+def get_event(
+    event_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """
+    Fetch a single event by id, including soft-deleted ones.
+
+    The edit modal on the home page reads this on row-click so it has
+    the real `notes` value (and all other fields) — server-rendered
+    rows do not embed every field as DOM attributes, so a client-side
+    fetch is the cleanest source of truth (issue #28 finding #4).
+    """
+    event = repo.fetch_event(conn, event_id)
+    if event is None:
+        raise HTTPException(404, "Not found")
+    return {"event": event}
+
+
 @router.post("/events")
 async def create_event(
     payload: EventCreate,
