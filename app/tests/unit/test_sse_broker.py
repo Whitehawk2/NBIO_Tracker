@@ -56,7 +56,7 @@ async def test_publish_drops_when_full(broker):
 
 
 def test_format_sse_shape():
-    out = format_sse("event.created", 42, {"id": 42, "type": "feed"})
+    out = format_sse("event.created", 42, {"id": 42, "type": "breast"})
     # id / event / data lines + blank terminator
     assert out.startswith("id: 42\n")
     assert "\nevent: event.created\n" in out

@@ -3,7 +3,7 @@
 
 def _payload(**over):
     base = {
-        "type": "feed",
+        "type": "breast",
         "occurred_at": "2026-05-16T03:00:00.000Z",
         "feed_side": "L",
         "feed_duration_min": 15,
@@ -25,7 +25,7 @@ def test_create_returns_created(client):
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "created"
-    assert body["event"]["type"] == "feed"
+    assert body["event"]["type"] == "breast"
     assert "duplicate_of" not in body
 
 
@@ -56,7 +56,7 @@ def test_create_possible_duplicate(client):
     assert isinstance(dup, dict)
     assert dup["id"] == first["event"]["id"]
     assert dup["occurred_at"] == "2026-05-16T03:00:00.000Z"
-    assert dup["type"] == "feed"
+    assert dup["type"] == "breast"
     assert dup["created_by_device"] == "device-test"
     # 60s difference between the two timestamps
     assert abs(dup["delta_seconds"]) == 60
@@ -259,7 +259,7 @@ def test_get_event_by_id_returns_full_row(client):
     assert expected_keys <= set(event), f"missing keys: {expected_keys - set(event)}"
     assert event["id"] == event_id
     assert event["notes"] == "midnight feed, both sides"
-    assert event["type"] == "feed"
+    assert event["type"] == "breast"
     assert event["feed_side"] == "L"
 
 

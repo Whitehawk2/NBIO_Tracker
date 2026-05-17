@@ -7,7 +7,7 @@ from nbio.repo import create_event, last_feed_side, soft_delete_event
 def _feed(idem, occurred_at, side):
     """Pads the idem so even short like 'i1' satisfies min_length=8."""
     return EventCreate(
-        type="feed",
+        type="breast",
         occurred_at=occurred_at,
         feed_side=side,
         idempotency_key=f"idem-{idem}-pad",
@@ -59,7 +59,7 @@ def test_feed_with_null_side_returns_null(conn):
     create_event(
         conn,
         EventCreate(
-            type="feed",
+            type="breast",
             occurred_at="2026-05-16T03:00:00.000Z",
             idempotency_key="idem-i1-pad",
             created_by_device="device-1",

@@ -8,7 +8,7 @@ from nbio.repo import create_event, find_duplicate_in_window
 
 def _payload(**over):
     base = {
-        "type": "feed",
+        "type": "breast",
         "occurred_at": "2026-05-16T03:00:00.000Z",
         "idempotency_key": "idem-default",
         "created_by_device": "device-1",
@@ -71,7 +71,7 @@ def test_different_type_does_not_clash(conn):
     create_event(
         conn,
         _payload(
-            type="feed",
+            type="breast",
             idempotency_key="idem-i1-pad",
             occurred_at="2026-05-16T03:00:00.000Z",
         ),
@@ -125,7 +125,7 @@ def test_find_duplicate_in_window_excludes_own_id(conn):
         conn, _payload(idempotency_key="idem-i1-pad", occurred_at="2026-05-16T03:00:00.000Z")
     )
     # Calling with own_id = first's id should return None
-    found = find_duplicate_in_window(conn, 1, "feed", first["occurred_at"], first["id"])
+    found = find_duplicate_in_window(conn, 1, "breast", first["occurred_at"], first["id"])
     assert found is None
 
 

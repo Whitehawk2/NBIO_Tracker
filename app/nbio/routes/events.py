@@ -89,6 +89,20 @@ async def undelete_event(
     return {"status": "undeleted", "event": event}
 
 
+@router.get("/feeds/last")
+def get_last_feed(conn: sqlite3.Connection = Depends(get_conn)):
+    """
+    Most recent feed event (breast OR formula) with full detail so the
+    modal can pre-fill smart defaults. Returns {"last": null} when
+    there are no feeds.
+    """
+    return {"last": repo.last_feed_method(conn)}
+
+
 @router.get("/feeds/last-side")
 def get_last_feed_side(conn: sqlite3.Connection = Depends(get_conn)):
+    """
+    Legacy alias kept for clients on older shells (#28 #5).
+    Returns the side of the most recent BREAST feed; null for formula or none.
+    """
     return {"last_side": repo.last_feed_side(conn)}

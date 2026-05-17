@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE TABLE IF NOT EXISTS events (
     id                  INTEGER PRIMARY KEY,
     baby_id             INTEGER NOT NULL REFERENCES babies(id),
-    type                TEXT NOT NULL CHECK (type IN ('feed','wee','poo')),
+    type                TEXT NOT NULL CHECK (type IN ('breast','formula','wee','poo')),
     occurred_at         TEXT NOT NULL,
     feed_side           TEXT CHECK (feed_side IN ('L','R','both') OR feed_side IS NULL),
     feed_duration_min   INTEGER,
@@ -33,7 +33,9 @@ CREATE TABLE IF NOT EXISTS events (
     created_by_device   TEXT NOT NULL,
     created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-    deleted_at          TEXT
+    deleted_at          TEXT,
+    formula_brand       TEXT,
+    formula_volume_ml   INTEGER
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_events_idem ON events(idempotency_key);
@@ -59,6 +61,8 @@ def connect() -> sqlite3.Connection:
 
 
 def init_db() -> None:
+    from . import migrations
+
     Path(settings.db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = connect()
     try:
@@ -69,6 +73,10 @@ def init_db() -> None:
                 "INSERT INTO babies (id, name) VALUES (1, ?)",
                 (settings.baby_name,),
             )
+        # Run any pending schema migrations after the baseline SCHEMA so
+        # in-place upgrades reach the same shape new installs already have.
+        # No-op on fresh installs (user_version advances; rebuild is empty).
+        migrations.apply_pending(conn)
     finally:
         conn.close()
 

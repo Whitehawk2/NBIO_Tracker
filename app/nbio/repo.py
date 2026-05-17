@@ -12,6 +12,7 @@ from .models import DeviceUpsert, EventCreate, EventPatch
 EVENT_COLS = """
     e.id, e.baby_id, e.type, e.occurred_at,
     e.feed_side, e.feed_duration_min, e.poo_quality, e.notes,
+    e.formula_brand, e.formula_volume_ml,
     e.idempotency_key, e.created_by_device,
     e.created_at, e.updated_at, e.deleted_at,
     d.color AS actor_color, d.name AS actor_name
@@ -132,9 +133,10 @@ def create_event(
             INSERT INTO events (
                 baby_id, type, occurred_at,
                 feed_side, feed_duration_min, poo_quality, notes,
+                formula_brand, formula_volume_ml,
                 idempotency_key, created_by_device,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 baby_id,
@@ -144,6 +146,8 @@ def create_event(
                 payload.feed_duration_min,
                 payload.poo_quality,
                 payload.notes,
+                payload.formula_brand,
+                payload.formula_volume_ml,
                 payload.idempotency_key,
                 payload.created_by_device,
                 now,
@@ -219,10 +223,11 @@ def undelete_event(conn: sqlite3.Connection, event_id: int) -> dict[str, Any] | 
 
 
 def last_feed_side(conn: sqlite3.Connection, baby_id: int = 1) -> str | None:
+    """Most recent breast-feed side. Formula feeds have no side and are skipped."""
     row = conn.execute(
         """
         SELECT feed_side FROM events
-        WHERE baby_id = ? AND type = 'feed' AND deleted_at IS NULL
+        WHERE baby_id = ? AND type = 'breast' AND deleted_at IS NULL
         ORDER BY occurred_at DESC, id DESC LIMIT 1
         """,
         (baby_id,),
@@ -230,11 +235,44 @@ def last_feed_side(conn: sqlite3.Connection, baby_id: int = 1) -> str | None:
     return row["feed_side"] if row else None
 
 
+def last_feed_method(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, Any] | None:
+    """
+    Most recent breast OR formula event with enough detail for the modal
+    to pre-fill smart defaults. Returns None when there are no feeds.
+    Soft-deleted rows are skipped.
+    """
+    row = conn.execute(
+        f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
+        "WHERE e.baby_id = ? AND e.type IN ('breast', 'formula') AND e.deleted_at IS NULL "
+        "ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1",
+        (baby_id,),
+    ).fetchone()
+    return _row_to_dict(row)
+
+
 def last_event_of_each_type(
     conn: sqlite3.Connection, baby_id: int = 1
 ) -> dict[str, dict[str, Any]]:
+    """
+    Most recent event per consumer-facing category. Breast + formula are
+    combined under the "feed" key so the today_card can say "last feed:
+    14m ago" without caring which kind.
+    """
     out: dict[str, dict[str, Any]] = {}
-    for t in ("feed", "wee", "poo"):
+
+    # Combined feed (breast OR formula) — pick the most recent of either
+    row = conn.execute(
+        f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
+        "WHERE e.baby_id = ? AND e.type IN ('breast', 'formula') AND e.deleted_at IS NULL "
+        "ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1",
+        (baby_id,),
+    ).fetchone()
+    if row:
+        d = _row_to_dict(row)
+        assert d is not None
+        out["feed"] = d
+
+    for t in ("wee", "poo"):
         row = conn.execute(
             f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
             "WHERE e.baby_id = ? AND e.type = ? AND e.deleted_at IS NULL "
@@ -243,13 +281,16 @@ def last_event_of_each_type(
         ).fetchone()
         if row:
             d = _row_to_dict(row)
-            assert d is not None  # row is truthy, _row_to_dict only returns None for None input
+            assert d is not None
             out[t] = d
     return out
 
 
 def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
-    """Counts since local midnight today (UTC-anchored — close enough for v1)."""
+    """
+    Counts since local midnight today (UTC-anchored — close enough for v1).
+    Breast + formula are combined under "feed" per the today_card contract.
+    """
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     out = {"feed": 0, "wee": 0, "poo": 0}
     cur = conn.execute(
@@ -262,13 +303,22 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
         (baby_id, today),
     )
     for r in cur.fetchall():
-        out[r["type"]] = r["n"]
+        if r["type"] in ("breast", "formula"):
+            out["feed"] += r["n"]
+        else:
+            out[r["type"]] = r["n"]
     return out
 
 
 def daily_totals(
     conn: sqlite3.Connection, baby_id: int = 1, days: int = 14
 ) -> list[dict[str, Any]]:
+    """
+    Per-day totals. The reports page wants formula vs breast broken out
+    separately; the today_card wants them combined. We expose BOTH:
+      row["breast"], row["formula"]  — separate counts
+      row["feed"]                    — convenience sum for combined views
+    """
     # Compute cutoff in Python (NOT via SQLite's date('now', ...)) so tests
     # can freeze time deterministically. ISO-8601 string compares lexically
     # against `occurred_at` because UTC ISO timestamps share the YYYY-MM-DD
@@ -293,10 +343,20 @@ def daily_totals(
     for r in cur.fetchall():
         d = by_day.setdefault(
             r["day"],
-            {"day": r["day"], "feed": 0, "wee": 0, "poo": 0, "avg_feed_min": None},
+            {
+                "day": r["day"],
+                "breast": 0,
+                "formula": 0,
+                "feed": 0,
+                "wee": 0,
+                "poo": 0,
+                "avg_feed_min": None,
+            },
         )
         d[r["type"]] = r["n"]
-        if r["type"] == "feed" and r["avg_feed_min"] is not None:
+        if r["type"] in ("breast", "formula"):
+            d["feed"] = d["breast"] + d["formula"]
+        if r["type"] == "breast" and r["avg_feed_min"] is not None:
             d["avg_feed_min"] = round(r["avg_feed_min"], 1)
     return list(by_day.values())
 

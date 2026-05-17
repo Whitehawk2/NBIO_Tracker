@@ -15,7 +15,7 @@ from nbio.models import EventCreate
 from nbio.repo import create_event
 
 
-def _payload(idem, t="feed", occurred_at="2026-05-16T03:00:00.000Z"):
+def _payload(idem, t="breast", occurred_at="2026-05-16T03:00:00.000Z"):
     return EventCreate(
         type=t,
         occurred_at=occurred_at,
@@ -34,7 +34,17 @@ def test_reports_handles_malformed_day_in_totals(client, monkeypatch):
     from nbio.routes import pages
 
     def fake_totals(*a, **kw):
-        return [{"day": "not-a-date", "feed": 7, "wee": 5, "poo": 3}]
+        # Post-#5: row exposes both breast/formula breakdown AND a feed sum
+        return [
+            {
+                "day": "not-a-date",
+                "breast": 7,
+                "formula": 5,
+                "feed": 12,
+                "wee": 3,
+                "poo": 2,
+            }
+        ]
 
     monkeypatch.setattr(pages.repo, "daily_totals", fake_totals)
     r = client.get("/reports")
@@ -43,8 +53,9 @@ def test_reports_handles_malformed_day_in_totals(client, monkeypatch):
     assert 'id="totals-body"' in r.text
     # The raw bad day string appears in a cell (label fell back to row["day"])
     assert "<td>not-a-date</td>" in r.text
-    # And the data columns are still populated
+    # And the data columns are still populated (breast / formula now separate)
     assert "<td>7</td>" in r.text
+    assert "<td>5</td>" in r.text
 
 
 def test_reports_handles_missing_day_key(client, monkeypatch):
@@ -55,7 +66,10 @@ def test_reports_handles_missing_day_key(client, monkeypatch):
     from nbio.routes import pages
 
     def fake_totals(*a, **kw):
-        return [{"feed": 2, "wee": 1, "poo": 0}]  # no 'day' key
+        # No 'day' key; both breast and formula explicitly set so the cells
+        # match deterministically (the row.get("breast", 0) fallback path is
+        # exercised by missing-keys further below).
+        return [{"breast": 2, "formula": 1, "feed": 3, "wee": 1, "poo": 0}]
 
     monkeypatch.setattr(pages.repo, "daily_totals", fake_totals)
     r = client.get("/reports")
@@ -65,8 +79,28 @@ def test_reports_handles_missing_day_key(client, monkeypatch):
     tbody = r.text[tbody_start:tbody_end]
     # Empty label cell present, but the count columns still render
     assert "<td></td>" in tbody
-    assert "<td>2</td>" in tbody
-    assert "<td>1</td>" in tbody
+    assert "<td>2</td>" in tbody  # breast
+    assert "<td>1</td>" in tbody  # formula and wee both show 1
+
+
+def test_reports_handles_missing_breast_formula_keys(client, monkeypatch):
+    """
+    Defensive: when daily_totals returns a row with NEITHER breast nor
+    formula keys, the template's `row.get('breast', 0)` falls back to 0.
+    """
+    from nbio.routes import pages
+
+    def fake_totals(*a, **kw):
+        return [{"day": "2026-05-16", "wee": 1, "poo": 0}]
+
+    monkeypatch.setattr(pages.repo, "daily_totals", fake_totals)
+    r = client.get("/reports")
+    assert r.status_code == 200
+    tbody_start = r.text.find('id="totals-body"')
+    tbody_end = r.text.find("</tbody>", tbody_start)
+    tbody = r.text[tbody_start:tbody_end]
+    # Both breast + formula columns rendered as 0
+    assert tbody.count("<td>0</td>") >= 2
 
 
 def test_reports_skips_malformed_occurred_at_in_heatmap(client, conn):
@@ -82,7 +116,7 @@ def test_reports_skips_malformed_occurred_at_in_heatmap(client, conn):
         """
         INSERT INTO events (
             baby_id, type, occurred_at, idempotency_key, created_by_device
-        ) VALUES (1, 'feed', 'completely-not-iso', 'idem-malformed1', 'device-test')
+        ) VALUES (1, 'breast', 'completely-not-iso', 'idem-malformed1', 'device-test')
         """
     )
     # And one valid event today (uses real wall-clock for "today" — fine because
@@ -94,7 +128,7 @@ def test_reports_skips_malformed_occurred_at_in_heatmap(client, conn):
         """
         INSERT INTO events (
             baby_id, type, occurred_at, idempotency_key, created_by_device
-        ) VALUES (1, 'feed', ?, 'idem-validone', 'device-test')
+        ) VALUES (1, 'breast', ?, 'idem-validone', 'device-test')
         """,
         (f"{today}T03:00:00.000Z",),
     )
