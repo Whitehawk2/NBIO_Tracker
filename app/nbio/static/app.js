@@ -356,7 +356,7 @@
 
     // volume chips
     const volLabel = label("Amount (cc)");
-    const volSeg = document.createElement("div"); volSeg.className = "segmented segmented-wrap";
+    const volSeg = document.createElement("div"); volSeg.className = "segmented-wrap";
     let volume = defaultVolume;
     const volChoices = [30, 60, 90, 120, 150, 180, 210, 240];
     const customVolInput = document.createElement("input");
@@ -996,12 +996,31 @@
       wee: openWeeModal,
       poo: openPooModal,
     };
+    // Hold-to-quick-log: 3-second timer, cancelled the moment the finger
+    // moves more than MOVE_THRESHOLD px (so page-scroll never accidentally
+    // logs an entry). 600ms was too short — kids of finger-tremor or scroll
+    // intent could trip it. See production-finding #28 #2 follow-up.
+    const LONG_PRESS_MS = 3000;
+    const MOVE_THRESHOLD = 10;
     $$(".tile").forEach((tile) => {
       const type = tile.dataset.type;
       if (!(type in map)) return;
-      let pressTimer = null, longFired = false;
-      const start = () => {
+      let pressTimer = null;
+      let longFired = false;
+      let movedDuringTouch = false;
+      let startX = 0, startY = 0;
+      const cancel = () => {
+        if (pressTimer !== null) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+      };
+      const start = (e) => {
         longFired = false;
+        movedDuringTouch = false;
+        const t = e.touches?.[0];
+        if (t) { startX = t.clientX; startY = t.clientY; }
+        else if (e.clientX !== undefined) { startX = e.clientX; startY = e.clientY; }
         pressTimer = setTimeout(() => {
           longFired = true; haptic(40);
           submitCreate(makeModalShell(""), {
@@ -1010,19 +1029,37 @@
             skip_dup_check: false,
             ...(type === "breast" ? { feed_side: null } : {}),
           });
-        }, 600);
+        }, LONG_PRESS_MS);
+      };
+      const move = (e) => {
+        if (pressTimer === null) return;
+        const t = e.touches?.[0] ?? e;
+        if (t.clientX === undefined) return;
+        if (Math.abs(t.clientX - startX) > MOVE_THRESHOLD
+            || Math.abs(t.clientY - startY) > MOVE_THRESHOLD) {
+          movedDuringTouch = true;
+          cancel();
+        }
       };
       const end = (e) => {
-        clearTimeout(pressTimer);
+        cancel();
         if (longFired) { e.preventDefault?.(); return; }
       };
       tile.addEventListener("touchstart", start, { passive: true });
+      tile.addEventListener("touchmove", move, { passive: true });
       tile.addEventListener("touchend", end);
-      tile.addEventListener("touchcancel", () => clearTimeout(pressTimer));
+      tile.addEventListener("touchcancel", cancel);
       tile.addEventListener("mousedown", start);
+      tile.addEventListener("mousemove", move);
       tile.addEventListener("mouseup", end);
-      tile.addEventListener("mouseleave", () => clearTimeout(pressTimer));
-      tile.addEventListener("click", (e) => { if (longFired) return e.preventDefault(); haptic(12); map[type]({}); });
+      tile.addEventListener("mouseleave", cancel);
+      tile.addEventListener("click", (e) => {
+        // Suppress click if either: long-press fired (already logged), or the
+        // user was scrolling/dragging when they touched the tile.
+        if (longFired || movedDuringTouch) { e.preventDefault(); return; }
+        haptic(12);
+        map[type]({});
+      });
     });
   }
 
