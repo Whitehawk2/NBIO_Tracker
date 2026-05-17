@@ -10,7 +10,11 @@
         <span class="actor-dot" style="background: {{ today.last.poo.actor_color }}" title="{{ today.last.poo.actor_name or '' }}"></span>
       {% endif %}
     {% else %}
-      <span class="muted">no poos yet</span>
+      <span class="no-recent">no poos yet</span>
     {% endif %}
+  </div>
+  <div class="tile-hint" data-hint="long-press" hidden>
+    <span>Hold 3s to log instantly</span>
+    <button type="button" class="hint-dismiss" aria-label="Dismiss hint">×</button>
   </div>
 </button>

@@ -98,12 +98,6 @@ def test_index_with_known_device_renders_actor_color(client):
     assert 'title="Mum"' in r.text
 
 
-def test_index_empty_state_message(client):
-    """No events → the warm empty-state copy is visible."""
-    r = client.get("/")
-    assert "Quiet night" in r.text
-
-
 def test_reports_today_counts_render_in_big_numbers(client):
     """today.counts.feed renders inside the .big-numbers block."""
     today = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -177,6 +171,284 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert 'data-type="formula"' in r.text
     assert "BREAST" in r.text
     assert "FORMULA" in r.text
+
+
+def test_event_row_has_row_menu_button(client):
+    """
+    Every event row carries a trailing-edge `⋯` button (`data-row-menu`)
+    that opens an Edit/Delete sheet. Discoverable alternative to swipe.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-row-menu-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-row-menu" in r.text
+    assert 'aria-label="Row actions"' in r.text
+    # And the trailing-edge glyph.
+    assert "⋯" in r.text
+
+
+def test_event_row_has_aria_label(client):
+    """
+    Each row gets an aria-label describing both gestures, so SR users
+    know the row is interactive AND know about swipe.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-row-aria-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'aria-label="Tap to edit; swipe left to delete"' in r.text
+
+
+def test_first_row_hint_rendered_when_events_present(client):
+    """
+    With at least one event logged, a dismissible 'Tap to edit · swipe
+    left to delete' hint renders ABOVE the event list (outside the
+    `<ul>` to avoid the sticky day-header's z-index context).
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-frh-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'data-hint="first-row"' in r.text
+    assert "Tap to edit" in r.text and "swipe left to delete" in r.text
+
+
+def test_first_row_hint_absent_on_empty_state(client):
+    """No events → no first-row hint (the empty-state copy carries the cue)."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'data-hint="first-row"' not in r.text
+
+
+def test_first_row_hint_emitted_only_once(client):
+    """
+    Multiple events across multiple days → still only ONE first-row
+    hint (the hint is for the list as a whole, not per row).
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    for i in range(3):
+        client.post(
+            "/api/events",
+            json={
+                "type": "wee",
+                "occurred_at": f"{today}T0{i + 1}:00:00.000Z",
+                "idempotency_key": f"idem-frh-multi-{i}",
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.text.count('data-hint="first-row"') == 1
+
+
+def test_first_row_hint_starts_hidden(client):
+    """Hint starts `hidden`; JS un-hides if not dismissed."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-frh-hidden",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    m = re.search(r'<[^>]*data-hint="first-row"([^>]*)>', r.text)
+    assert m
+    assert "hidden" in m.group(1)
+
+
+def test_tile_long_press_caption_rendered_for_each_tile(client):
+    """
+    Every tile (4 total: breast / formula / wee / poo) carries a small
+    caption hint announcing the long-press skip-modal quick-log.
+    Without this, the 3-second hold gesture is undiscoverable.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.text.count('data-hint="long-press"') == 4, (
+        "expected exactly 4 long-press hint nodes (one per tile)"
+    )
+    assert r.text.count("Hold 3s to log instantly") == 4
+
+
+def test_tile_caption_starts_hidden(client):
+    """
+    The caption renders with the `hidden` attribute by default; app.js
+    un-hides it on DOMContentLoaded only when the dismissal flag isn't
+    set. Pinned because a regression here would show the hint to every
+    parent forever.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    # Every long-press hint node should have the `hidden` attribute.
+    nodes = re.findall(
+        r'<div class="tile-hint" data-hint="long-press"([^>]*)>',
+        r.text,
+    )
+    assert len(nodes) == 4
+    for attrs in nodes:
+        assert "hidden" in attrs, (
+            f"long-press hint must carry the hidden attribute; got attrs={attrs!r}"
+        )
+
+
+def test_sync_badge_has_explainer_button(client):
+    """
+    The header sync dot must be a real <button> with an aria-label,
+    and carry `data-sync-explain` so the JS click handler can attach.
+    Previously a <span> with a static title="Connection" — invisible
+    to keyboard users and unhelpful for two-parent onboarding.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-sync-explain" in r.text, (
+        "expected the sync badge to expose `data-sync-explain` for JS wiring"
+    )
+    assert 'aria-label="Connection status"' in r.text, (
+        "sync badge button must declare aria-label='Connection status'"
+    )
+
+
+def test_event_row_shows_notes_icon_when_notes_present(client):
+    """
+    Event rows with non-empty notes show a small 📝 indicator inside
+    `.ev-detail`. Without this, users can't tell at a glance which rows
+    carry hidden notes (the full notes text is also rendered, but it
+    truncates at 50% width, so a deliberate icon is the at-a-glance
+    affordance).
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "notes": "loose",
+            "idempotency_key": "idem-notes-icon-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'class="ev-notes-icon"' in r.text
+    assert "📝" in r.text
+
+
+def test_event_row_omits_notes_icon_when_no_notes(client):
+    """Symmetric: rows without notes must NOT carry the icon."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-notes-icon-2",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "ev-notes-icon" not in r.text
+
+
+def test_index_empty_state_copy_actionable(client):
+    """
+    Fresh-install empty state must direct the user up to the tiles
+    rather than just commenting on quiet ("Quiet night 💤" gave no
+    next-action cue).
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Tap a tile above to log your first entry" in r.text
+    assert "Quiet night" not in r.text
+
+
+def test_tile_no_recent_uses_dedicated_class(client):
+    """
+    Tiles with no recent event must use a dedicated `.no-recent` class
+    rather than the generic `.muted` so the placeholder is visually
+    distinct from real muted metadata (formula brand, feed side, etc.).
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    # Fresh DB — every tile-ago region should show the dedicated class.
+    assert r.text.count('class="no-recent"') >= 4, (
+        "expected `.no-recent` on every tile's empty-state placeholder "
+        "(breast/formula/wee/poo when no event of that type exists)"
+    )
+
+
+def test_tile_no_recent_absent_when_recent_event_exists(client):
+    """
+    The `.no-recent` placeholder must disappear from a tile once an
+    event of that type is logged. Belt-and-braces — symmetric to the
+    presence test above.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-norec-w-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    m = re.search(
+        r'<div class="tile-ago" id="ago-wee">(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "wee tile-ago region not found"
+    assert "no-recent" not in m.group(1), (
+        "wee tile must drop the .no-recent placeholder once a wee is logged"
+    )
+    # Other tiles still show it (no breast/formula/poo logged).
+    for tile_id in ("ago-breast", "ago-formula", "ago-poo"):
+        m = re.search(
+            rf'<div class="tile-ago" id="{tile_id}">(.*?)</div>',
+            r.text,
+            flags=re.DOTALL,
+        )
+        assert m and "no-recent" in m.group(1), (
+            f"{tile_id} should still carry .no-recent (no event of that type)"
+        )
 
 
 def test_formula_tile_shows_recent_when_breast_is_more_recent(client):

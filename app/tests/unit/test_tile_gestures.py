@@ -83,6 +83,136 @@ def test_click_handler_suppresses_after_drag():
     )
 
 
+def test_app_js_has_hint_dismissed_helper():
+    """
+    The hint-dismissal API is centralised so each hint follows the same
+    pattern. Pin that `hintDismissed` and `dismissHint` helpers exist
+    and use `localStorage`.
+    """
+    src = _src()
+    assert "function hintDismissed" in src, "missing hintDismissed() helper"
+    assert "function dismissHint" in src, "missing dismissHint() helper"
+    # Helpers must touch localStorage.
+    idx = src.find("function hintDismissed")
+    block = src[idx : idx + 400]
+    assert "localStorage" in block, "hintDismissed must read localStorage"
+
+
+def test_sync_dot_click_handler_attached():
+    """
+    Tapping the header sync dot must open an explainer popover. Pin
+    that a `wireSyncDot` function exists and wires a click listener to
+    the `[data-sync-explain]` element.
+    """
+    src = _src()
+    assert "data-sync-explain" in src, "expected `data-sync-explain` to be referenced in app.js"
+    idx = src.find("function wireSyncDot")
+    assert idx >= 0, "expected a `wireSyncDot()` function in app.js"
+    # The function body is short — look at the next ~400 chars.
+    block = src[idx : idx + 400]
+    assert "data-sync-explain" in block, "wireSyncDot must select the [data-sync-explain] element"
+    assert 'addEventListener("click"' in block or "addEventListener('click'" in block, (
+        "wireSyncDot must wire a click listener on the sync-explain element"
+    )
+
+
+def test_set_sync_state_updates_aria_label():
+    """
+    The sync-dot button's aria-label / title must change with state so
+    screen-reader users hear "Connection: live" vs "Connection: offline"
+    — not just the static title="Connection".
+    """
+    src = _src()
+    idx = src.find("function setSyncState(")
+    assert idx >= 0, "setSyncState() function not found"
+    block = src[idx : idx + 600]
+    assert "aria-label" in block or "ariaLabel" in block or "setAttribute" in block, (
+        "setSyncState must mutate aria-label / title so the state is accessible, not just visual"
+    )
+
+
+def test_row_html_includes_row_menu():
+    """
+    Client-side `rowHTML(ev)` must mirror the server template by
+    emitting the `.row-menu` button. Otherwise rows inserted via
+    SSE/optimistic paths would silently lack the affordance.
+    """
+    src = _src()
+    idx = src.find("function rowHTML(")
+    assert idx >= 0
+    block = src[idx : idx + 1500]
+    assert "row-menu" in block, (
+        "rowHTML must emit the `.row-menu` button so SSE-/optimistic-"
+        "inserted rows match the server template"
+    )
+    assert "data-row-menu" in block
+
+
+def test_row_menu_click_stops_propagation():
+    """
+    Clicking the `⋯` button must NOT bubble to the row's tap-to-edit
+    click handler. Pinned by looking for `stopPropagation()` near the
+    row-menu wiring.
+    """
+    src = _src()
+    # Find the wireRowMenu function (or wherever row-menu click is bound).
+    idx = src.find("function wireRowMenu")
+    assert idx >= 0, "expected a `wireRowMenu()` function in app.js"
+    block = src[idx : idx + 600]
+    assert "stopPropagation" in block, (
+        "wireRowMenu must call event.stopPropagation() so clicks on the "
+        "menu button don't bubble to the row tap-to-edit handler"
+    )
+
+
+def test_row_menu_opens_action_sheet_with_edit_and_delete():
+    """
+    The action sheet opened by the row-menu must offer Edit and Delete
+    actions. Pin the literal strings near `openRowActionSheet`.
+    """
+    src = _src()
+    idx = src.find("function openRowActionSheet")
+    assert idx >= 0, "expected an `openRowActionSheet()` function in app.js"
+    block = src[idx : idx + 1000]
+    assert "Edit" in block, "action sheet must offer an Edit button"
+    assert "Delete" in block, "action sheet must offer a Delete button"
+
+
+def test_row_swipe_skips_when_target_in_row_menu():
+    """
+    The row's `touchstart` / `touchmove` handlers must early-return
+    when the touch starts inside a `.row-menu` button — otherwise the
+    button can never be tapped on touch devices because the row eats
+    the gesture.
+    """
+    src = _src()
+    idx = src.find("function attachRowGestures")
+    assert idx >= 0
+    block = src[idx : idx + 1200]
+    assert "closest" in block and "row-menu" in block, (
+        "attachRowGestures must check `e.target.closest('.row-menu')` to "
+        "skip the swipe gesture when touching the menu button"
+    )
+
+
+def test_row_html_includes_notes_icon_branch():
+    """
+    The client-side `rowHTML(ev)` must mirror the server template by
+    conditionally rendering the 📝 notes-exists icon. Tested at the
+    source level — the rendered row markup must contain a branch that
+    checks `ev.notes` and emits `ev-notes-icon`.
+    """
+    src = _src()
+    idx = src.find("function rowHTML(")
+    assert idx >= 0, "rowHTML function not found in app.js"
+    block = src[idx : idx + 1200]
+    assert "ev-notes-icon" in block, (
+        "rowHTML must render an `ev-notes-icon` element so client-inserted "
+        "rows match the server template"
+    )
+    assert "ev.notes" in block, "the notes-icon emission in rowHTML must be conditional on ev.notes"
+
+
 def test_formula_volume_picker_uses_only_segmented_wrap():
     """
     Volume picker chips overflow horizontally when both .segmented and

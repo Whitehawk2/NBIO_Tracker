@@ -18,6 +18,22 @@
   const isoNow = () => new Date().toISOString();
   const haptic = (ms = 12) => { try { navigator.vibrate && navigator.vibrate(ms); } catch (_) {} };
 
+  // ----- discoverability hints (#11)
+  // Each hint persists its dismissal in localStorage under
+  // `nbio.hint.<name>` = "dismissed". The settings UI (#6) will later
+  // reset them by prefix-iterating.
+  const HINT_KEYS = {
+    firstRow: "nbio.hint.first_row",
+    longPress: "nbio.hint.long_press",
+    syncDot: "nbio.hint.sync_dot",
+  };
+  function hintDismissed(key) {
+    return localStorage.getItem(key) === "dismissed";
+  }
+  function dismissHint(key) {
+    localStorage.setItem(key, "dismissed");
+  }
+
   function fmtRel(iso) {
     const dt = new Date(iso);
     const sec = Math.max(0, Math.floor((Date.now() - dt.getTime()) / 1000));
@@ -635,12 +651,16 @@
     const tail = ev.notes ? (detail ? ` · ${ev.notes}` : ev.notes) : "";
     const emoji = ev.type === "breast" ? "🤱" : ev.type === "formula" ? "🍼" : ev.type === "wee" ? "💦" : "💩";
     const color = ev.actor_color || "#888";
+    const notesIcon = ev.notes
+      ? `<span class="ev-notes-icon" aria-label="has notes" title="has notes">📝</span>`
+      : "";
     return `
       <span class="ev-emoji" aria-hidden="true">${emoji}</span>
       <span class="ev-time">${fmtHHMM(ev.occurred_at)}</span>
       <span class="ev-rel" data-rel="${ev.occurred_at}">${fmtRel(ev.occurred_at)}</span>
-      <span class="ev-detail">${escapeHtml(detail + tail)}</span>
+      <span class="ev-detail">${notesIcon}${escapeHtml(detail + tail)}</span>
       <span class="ev-actor" style="background:${color}" title="${escapeHtml(ev.actor_name || "")}"></span>
+      <button type="button" class="row-menu" data-row-menu aria-label="Row actions">⋯</button>
     `;
   }
   function escapeHtml(s) { return String(s ?? "").replace(/[&<>\"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c])); }
@@ -767,15 +787,25 @@
     }
   }
 
-  // ----- row gestures: tap = edit, swipe-left = delete
+  // ----- row gestures: tap = edit, swipe-left = delete, ⋯ = action sheet
   function attachRowGestures(row) {
     if (row.__gesturesAttached) return;
     row.__gesturesAttached = true;
 
     let startX = null, dx = 0;
-    row.addEventListener("touchstart", (e) => { startX = e.touches[0].clientX; dx = 0; }, { passive: true });
+    // Touches that start on the `.row-menu` button must not initiate a
+    // swipe — otherwise the button can never be tapped on a touch
+    // device (the row would eat the gesture).
+    row.addEventListener("touchstart", (e) => {
+      if (e.target && e.target.closest && e.target.closest(".row-menu")) {
+        startX = null;
+        return;
+      }
+      startX = e.touches[0].clientX; dx = 0;
+    }, { passive: true });
     row.addEventListener("touchmove", (e) => {
       if (startX == null) return;
+      if (e.target && e.target.closest && e.target.closest(".row-menu")) return;
       dx = e.touches[0].clientX - startX;
       if (dx < -10) {
         row.classList.add("swiping");
@@ -789,11 +819,58 @@
       startX = null; dx = 0;
     });
 
-    row.addEventListener("click", () => {
+    row.addEventListener("click", (e) => {
+      // The `⋯` button has its own click handler — let it run, not us.
+      if (e.target && e.target.closest && e.target.closest(".row-menu")) return;
       const ev = row.__event;
       if (!ev || !ev.id || String(ev.id).startsWith("local:")) return;
       openEditFor(ev);
     });
+
+    wireRowMenu(row);
+  }
+
+  function wireRowMenu(row) {
+    const btn = row && row.querySelector ? row.querySelector(".row-menu") : null;
+    if (!btn) return;
+    btn.addEventListener("click", (e) => {
+      // The `.row-menu` button is inside the row, so its click bubbles
+      // up to the row's tap-to-edit handler. stopPropagation() prevents
+      // both that AND any future delegated handlers from firing.
+      e.stopPropagation();
+      e.preventDefault();
+      const ev = row.__event;
+      if (!ev) return;
+      openRowActionSheet(row, ev);
+    });
+  }
+
+  function openRowActionSheet(row, ev) {
+    const backdrop = makeModalShell("Actions");
+    const body = backdrop.querySelector(".modal-body");
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "btn-secondary";
+    editBtn.textContent = "Edit";
+    editBtn.style.width = "100%";
+    editBtn.style.marginBottom = "10px";
+    editBtn.addEventListener("click", () => {
+      closeModal(backdrop);
+      openEditFor(ev);
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-secondary";
+    delBtn.textContent = "Delete";
+    delBtn.style.width = "100%";
+    delBtn.style.color = "#c95757";
+    delBtn.addEventListener("click", () => {
+      closeModal(backdrop);
+      doSoftDelete(row);
+    });
+
+    body.append(editBtn, delBtn);
+    document.body.appendChild(backdrop);
   }
 
   async function openEditFor(ev) {
@@ -919,9 +996,91 @@
     sse.addEventListener("event.undeleted", handle("undeleted"));
     sse.addEventListener("device.updated", () => { /* future: recolour rows */ });
   }
+  const SYNC_LABELS = {
+    connecting: "Connection: connecting",
+    connected: "Connection: live",
+    offline: "Connection: offline (changes queued)",
+    error: "Connection: error",
+  };
   function setSyncState(state) {
     const dot = $("#sync-badge .sync-dot");
     if (dot) dot.dataset.state = state;
+    const btn = $("#sync-badge [data-sync-explain]");
+    if (btn) {
+      const label = SYNC_LABELS[state] || "Connection status";
+      btn.setAttribute("aria-label", label);
+      btn.setAttribute("title", label);
+    }
+  }
+
+  // ----- inline hints (#11)
+  // Each `[data-hint]` element starts `hidden` server-side. On load we
+  // unhide it unless the dismissal flag is set, and bind its
+  // `.hint-dismiss` button to persist the dismissal + remove the node.
+  const HINT_KEY_BY_NAME = {
+    "long-press": HINT_KEYS.longPress,
+    "first-row": HINT_KEYS.firstRow,
+  };
+  function wireHints() {
+    $$("[data-hint]").forEach((el) => {
+      const name = el.dataset.hint;
+      const key = HINT_KEY_BY_NAME[name];
+      if (!key) return;
+      if (hintDismissed(key)) {
+        el.remove();
+        return;
+      }
+      el.hidden = false;
+      const btn = el.querySelector(".hint-dismiss");
+      if (btn) {
+        btn.addEventListener("click", (e) => {
+          // Don't let the dismiss bubble to the tile / row click.
+          e.stopPropagation();
+          e.preventDefault();
+          dismissHint(key);
+          el.remove();
+        });
+      }
+    });
+  }
+
+  // ----- sync-dot tap-to-explain (#11)
+  // Tapping the dot opens a small popover listing the four states so a
+  // two-parent setup can learn what the colours mean. Dismissal flag
+  // only suppresses the auto-open-on-first-connect path; explicit
+  // taps always re-open.
+  function wireSyncDot() {
+    const btn = $("#sync-badge [data-sync-explain]");
+    if (!btn) return;
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      openSyncPopover();
+    });
+  }
+  function openSyncPopover() {
+    // Reuse the modal backdrop for outside-click dismissal; the inner
+    // shell is a small top-anchored card rather than the bottom sheet.
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop sync-popover-backdrop";
+    backdrop.innerHTML = `
+      <div class="sync-popover" role="dialog" aria-modal="true" aria-label="Connection states" tabindex="-1">
+        <div class="sync-popover-title">Connection</div>
+        <ul class="sync-popover-list">
+          <li><span class="sync-dot" data-state="connected"></span> Live — events sync instantly</li>
+          <li><span class="sync-dot" data-state="connecting"></span> Connecting</li>
+          <li><span class="sync-dot" data-state="offline"></span> Offline — changes queued</li>
+          <li><span class="sync-dot" data-state="error"></span> Error — retrying</li>
+        </ul>
+        <button type="button" class="btn-secondary sync-popover-dismiss">Got it</button>
+      </div>
+    `;
+    const close = () => {
+      dismissHint(HINT_KEYS.syncDot);
+      backdrop.remove();
+    };
+    backdrop.addEventListener("click", (e) => { if (e.target === backdrop) close(); });
+    backdrop.querySelector(".sync-popover-dismiss").addEventListener("click", close);
+    document.body.appendChild(backdrop);
   }
 
   // ----- outbox flush
@@ -1086,6 +1245,8 @@
     wireTiles();
     wireExistingRows();
     wireCopySummary();
+    wireSyncDot();
+    wireHints();
     refreshRelTimes();
     setInterval(refreshRelTimes, 60 * 1000);
 
