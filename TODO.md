@@ -44,28 +44,46 @@ on the Pi server (2026-05-16).
 - Hostname source: `NBIO_TS_HOSTNAME` env → prompt → autodetect from
   `tailscale status --json`.
 
-## 4. Production-use findings — first 12 hours — [#28](https://github.com/Whitehawk2/NBIO_Tracker/issues/28)
+## 4. ✅ Production-use findings — first 12 hours — [#28](https://github.com/Whitehawk2/NBIO_Tracker/issues/28)
 
-Five fixes/features surfaced after real two-parent use of the Pi
-stack post-#26. Tracked as one inbox issue (#28); planned per-fix
-before each lands.
+**Status:** Done — all 5 findings shipped and tested on the Pi.
 
-- **#4 in the issue body** — notes/comments invisible after refresh
-  (the "has note" banner shows, modal opens empty). Major; probably
-  client-side bug, not data loss.
-- **#5** — formula vs breastfeeding needs first-class buttons; 3am
-  parents can't use the notes field as a workaround. Major UX gap.
-- **#1** — "Last 3 days" overview buckets late-evening entries under
-  the wrong day (UTC vs local-time mismatch in `repo.daily_totals`).
-  Major-ish — display inconsistent with the event list below it.
-- **#3** — `./upgrade.sh --ref master` failed silently with exit 1
-  on the first real Pi exercise. Bug. Investigate root cause +
-  audit error paths so silent exit becomes impossible.
-- **#2** — overviews don't reactively refresh when an entry is
-  logged. Minor; user explicitly OK with deferring.
+- **#4** notes vanishing after refresh →
+  [PR #35](https://github.com/Whitehawk2/NBIO_Tracker/pull/35) — new
+  `GET /api/events/{id}`; modal fetches the canonical row on open
+  instead of reading stale row-local data attrs.
+- **#3** `./upgrade.sh --ref master` silent exit 1 →
+  [PR #36](https://github.com/Whitehawk2/NBIO_Tracker/pull/36) — ERR
+  trap + `|| die` on every `git checkout`. Two follow-ups:
+  [PR #40](https://github.com/Whitehawk2/NBIO_Tracker/pull/40)
+  (`git fetch --tags --force` for conflicting tag SHAs) and
+  [PR #41](https://github.com/Whitehawk2/NBIO_Tracker/pull/41)
+  (deployed SHA tracked in `data/.upgrade-current-ref` so a manual
+  `git pull` no longer fools the "nothing to do" short-circuit).
+- **#5** formula vs breastfeeding →
+  [PR #37](https://github.com/Whitehawk2/NBIO_Tracker/pull/37) —
+  new `formula` event type, `formula_brand` + `formula_volume_ml`
+  columns, 4-tile home (🤱 Breast / 🍼 Formula / 💧 Wee / 💩 Poo),
+  brand + volume chip modal, migration framework
+  (`nbio/migrations/` gated by `PRAGMA user_version`) + SQLite
+  12-step rebuild renaming legacy `feed` rows → `breast`.
+- **#1** last-3-days bucketing under UTC →
+  [PR #38](https://github.com/Whitehawk2/NBIO_Tracker/pull/38) —
+  new `nbio/tz.py`; `today_counts` / `daily_totals` shift
+  `occurred_at` by the server's current local-tz offset before
+  bucketing.
+- **#2** reactive overview refresh →
+  [PR #39](https://github.com/Whitehawk2/NBIO_Tracker/pull/39) —
+  `bumpOverviews()` updates the today-card counters and
+  last-3-days mini-table inline on POST and SSE without a reload.
+- **Production-test follow-up** →
+  [PR #42](https://github.com/Whitehawk2/NBIO_Tracker/pull/42) —
+  tile long-press hardened to a 3-second hold that cancels on
+  finger movement (no more accidental logs while scrolling);
+  formula volume chips wrap responsively (no more cut-off at 150cc).
 
-Tackle ordering (subject to per-fix planning): #4 → #5 → #1 → #3 →
-#2. Lands after Bucket A (#25).
+Suite at 335 tests / 100% line + branch coverage on `master` at the
+close of this item.
 
 ## 5. Nicer UI/UX hints for hidden affordances — [#11](https://github.com/Whitehawk2/NBIO_Tracker/issues/11)
 
