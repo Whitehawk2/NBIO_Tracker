@@ -36,6 +36,23 @@
 
 set -euo pipefail
 
+# ----- helpers (defined early so the ERR trap can call err()) ----------------
+info()  { printf '\033[1;34m::\033[0m %s\n' "$*"; }
+warn()  { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
+err()   { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; }
+ok()    { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
+
+die()   { err "$1"; exit "${2:-1}"; }
+
+# ----- safety net: every uncaught failure under `set -e` gets a diagnostic ---
+# Without this, a non-zero exit from any unwrapped command (a bare `git
+# checkout`, `docker compose build`, etc.) leaves the operator staring at
+# exit code 1 with no clue WHERE in the 300-line script we died. The ERR
+# trap fires for any non-zero exit not explicitly handled (`|| die ...`,
+# `if ! cmd; then`, `cmd || true`). See issue #28 finding #3.
+# shellcheck disable=SC2154
+trap '_rc=$?; err "upgrade.sh aborted at line ${LINENO} (exit ${_rc}) running: ${BASH_COMMAND}"; exit "$_rc"' ERR
+
 # ----- args ------------------------------------------------------------------
 REF=""
 ROLLBACK=0
@@ -66,14 +83,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ "${NBIO_NONINTERACTIVE:-0}" == "1" ]] && YES=1
-
-# ----- helpers ---------------------------------------------------------------
-info()  { printf '\033[1;34m::\033[0m %s\n' "$*"; }
-warn()  { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
-err()   { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; }
-ok()    { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
-
-die()   { err "$1"; exit "${2:-1}"; }
 
 # ----- pre-flight ------------------------------------------------------------
 preflight() {
@@ -265,11 +274,21 @@ ok "recorded prev-ref → data/.upgrade-prev-ref"
 # ----- checkout target -------------------------------------------------------
 info "Checking out $TARGET_REF"
 if [[ "$TARGET_KIND" == "branch" ]]; then
-  git checkout -q "$TARGET_REF"
+  # If local branch doesn't exist yet (fresh clone state), create it from
+  # origin/$REF; otherwise reuse the existing branch. Either way `|| die`
+  # so a failure is never silent.
+  if git rev-parse --verify --quiet "refs/heads/$TARGET_REF" >/dev/null; then
+    git checkout "$TARGET_REF" \
+      || die "git checkout $TARGET_REF failed."
+  else
+    git checkout -B "$TARGET_REF" "origin/$TARGET_REF" \
+      || die "git checkout -B $TARGET_REF origin/$TARGET_REF failed (local branch missing and origin couldn't be tracked)."
+  fi
   git merge --ff-only "origin/$TARGET_REF" \
-    || die "fast-forward to origin/$TARGET_REF failed."
+    || die "fast-forward to origin/$TARGET_REF failed. Local has diverged from origin? Try './upgrade.sh --rollback' or inspect 'git log HEAD..origin/$TARGET_REF'."
 else
-  git checkout -q "$TARGET_REF"
+  git checkout "$TARGET_REF" \
+    || die "git checkout $TARGET_REF failed (tag may have been deleted or fetch was incomplete)."
 fi
 ok "HEAD is now at $(git rev-parse HEAD)"
 
