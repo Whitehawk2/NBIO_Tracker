@@ -210,9 +210,7 @@ def test_tile_hint_background_uses_solid_color():
         f"got {bg_value!r}. Use a solid `var(--bg-sunk)` / `var(--bg-elev)` so "
         f"any cascade failure doesn't fall through to a white background."
     )
-    assert "var(--" in bg_value, (
-        f".tile-hint background must use a CSS variable; got {bg_value!r}"
-    )
+    assert "var(--" in bg_value, f".tile-hint background must use a CSS variable; got {bg_value!r}"
 
 
 def test_dark_mode_feed_color_brightened():
@@ -230,13 +228,10 @@ def test_dark_mode_feed_color_brightened():
     feed = re.search(r"--feed\s*:\s*([#0-9a-fA-F]+)", block)
     assert feed, "html.dark must declare --feed"
     value = feed.group(1).lower()
-    assert value != "#5fa088", (
-        "dark-mode --feed must be bumped from the low-salience value #5fa088"
-    )
+    assert value != "#5fa088", "dark-mode --feed must be bumped from the low-salience value #5fa088"
     # New value should be visibly brighter: each channel ~>= 0x70.
     assert re.match(r"#[7-f][0-9a-f]{5}$", value), (
-        f"dark-mode --feed should be visibly brighter (>= ~#707070 per "
-        f"channel); got {value}"
+        f"dark-mode --feed should be visibly brighter (>= ~#707070 per channel); got {value}"
     )
 
 

@@ -213,6 +213,34 @@ def test_row_html_includes_notes_icon_branch():
     assert "ev.notes" in block, "the notes-icon emission in rowHTML must be conditional on ev.notes"
 
 
+def test_optimistic_dict_includes_formula_fields():
+    """
+    Critical regression: `submitCreate`'s optimistic event-row dict
+    copies feed_side / feed_duration_min / poo_quality / notes from the
+    payload, but pre-fix it forgot `formula_brand` and
+    `formula_volume_ml`. The result: `bumpOverviews(optimistic, +1)`'s
+    formula branch checked `ev.formula_volume_ml` and silently fell
+    through because the field was undefined. The today-card cc total
+    and the last-3-days cc cell didn't refresh on a POST — only on a
+    page reload (when the server-rendered HTML had the values).
+
+    Pin the two fields explicitly so the regression can't return.
+    """
+    src = _src()
+    idx = src.find("const optimistic = {")
+    assert idx >= 0, "optimistic dict not found in app.js"
+    # Look at the full literal block (~30 lines after).
+    block = src[idx : idx + 800]
+    assert "formula_brand:" in block, (
+        "submitCreate's optimistic dict must include `formula_brand:` so "
+        "the optimistic row + bumpOverviews receive the brand"
+    )
+    assert "formula_volume_ml:" in block, (
+        "submitCreate's optimistic dict must include `formula_volume_ml:` "
+        "so bumpOverviews' formula branch can sum the cc total"
+    )
+
+
 def test_bump_overviews_bumps_formula_ml_for_formula_events():
     """
     `bumpOverviews` must bump the `formula_ml` cell by the event's

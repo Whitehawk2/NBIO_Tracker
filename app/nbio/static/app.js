@@ -551,6 +551,11 @@
       feed_duration_min: payload.feed_duration_min ?? null,
       poo_quality: payload.poo_quality ?? null,
       notes: payload.notes ?? null,
+      // Formula fields need to propagate to bumpOverviews so the
+      // today-formula-strip + last-3-days cc cell can update without
+      // a reload. (v1.1.0 regression — pre-fix these were missing.)
+      formula_brand: payload.formula_brand ?? null,
+      formula_volume_ml: payload.formula_volume_ml ?? null,
       actor_color: getDeviceColor() || "#888",
       actor_name: getDeviceName(),
       idempotency_key: idem,
