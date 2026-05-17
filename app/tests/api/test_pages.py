@@ -179,6 +179,18 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert "FORMULA" in r.text
 
 
+def test_index_empty_state_copy_actionable(client):
+    """
+    Fresh-install empty state must direct the user up to the tiles
+    rather than just commenting on quiet ("Quiet night 💤" gave no
+    next-action cue).
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Tap a tile above to log your first entry" in r.text
+    assert "Quiet night" not in r.text
+
+
 def test_tile_no_recent_uses_dedicated_class(client):
     """
     Tiles with no recent event must use a dedicated `.no-recent` class
