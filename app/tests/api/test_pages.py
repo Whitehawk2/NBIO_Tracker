@@ -672,6 +672,41 @@ def test_sync_badge_has_explainer_button(client):
     )
 
 
+def test_event_row_does_not_render_long_notes_inline(client):
+    """
+    Inline notes text in `.ev-detail` overlapped the relative-time
+    column on long notes (v1.1.0 production feedback). The 📝 icon
+    is the at-a-glance signal that notes exist; the full notes are
+    visible in the edit modal on tap. Pin that the inline notes
+    text is NOT rendered in the row at all.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    long_note = "this-is-a-deliberately-long-unique-comment-marker-XYZ123"
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "notes": long_note,
+            "idempotency_key": "idem-no-inline-notes-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    # The 📝 icon is present.
+    assert "📝" in r.text
+    # But the literal note text is NOT rendered anywhere in the page —
+    # the icon is the existence indicator; full notes only show in modal.
+    assert long_note not in r.text, (
+        "event row must NOT include the inline notes text — long notes "
+        "overlapped the relative-time column. Show only the 📝 icon; "
+        "full notes appear in the edit modal on tap."
+    )
+
+
 def test_event_row_shows_notes_icon_when_notes_present(client):
     """
     Event rows with non-empty notes show a small 📝 indicator inside

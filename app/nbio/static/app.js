@@ -653,7 +653,9 @@
     } else if (ev.type === "poo" && ev.poo_quality) {
       detail = `type ${ev.poo_quality}`;
     }
-    const tail = ev.notes ? (detail ? ` · ${ev.notes}` : ev.notes) : "";
+    // 📝 icon signals notes exist; the full text is revealed in the
+    // edit modal. Inline notes text was dropped (long notes overlapped
+    // the relative-time column on phones — v1.1.0 regression).
     const emoji = ev.type === "breast" ? "🤱" : ev.type === "formula" ? "🍼" : ev.type === "wee" ? "💦" : "💩";
     const color = ev.actor_color || "#888";
     const notesIcon = ev.notes
@@ -663,7 +665,7 @@
       <span class="ev-emoji" aria-hidden="true">${emoji}</span>
       <span class="ev-time">${fmtHHMM(ev.occurred_at)}</span>
       <span class="ev-rel" data-rel="${ev.occurred_at}">${fmtRel(ev.occurred_at)}</span>
-      <span class="ev-detail">${notesIcon}${escapeHtml(detail + tail)}</span>
+      <span class="ev-detail">${notesIcon}${escapeHtml(detail)}</span>
       <span class="ev-actor" style="background:${color}" title="${escapeHtml(ev.actor_name || "")}"></span>
       <button type="button" class="row-menu" data-row-menu aria-label="Row actions">⋯</button>
     `;
