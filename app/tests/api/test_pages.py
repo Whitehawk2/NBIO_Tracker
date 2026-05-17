@@ -130,6 +130,39 @@ def test_reports_today_counts_render_in_big_numbers(client):
 # ---------------------------------------------------------------------------
 
 
+def test_tile_hint_rendered_outside_tile_button(client):
+    """
+    Critical accessibility bug in PR #46: tile-hint with its <button
+    class='hint-dismiss'> was nested INSIDE <button class='tile'>.
+    Nested interactive elements are HTML5-illegal and browsers
+    (specifically Android Chrome) silently dropped the inner click —
+    so the × button was unclickable and hints couldn't be dismissed.
+
+    Fix: each tile + hint is wrapped in a `<div class='tile-wrap'>`;
+    the tile-hint is a SIBLING of <button class='tile'>, not a child.
+    """
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    for tile_type in ("breast", "formula", "wee", "poo"):
+        assert f'data-type="{tile_type}"' in r.text
+        m = re.search(
+            rf'<button[^>]+data-type="{tile_type}"[^>]*>(.*?)</button>',
+            r.text,
+            flags=re.DOTALL,
+        )
+        assert m, f"{tile_type} tile button not found"
+        inner = m.group(1)
+        assert 'data-hint="long-press"' not in inner, (
+            f"{tile_type} tile must NOT have a nested data-hint long-press "
+            f"element — clicks on the inner hint-dismiss × get swallowed by "
+            f"the outer <button class='tile'>. Render the hint as a sibling."
+        )
+    # All four long-press hints still render (just outside their tiles now).
+    assert r.text.count('data-hint="long-press"') == 4
+
+
 def test_today_card_count_cells_have_stable_selectors(client):
     """today-card has `<b data-count="feed">…</b>` etc. on each count."""
     r = client.get("/")

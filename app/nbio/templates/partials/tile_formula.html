@@ -1,23 +1,25 @@
-<button class="tile tile-formula" data-type="formula" aria-label="Log formula feed">
-  <div class="tile-head">
-    <span class="emoji" aria-hidden="true">🍼</span>
-    <span class="label">FORMULA</span>
-  </div>
-  <div class="tile-ago" id="ago-formula">
-    {% if today.last.formula %}
-      <span data-rel="{{ today.last.formula.occurred_at }}">{{ today.last.formula.occurred_at | relative }}</span>
-      {% if today.last.formula.formula_brand %}
-        <span class="muted"> · {{ today.last.formula.formula_brand }}</span>
+<div class="tile-wrap">
+  <button class="tile tile-formula" data-type="formula" aria-label="Log formula feed">
+    <div class="tile-head">
+      <span class="emoji" aria-hidden="true">🍼</span>
+      <span class="label">FORMULA</span>
+    </div>
+    <div class="tile-ago" id="ago-formula">
+      {% if today.last.formula %}
+        <span data-rel="{{ today.last.formula.occurred_at }}">{{ today.last.formula.occurred_at | relative }}</span>
+        {% if today.last.formula.formula_brand %}
+          <span class="muted"> · {{ today.last.formula.formula_brand }}</span>
+        {% endif %}
+        {% if today.last.formula.actor_color %}
+          <span class="actor-dot" style="background: {{ today.last.formula.actor_color }}" title="{{ today.last.formula.actor_name or '' }}"></span>
+        {% endif %}
+      {% else %}
+        <span class="no-recent">no recent</span>
       {% endif %}
-      {% if today.last.formula.actor_color %}
-        <span class="actor-dot" style="background: {{ today.last.formula.actor_color }}" title="{{ today.last.formula.actor_name or '' }}"></span>
-      {% endif %}
-    {% else %}
-      <span class="no-recent">no recent</span>
-    {% endif %}
-  </div>
+    </div>
+  </button>
   <div class="tile-hint" data-hint="long-press" hidden>
     <span>Hold 3s to log instantly</span>
     <button type="button" class="hint-dismiss" aria-label="Dismiss hint">×</button>
   </div>
-</button>
+</div>

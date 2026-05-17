@@ -201,6 +201,11 @@ a { color: var(--accent); text-decoration: none; }
 
 /* ============ Tiles ============ */
 .tiles { display: flex; flex-direction: column; gap: 12px; margin: 8px 0 18px; }
+/* Each tile + its long-press hint is wrapped so the hint can sit as a
+   SIBLING of the <button class="tile">, not a child. Nested interactive
+   elements are HTML5-illegal and Chrome silently swallowed the hint's
+   dismiss × click (it bubbled to the outer tile button instead). */
+.tile-wrap { display: flex; flex-direction: column; gap: 6px; }
 .tile {
   appearance: none; border: 1px solid var(--border); cursor: pointer;
   width: 100%; min-height: 110px;
@@ -208,7 +213,6 @@ a { color: var(--accent); text-decoration: none; }
   border-radius: var(--radius-lg);
   padding: 18px 20px;
   display: flex; align-items: center; justify-content: space-between;
-  flex-wrap: wrap; row-gap: 10px;
   text-align: left;
   transition: transform .12s ease, background .12s ease;
   box-shadow: var(--shadow);
@@ -234,7 +238,6 @@ a { color: var(--accent); text-decoration: none; }
    stores its dismissal in localStorage so it never reappears. */
 .tile-hint, .first-row-hint {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  flex-basis: 100%;
   margin: 0; padding: 6px 10px;
   font-size: 12px; color: var(--text-muted);
   /* Solid background — color-mix(... transparent) was correct on Chrome
