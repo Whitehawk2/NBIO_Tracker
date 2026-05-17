@@ -135,6 +135,38 @@ class TestLastDaysRows:
 # ---------- _timeline_marks --------------------------------------------------
 
 
+class TestDayFormulaCc:
+    def test_sums_formula_volume_for_day(self):
+        events = [
+            {"occurred_at": "2026-05-16T03:00:00Z", "type": "formula", "formula_volume_ml": 120},
+            {"occurred_at": "2026-05-16T08:00:00Z", "type": "formula", "formula_volume_ml": 90},
+            {"occurred_at": "2026-05-15T22:00:00Z", "type": "formula", "formula_volume_ml": 200},
+            {"occurred_at": "2026-05-16T10:00:00Z", "type": "breast"},
+        ]
+        # 120 + 90 = 210 for 2026-05-16; the 2026-05-15 event is excluded.
+        assert pages._day_formula_cc(events, "2026-05-16") == 210
+        # The breast event doesn't contribute.
+
+    def test_zero_when_no_formula(self):
+        events = [{"occurred_at": "2026-05-16T03:00:00Z", "type": "breast"}]
+        assert pages._day_formula_cc(events, "2026-05-16") == 0
+
+    def test_skips_formula_without_volume(self):
+        events = [
+            {"occurred_at": "2026-05-16T03:00:00Z", "type": "formula", "formula_volume_ml": None},
+            {"occurred_at": "2026-05-16T04:00:00Z", "type": "formula", "formula_volume_ml": 0},
+            {"occurred_at": "2026-05-16T05:00:00Z", "type": "formula", "formula_volume_ml": 60},
+        ]
+        assert pages._day_formula_cc(events, "2026-05-16") == 60
+
+    def test_skips_malformed_occurred_at(self):
+        events = [
+            {"occurred_at": "bad-iso", "type": "formula", "formula_volume_ml": 100},
+            {"occurred_at": "2026-05-16T03:00:00Z", "type": "formula", "formula_volume_ml": 60},
+        ]
+        assert pages._day_formula_cc(events, "2026-05-16") == 60
+
+
 class TestTimelineMarks:
     def test_only_events_on_target_day(self):
         events = [
@@ -157,6 +189,16 @@ class TestTimelineMarks:
         marks = pages._timeline_marks(events, "2026-05-16")
         assert len(marks) == 1
         assert marks[0]["type"] == "wee"
+
+    def test_poo_quality_renders_in_tooltip(self):
+        """poo marks include their quality in the tooltip string."""
+        events = [
+            {"occurred_at": "2026-05-16T03:00:00Z", "type": "poo", "poo_quality": 4},
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert "type 4" in marks[0]["tooltip"]
+        assert "03:00" in marks[0]["tooltip"]
 
     def test_unknown_type_is_skipped(self):
         """

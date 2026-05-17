@@ -29,7 +29,7 @@
   </div>
   {% for day in days_list %}
     <div class="day-strip">
-      <div class="day-label">{{ day.label }}</div>
+      <div class="day-label">{{ day.label }}{% if day.formula_ml and day.formula_ml > 0 %} <span class="day-cc" data-day-cc>· {{ day.formula_ml }} cc</span>{% endif %}</div>
       <div class="hour-axis" aria-hidden="true">
         {% for h in range(0, 25, 3) %}<span>{{ '%02d'|format(h) }}</span>{% endfor %}
       </div>
@@ -39,7 +39,7 @@
         {% endfor %}
         {% for m in day.marks %}
           <rect x="{{ (m.x * 1000) | round(2) - 3 }}" y="8" width="6" height="40" rx="2"
-                class="mark mark-{{ m.type }}"/>
+                class="mark mark-{{ m.type }}"><title>{{ m.tooltip }}</title></rect>
         {% endfor %}
         {% if day.is_today %}
           <line x1="{{ (now_x * 1000) | round(2) }}" y1="0" x2="{{ (now_x * 1000) | round(2) }}" y2="56" class="now-line"/>

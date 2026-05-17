@@ -225,6 +225,110 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
     assert 'class="counts"' in r.text
 
 
+def test_reports_day_strip_shows_per_day_cc_total(client):
+    """
+    Each day-strip on the reports page shows the day's formula CC total
+    inline with the day label (e.g. 'Today · 240 cc'). Without this,
+    parents have to scroll all the way down to the totals table.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    for i, vol in enumerate([120, 90]):
+        client.post(
+            "/api/events",
+            json={
+                "type": "formula",
+                "occurred_at": f"{today}T0{i + 1}:00:00.000Z",
+                "formula_brand": "Materna",
+                "formula_volume_ml": vol,
+                "idempotency_key": f"idem-day-strip-cc-{i}",
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The day-strip's day-label area must include 'cc' for the today row.
+    import re
+
+    m = re.search(
+        r'<div class="day-label">[^<]*Today[^<]*<span class="day-cc"[^>]*>([^<]+)</span>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "expected `<span class='day-cc'>...</span>` on today's day-label"
+    assert "210" in m.group(1) and "cc" in m.group(1)
+
+
+def test_reports_day_strip_omits_cc_when_no_formula(client):
+    """A day with no formula logged shows the day label without the cc span."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "idempotency_key": "idem-no-cc-day",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # No `day-cc` span on a day with no formula.
+    import re
+
+    # Search for the today strip's day-label.
+    m = re.search(
+        r'<div class="day-label">[^<]*Today[^<]*(<span class="day-cc"[^>]*>)?',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "today's day-label not found"
+    # The day-cc span shouldn't be present (group 1 is None).
+    assert m.group(1) is None, (
+        f"day-cc span must NOT render on days with no formula logged; got: {m.group(0)!r}"
+    )
+
+
+def test_reports_timeline_marks_have_title_tooltips(client):
+    """
+    Each timeline mark must carry a <title> element for hover/long-press
+    tooltip. For formula events the title includes the cc value; for
+    breast it includes side + duration.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 240,
+            "idempotency_key": "idem-tooltip-f",
+            "created_by_device": "device-test",
+        },
+    )
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T05:00:00.000Z",
+            "feed_side": "R",
+            "feed_duration_min": 12,
+            "idempotency_key": "idem-tooltip-b",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # Formula tooltip must include cc value and brand.
+    assert "<title>" in r.text
+    assert "240 cc" in r.text
+    assert "Materna" in r.text
+    # Breast tooltip must include side + duration.
+    assert "12m" in r.text
+
+
 def test_reports_timeline_breast_event_renders_feed_class(client):
     """
     The timeline mark for a breast event must use the `.mark-feed` CSS

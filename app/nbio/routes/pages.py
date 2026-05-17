@@ -138,6 +138,24 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     )
 
 
+def _mark_tooltip(e: dict[str, Any], hhmm: str) -> str:
+    """Build the per-mark `<title>` tooltip string for the reports timeline."""
+    parts: list[str] = [hhmm]
+    if e["type"] == "breast":
+        if e.get("feed_side"):
+            parts.append(str(e["feed_side"]))
+        if e.get("feed_duration_min"):
+            parts.append(f"{e['feed_duration_min']}m")
+    elif e["type"] == "formula":
+        if e.get("formula_brand"):
+            parts.append(str(e["formula_brand"]))
+        if e.get("formula_volume_ml"):
+            parts.append(f"{e['formula_volume_ml']} cc")
+    elif e["type"] == "poo" and e.get("poo_quality"):
+        parts.append(f"type {e['poo_quality']}")
+    return " · ".join(parts)
+
+
 def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str, Any]]:
     """
     Compute x-positions (0..1) for events occurring on day_iso (LOCAL date).
@@ -146,6 +164,10 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
     the timeline CSS classes (.mark-feed / .mark-wee / .mark-poo).
     Breast and formula events both map to `feed` — the reports timeline
     doesn't distinguish (the daily-totals table below does).
+
+    Each mark also carries a `tooltip` string used by `<title>` inside
+    the SVG `<rect>` so hover / long-press surfaces per-event details
+    (time + side + duration for breast, time + brand + cc for formula).
     """
     type_to_mark = {"breast": "feed", "formula": "feed", "wee": "wee", "poo": "poo"}
     marks: list[dict[str, Any]] = []
@@ -165,8 +187,31 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
         mark_type = type_to_mark.get(e["type"])
         if mark_type is None:
             continue
-        marks.append({"x": seconds / 86400.0, "type": mark_type})
+        hhmm = f"{local.hour:02d}:{local.minute:02d}"
+        marks.append(
+            {
+                "x": seconds / 86400.0,
+                "type": mark_type,
+                "tooltip": _mark_tooltip(e, hhmm),
+            }
+        )
     return marks
+
+
+def _day_formula_cc(events: list[dict[str, Any]], day_iso: str) -> int:
+    """Sum formula_volume_ml for a given LOCAL day. 0 if no formula logged."""
+    total = 0
+    for e in events:
+        if e.get("type") != "formula" or not e.get("formula_volume_ml"):
+            continue
+        try:
+            dt = datetime.fromisoformat(e["occurred_at"].replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if dt.astimezone().date().isoformat() != day_iso:
+            continue
+        total += int(e["formula_volume_ml"])
+    return total
 
 
 @router.get("/reports", response_class=HTMLResponse)
@@ -192,6 +237,7 @@ def reports(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
             {
                 "day": d.isoformat(),
                 "label": _day_label(d, today),
+                "formula_ml": _day_formula_cc(all_events, d.isoformat()),
                 "marks": _timeline_marks(all_events, d.isoformat()),
                 "is_today": i == 0,
             }

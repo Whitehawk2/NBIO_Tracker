@@ -455,6 +455,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 
 .day-strip { margin: 14px 0; }
 .day-label { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.day-label .day-cc { font-weight: 500; color: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .hour-axis {
   display: grid; grid-template-columns: repeat(9, 1fr);
   font-size: 11px; color: var(--text-muted);
