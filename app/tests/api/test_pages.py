@@ -179,6 +179,104 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert "FORMULA" in r.text
 
 
+def test_formula_tile_shows_recent_when_breast_is_more_recent(client):
+    """
+    Production bug (May 2026): with a formula logged earlier and a breast
+    logged after it, the formula tile rendered "no recent" because the
+    tile read from the combined `feed` key which always pointed at the
+    most-recent feed of EITHER kind. Each tile must drive off its own
+    per-type "last X".
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T01:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 120,
+            "idempotency_key": "idem-tile-f-1",
+            "created_by_device": "device-test",
+        },
+    )
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T05:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 12,
+            "idempotency_key": "idem-tile-b-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    # The formula tile's tile-ago region must NOT show "no recent" — a
+    # formula WAS logged today. Anchor on the formula tile's id.
+    import re
+
+    m = re.search(
+        r'<div class="tile-ago" id="ago-formula">(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "formula tile-ago region not found"
+    formula_ago = m.group(1)
+    assert "no recent" not in formula_ago, (
+        "formula tile must show the last formula time even when the most-"
+        "recent feed overall is a breast feed"
+    )
+    assert "Materna" in formula_ago
+
+    # Symmetric: the breast tile must also still show its own recent.
+    m = re.search(
+        r'<div class="tile-ago" id="ago-breast">(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "breast tile-ago region not found"
+    assert "no recent" not in m.group(1)
+
+
+def test_breast_tile_shows_recent_when_formula_is_more_recent(client):
+    """Mirror of the above: breast logged earlier, formula more recently."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T01:00:00.000Z",
+            "feed_side": "R",
+            "feed_duration_min": 9,
+            "idempotency_key": "idem-tile-b-2",
+            "created_by_device": "device-test",
+        },
+    )
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T05:00:00.000Z",
+            "formula_brand": "Nutrilon",
+            "formula_volume_ml": 90,
+            "idempotency_key": "idem-tile-f-2",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    m = re.search(
+        r'<div class="tile-ago" id="ago-breast">(.*?)</div>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m
+    assert "no recent" not in m.group(1)
+
+
 def test_index_renders_formula_event_row_with_brand_and_volume(client):
     """A logged formula entry shows up with brand + volume in the row."""
     client.post(

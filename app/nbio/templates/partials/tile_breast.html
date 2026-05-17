@@ -4,10 +4,10 @@
     <span class="label">BREAST</span>
   </div>
   <div class="tile-ago" id="ago-breast">
-    {% if today.last.feed and today.last.feed.type == 'breast' %}
-      <span data-rel="{{ today.last.feed.occurred_at }}">{{ today.last.feed.occurred_at | relative }}</span>
-      {% if today.last.feed.actor_color %}
-        <span class="actor-dot" style="background: {{ today.last.feed.actor_color }}" title="{{ today.last.feed.actor_name or '' }}"></span>
+    {% if today.last.breast %}
+      <span data-rel="{{ today.last.breast.occurred_at }}">{{ today.last.breast.occurred_at | relative }}</span>
+      {% if today.last.breast.actor_color %}
+        <span class="actor-dot" style="background: {{ today.last.breast.actor_color }}" title="{{ today.last.breast.actor_name or '' }}"></span>
       {% endif %}
     {% else %}
       <span class="muted">no recent</span>

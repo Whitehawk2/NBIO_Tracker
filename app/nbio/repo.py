@@ -254,25 +254,19 @@ def last_event_of_each_type(
     conn: sqlite3.Connection, baby_id: int = 1
 ) -> dict[str, dict[str, Any]]:
     """
-    Most recent event per consumer-facing category. Breast + formula are
-    combined under the "feed" key so the today_card can say "last feed:
-    14m ago" without caring which kind.
+    Most recent event per consumer-facing category. Returns up to five
+    keys: `breast`, `formula`, `feed` (the most recent of breast OR
+    formula — used by the combined today-card "last feed" line), `wee`,
+    `poo`. Keys for types with no logged event are absent.
+
+    The separate per-type breast/formula keys exist because each tile
+    shows its own "last X ago" — driving them off the combined `feed`
+    key alone makes whichever tile isn't the most-recent feed type
+    silently show "no recent" (production bug, May 2026).
     """
     out: dict[str, dict[str, Any]] = {}
 
-    # Combined feed (breast OR formula) — pick the most recent of either
-    row = conn.execute(
-        f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
-        "WHERE e.baby_id = ? AND e.type IN ('breast', 'formula') AND e.deleted_at IS NULL "
-        "ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1",
-        (baby_id,),
-    ).fetchone()
-    if row:
-        d = _row_to_dict(row)
-        assert d is not None
-        out["feed"] = d
-
-    for t in ("wee", "poo"):
+    for t in ("breast", "formula", "wee", "poo"):
         row = conn.execute(
             f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
             "WHERE e.baby_id = ? AND e.type = ? AND e.deleted_at IS NULL "
@@ -283,6 +277,18 @@ def last_event_of_each_type(
             d = _row_to_dict(row)
             assert d is not None
             out[t] = d
+
+    # Combined feed = the more recent of breast or formula. Compared by
+    # `occurred_at` directly — ISO-8601 UTC strings sort lexically the
+    # same way as their datetimes.
+    breast = out.get("breast")
+    formula = out.get("formula")
+    if breast and formula:
+        out["feed"] = breast if breast["occurred_at"] >= formula["occurred_at"] else formula
+    elif breast:
+        out["feed"] = breast
+    elif formula:
+        out["feed"] = formula
     return out
 
 
