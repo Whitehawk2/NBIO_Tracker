@@ -140,7 +140,7 @@ cadence motivates faster Pi upgrades.
 
 ## 9. ✅ PWA service worker doesn't pick up upgrades — [#23](https://github.com/Whitehawk2/NBIO_Tracker/issues/23)
 
-**Status:** Fixed (PR pending merge).
+**Status:** Done — merged via [PR #26](https://github.com/Whitehawk2/NBIO_Tracker/pull/26).
 
 - New `nbio.version.static_assets_hash()` — sha256 of every file under
   `nbio/static/`, truncated to 12 hex chars. Path-and-content sensitive,
