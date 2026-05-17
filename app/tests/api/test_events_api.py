@@ -217,6 +217,83 @@ def test_delete_then_undelete_round_trip(client, freezer):
     assert restored["event"]["updated_at"] > first_updated
 
 
+# ---------------------------------------------------------------------------
+# GET /api/events/{id} — required so the edit modal can fetch the full row
+# instead of relying on whatever the server happened to render into the
+# `.event-row`'s DOM. The legacy client-side hydration in app.js hard-codes
+# `notes: null` for every server-rendered row, which is why notes appeared
+# to vanish after a page reload (issue #28 finding #4).
+# ---------------------------------------------------------------------------
+
+
+def test_get_event_by_id_returns_full_row(client):
+    created = client.post(
+        "/api/events",
+        json=_payload(idempotency_key="idem-getbyid-1", notes="midnight feed, both sides"),
+    ).json()
+    event_id = created["event"]["id"]
+
+    r = client.get(f"/api/events/{event_id}")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"event"}
+    event = body["event"]
+    # Every contract field should surface — this is what the modal will read
+    expected_keys = {
+        "id", "baby_id", "type", "occurred_at",
+        "feed_side", "feed_duration_min", "poo_quality", "notes",
+        "idempotency_key", "created_by_device",
+        "created_at", "updated_at", "deleted_at",
+        "actor_color", "actor_name",
+    }
+    assert expected_keys <= set(event), f"missing keys: {expected_keys - set(event)}"
+    assert event["id"] == event_id
+    assert event["notes"] == "midnight feed, both sides"
+    assert event["type"] == "feed"
+    assert event["feed_side"] == "L"
+
+
+def test_get_event_by_id_404_for_missing(client):
+    r = client.get("/api/events/999999")
+    assert r.status_code == 404
+
+
+def test_get_event_with_notes_round_trips_via_modal_path(client):
+    """
+    Belt-and-braces for #28-#4: POST with notes, GET by id, the notes
+    value is exactly what we wrote. This is the exact path the modal
+    will follow on row-click.
+    """
+    notes = "ate well, burped, no fuss"
+    created = client.post(
+        "/api/events",
+        json=_payload(idempotency_key="idem-roundtrip-notes", notes=notes),
+    ).json()
+    event_id = created["event"]["id"]
+    fetched = client.get(f"/api/events/{event_id}").json()["event"]
+    assert fetched["notes"] == notes
+
+
+def test_get_event_by_id_returns_deleted_row(client):
+    """
+    Soft-deleted rows are still fetchable by id so the modal can show an
+    'undelete' affordance and the user can recover an accidental delete.
+    """
+    created = client.post(
+        "/api/events",
+        json=_payload(idempotency_key="idem-deleted-getbyid", notes="oops"),
+    ).json()
+    event_id = created["event"]["id"]
+    client.delete(f"/api/events/{event_id}")
+
+    r = client.get(f"/api/events/{event_id}")
+    assert r.status_code == 200
+    event = r.json()["event"]
+    assert event["id"] == event_id
+    assert event["notes"] == "oops"
+    assert event["deleted_at"] is not None
+
+
 def test_feeds_last_side(client):
     """Returns the side of the most recent non-deleted feed (null when none)."""
     assert client.get("/api/feeds/last-side").json() == {"last_side": None}
