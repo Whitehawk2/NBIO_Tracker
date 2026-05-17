@@ -31,18 +31,45 @@ def _freeze(freezer):
     yield freezer
 
 
-def _evt(t, idem, occurred_at, dur=None):
+def _evt(t, idem, occurred_at, dur=None, brand=None, volume_ml=None):
     return EventCreate(
         type=t,
         occurred_at=occurred_at,
         feed_duration_min=dur,
+        formula_brand=brand,
+        formula_volume_ml=volume_ml,
         idempotency_key=f"idem-{idem}-pad",
         created_by_device="device-1",
     )
 
 
 def test_today_counts_zero_when_empty(conn):
-    assert today_counts(conn) == {"feed": 0, "wee": 0, "poo": 0}
+    assert today_counts(conn) == {"feed": 0, "wee": 0, "poo": 0, "formula_ml": 0}
+
+
+def test_today_counts_aggregates_formula_volume_ml(conn):
+    """
+    Daily formula intake is a first-class glance metric — `today_counts`
+    must include the SUM of `formula_volume_ml` across today's formula
+    feeds under the `formula_ml` key. Breast feeds and rows without a
+    volume don't contribute.
+    """
+    create_event(conn, _evt("formula", "f1", f"{TODAY}T03:00:00.000Z", brand="Materna", volume_ml=120))
+    create_event(conn, _evt("formula", "f2", f"{TODAY}T06:00:00.000Z", brand="Materna", volume_ml=90))
+    create_event(conn, _evt("breast", "b1", f"{TODAY}T09:00:00.000Z"))
+    # An older formula must NOT contribute.
+    create_event(conn, _evt("formula", "f3", "2026-05-15T03:00:00.000Z", brand="Materna", volume_ml=200))
+    counts = today_counts(conn)
+    assert counts["formula_ml"] == 210
+    assert counts["feed"] == 3  # 2 formula + 1 breast
+
+
+def test_today_counts_formula_volume_zero_when_volume_null(conn):
+    """A formula row without a volume_ml entry must not break aggregation."""
+    create_event(conn, _evt("formula", "f1", f"{TODAY}T03:00:00.000Z", brand="Materna"))
+    counts = today_counts(conn)
+    assert counts["formula_ml"] == 0
+    assert counts["feed"] == 1
 
 
 def test_today_counts_aggregates_today_only(conn):
@@ -51,7 +78,7 @@ def test_today_counts_aggregates_today_only(conn):
     create_event(conn, _evt("poo", "i3", f"{TODAY}T05:00:00.000Z"))
     create_event(conn, _evt("wee", "i4", "2020-01-01T00:00:00.000Z"))
     counts = today_counts(conn)
-    assert counts == {"feed": 2, "wee": 0, "poo": 1}
+    assert counts == {"feed": 2, "wee": 0, "poo": 1, "formula_ml": 0}
 
 
 def test_today_counts_ignores_deleted(conn):
@@ -79,6 +106,27 @@ def test_daily_totals_avg_only_set_when_feeds_have_duration(conn):
     create_event(conn, _evt("breast", "i1", f"{TODAY}T03:00:00.000Z", dur=None))
     rows = daily_totals(conn, days=14)
     assert rows[0]["avg_feed_min"] is None
+
+
+def test_daily_totals_sums_formula_volume_ml_per_day(conn):
+    """
+    Each daily-totals row carries a `formula_ml` SUM so the reports
+    table and the last-3-days mini-table can show per-day intake at a
+    glance. Volume_ml NULLs are treated as 0.
+    """
+    create_event(conn, _evt("formula", "f1", f"{TODAY}T03:00:00.000Z", brand="Materna", volume_ml=120))
+    create_event(conn, _evt("formula", "f2", f"{TODAY}T06:00:00.000Z", brand="Materna", volume_ml=90))
+    create_event(conn, _evt("formula", "f3", f"{TODAY}T09:00:00.000Z", brand="Materna"))  # NULL volume
+    rows = daily_totals(conn, days=14)
+    assert len(rows) == 1
+    assert rows[0]["formula_ml"] == 210
+
+
+def test_daily_totals_formula_ml_zero_when_no_formula(conn):
+    """Days with only breast/wee/poo events get `formula_ml = 0`."""
+    create_event(conn, _evt("breast", "i1", f"{TODAY}T03:00:00.000Z"))
+    rows = daily_totals(conn, days=14)
+    assert rows[0]["formula_ml"] == 0
 
 
 def test_daily_totals_excludes_pre_window(conn):

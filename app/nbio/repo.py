@@ -296,6 +296,9 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
     """
     Counts since local midnight today, in the server-configured tz.
     Breast + formula are combined under "feed" per the today_card contract.
+    Total formula intake (cc/ml) for today is exposed as `formula_ml` —
+    it's a glance metric on its own (a parent wants to know "did baby
+    drink enough today?" without doing mental arithmetic).
 
     Local-tz bucketing avoids the issue #28 #1 bug where late-evening
     local entries appeared in yesterday's UTC bucket.
@@ -304,10 +307,13 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
 
     offset = local_offset_modifier(settings.tz)
     today = local_today_str(settings.tz)
-    out = {"feed": 0, "wee": 0, "poo": 0}
+    out = {"feed": 0, "wee": 0, "poo": 0, "formula_ml": 0}
     cur = conn.execute(
         """
-        SELECT type, COUNT(*) AS n FROM events
+        SELECT type,
+               COUNT(*) AS n,
+               COALESCE(SUM(formula_volume_ml), 0) AS volume_ml
+        FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
           AND substr(datetime(occurred_at, ?), 1, 10) = ?
         GROUP BY type
@@ -319,6 +325,8 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
             out["feed"] += r["n"]
         else:
             out[r["type"]] = r["n"]
+        if r["type"] == "formula":
+            out["formula_ml"] += int(r["volume_ml"] or 0)
     return out
 
 
@@ -351,7 +359,8 @@ def daily_totals(
         SELECT substr(datetime(occurred_at, ?), 1, 10) AS day,
                type,
                COUNT(*) AS n,
-               AVG(feed_duration_min) AS avg_feed_min
+               AVG(feed_duration_min) AS avg_feed_min,
+               COALESCE(SUM(formula_volume_ml), 0) AS volume_ml
         FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
           AND substr(datetime(occurred_at, ?), 1, 10) >= ?
@@ -371,10 +380,13 @@ def daily_totals(
                 "feed": 0,
                 "wee": 0,
                 "poo": 0,
+                "formula_ml": 0,
                 "avg_feed_min": None,
             },
         )
         d[r["type"]] = r["n"]
+        if r["type"] == "formula":
+            d["formula_ml"] += int(r["volume_ml"] or 0)
         if r["type"] in ("breast", "formula"):
             d["feed"] = d["breast"] + d["formula"]
         if r["type"] == "breast" and r["avg_feed_min"] is not None:
