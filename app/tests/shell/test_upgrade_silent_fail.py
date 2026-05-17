@@ -277,3 +277,145 @@ def test_source_tag_fetch_uses_force():
                 "`git fetch --tags` must use --force so locally-conflicting "
                 f"tags don't abort the upgrade. Offending line: {stripped!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# "Already deployed" detection — issue: with the old TARGET_SHA vs HEAD
+# check, a user who manually `git pull`s before running upgrade.sh would
+# see "Already on $REF — nothing to do" while the container still runs the
+# prior code. Fix: track deployed SHA in data/.upgrade-current-ref, written
+# only after a successful upgrade (post-healthz). Short-circuit only when
+# the file matches the target.
+# ---------------------------------------------------------------------------
+
+
+def test_upgrade_proceeds_when_head_matches_target_but_nothing_deployed_yet(
+    staged_repo, tmp_path
+):
+    """
+    User did `git pull` themselves → HEAD already matches origin/master.
+    No `data/.upgrade-current-ref` exists yet. Script should NOT short-
+    circuit; it should still run the build/deploy because the container
+    has never been marked as deployed at this SHA.
+    """
+    stub_dir = tmp_path / "stubs"
+    _make_docker_stub(stub_dir)
+    env = _base_env(stub_dir)
+    env["NBIO_SKIP_BACKUP"] = "1"
+    env["NBIO_SKIP_BUILD"] = "1"
+    env["NBIO_SKIP_HEALTHZ"] = "1"
+
+    # Start ON master (simulating `git pull` having already happened)
+    subprocess.run(
+        ["git", "checkout", "-q", "master"], cwd=str(staged_repo), check=True
+    )
+
+    # Sanity: no current-ref file yet
+    assert not (staged_repo / "data" / ".upgrade-current-ref").exists()
+
+    r = _run(staged_repo, "--ref", "master", "--yes", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    # Should NOT have early-exited with "nothing to do"
+    combined = r.stdout + r.stderr
+    assert "Already on master — nothing to do" not in combined, (
+        f"Script should have proceeded with deploy; got:\n{combined}"
+    )
+
+    # And should have written the current-ref file after the deploy
+    current_ref_file = staged_repo / "data" / ".upgrade-current-ref"
+    assert current_ref_file.exists()
+    head_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(staged_repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert current_ref_file.read_text().strip() == head_sha
+
+
+def test_upgrade_short_circuits_when_current_ref_matches_target(
+    staged_repo, tmp_path
+):
+    """
+    Container is genuinely at the target SHA (current-ref says so).
+    Script should short-circuit cleanly.
+    """
+    stub_dir = tmp_path / "stubs"
+    _make_docker_stub(stub_dir)
+    env = _base_env(stub_dir)
+    env["NBIO_SKIP_BACKUP"] = "1"
+    env["NBIO_SKIP_BUILD"] = "1"
+    env["NBIO_SKIP_HEALTHZ"] = "1"
+
+    subprocess.run(
+        ["git", "checkout", "-q", "master"], cwd=str(staged_repo), check=True
+    )
+    head_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(staged_repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    # Pre-populate current-ref to match
+    (staged_repo / "data").mkdir(exist_ok=True)
+    (staged_repo / "data" / ".upgrade-current-ref").write_text(head_sha + "\n")
+
+    r = _run(staged_repo, "--ref", "master", "--yes", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    combined = r.stdout + r.stderr
+    assert "nothing to do" in combined.lower(), (
+        f"Script should have short-circuited; got:\n{combined}"
+    )
+
+
+def test_upgrade_proceeds_when_current_ref_is_stale(staged_repo, tmp_path):
+    """
+    Container marked at SHA X, target is SHA Y (different). Should deploy.
+    """
+    stub_dir = tmp_path / "stubs"
+    _make_docker_stub(stub_dir)
+    env = _base_env(stub_dir)
+    env["NBIO_SKIP_BACKUP"] = "1"
+    env["NBIO_SKIP_BUILD"] = "1"
+    env["NBIO_SKIP_HEALTHZ"] = "1"
+
+    # Start at v1.0.0
+    subprocess.run(
+        ["git", "checkout", "-q", "v1.0.0"], cwd=str(staged_repo), check=True
+    )
+    head_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(staged_repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    # Pre-populate current-ref to point at v0.9.0 (an older SHA)
+    v09_sha = subprocess.run(
+        ["git", "rev-parse", "v0.9.0^{commit}"],
+        cwd=str(staged_repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    (staged_repo / "data").mkdir(exist_ok=True)
+    (staged_repo / "data" / ".upgrade-current-ref").write_text(v09_sha + "\n")
+
+    r = _run(staged_repo, "v1.0.0", "--yes", env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    # Should NOT short-circuit
+    combined = r.stdout + r.stderr
+    assert "nothing to do" not in combined.lower(), (
+        f"Stale current-ref should not short-circuit; got:\n{combined}"
+    )
+    # And should update current-ref to the new SHA
+    assert (
+        (staged_repo / "data" / ".upgrade-current-ref").read_text().strip() == head_sha
+    )
