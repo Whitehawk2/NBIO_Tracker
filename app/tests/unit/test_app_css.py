@@ -215,6 +215,31 @@ def test_tile_hint_background_uses_solid_color():
     )
 
 
+def test_dark_mode_feed_color_brightened():
+    """
+    The reports timeline feed marks were `#5fa088` in dark mode —
+    technically WCAG AA contrast on `--bg-sunk`, but at the 4px SVG
+    rect width (rendered ~1.6 CSS px on Pixel 9's high DPI) the marks
+    were perceptually invisible. Pair the wider-mark fix in reports.html
+    with a brighter dark-mode feed colour for better salience.
+    """
+    src = _src()
+    m = re.search(r"html\.dark\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "html.dark token block not found"
+    block = m.group(1)
+    feed = re.search(r"--feed\s*:\s*([#0-9a-fA-F]+)", block)
+    assert feed, "html.dark must declare --feed"
+    value = feed.group(1).lower()
+    assert value != "#5fa088", (
+        "dark-mode --feed must be bumped from the low-salience value #5fa088"
+    )
+    # New value should be visibly brighter: each channel ~>= 0x70.
+    assert re.match(r"#[7-f][0-9a-f]{5}$", value), (
+        f"dark-mode --feed should be visibly brighter (>= ~#707070 per "
+        f"channel); got {value}"
+    )
+
+
 def test_dark_mode_text_muted_bumped():
     """
     `html.dark` `--text-muted` must be the bumped contrast value

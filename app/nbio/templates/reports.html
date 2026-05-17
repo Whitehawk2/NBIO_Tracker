@@ -38,7 +38,7 @@
           <line x1="{{ (h/24*1000) | round(1) }}" y1="0" x2="{{ (h/24*1000) | round(1) }}" y2="56" class="hour-tick"/>
         {% endfor %}
         {% for m in day.marks %}
-          <rect x="{{ (m.x * 1000) | round(2) - 2 }}" y="8" width="4" height="40" rx="2"
+          <rect x="{{ (m.x * 1000) | round(2) - 3 }}" y="8" width="6" height="40" rx="2"
                 class="mark mark-{{ m.type }}"/>
         {% endfor %}
         {% if day.is_today %}

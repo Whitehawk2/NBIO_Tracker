@@ -164,6 +164,40 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
     assert 'class="counts"' in r.text
 
 
+def test_reports_timeline_marks_use_wider_width(client):
+    """
+    The reports timeline marks were `<rect width="4">` — at Pixel 9's
+    high DPI that renders ~1.6 CSS px and the user couldn't see feed
+    marks at all. Widen to 6 (~2.4 CSS px) so events are visible at
+    arm's length without changing the timeline density.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "idempotency_key": "idem-timeline-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # No `width="4"` marks (the old too-thin value).
+    import re
+
+    assert not re.search(r'<rect[^>]*\bwidth="4"', r.text), (
+        "reports timeline marks must NOT use width='4' (too thin to see "
+        "on high-DPI phones); use width='6' instead"
+    )
+    # At least one `width="6"` mark for the logged event.
+    assert re.search(r'<rect[^>]*\bwidth="6"', r.text), (
+        "reports timeline must use width='6' marks for visibility"
+    )
+
+
 def test_today_card_has_formula_strip(client):
     """
     Today-card has a dedicated `today-formula-strip` element below the
