@@ -175,6 +175,77 @@ def test_index_renders_breast_and_formula_tiles(client):
     assert "FORMULA" in r.text
 
 
+def test_first_row_hint_rendered_when_events_present(client):
+    """
+    With at least one event logged, a dismissible 'Tap to edit · swipe
+    left to delete' hint renders ABOVE the event list (outside the
+    `<ul>` to avoid the sticky day-header's z-index context).
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-frh-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'data-hint="first-row"' in r.text
+    assert "Tap to edit" in r.text and "swipe left to delete" in r.text
+
+
+def test_first_row_hint_absent_on_empty_state(client):
+    """No events → no first-row hint (the empty-state copy carries the cue)."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'data-hint="first-row"' not in r.text
+
+
+def test_first_row_hint_emitted_only_once(client):
+    """
+    Multiple events across multiple days → still only ONE first-row
+    hint (the hint is for the list as a whole, not per row).
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    for i in range(3):
+        client.post(
+            "/api/events",
+            json={
+                "type": "wee",
+                "occurred_at": f"{today}T0{i+1}:00:00.000Z",
+                "idempotency_key": f"idem-frh-multi-{i}",
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert r.text.count('data-hint="first-row"') == 1
+
+
+def test_first_row_hint_starts_hidden(client):
+    """Hint starts `hidden`; JS un-hides if not dismissed."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "wee",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "idempotency_key": "idem-frh-hidden",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    m = re.search(r'<[^>]*data-hint="first-row"([^>]*)>', r.text)
+    assert m
+    assert "hidden" in m.group(1)
+
+
 def test_tile_long_press_caption_rendered_for_each_tile(client):
     """
     Every tile (4 total: breast / formula / wee / poo) carries a small

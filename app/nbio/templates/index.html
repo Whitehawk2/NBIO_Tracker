@@ -16,6 +16,10 @@
 <section class="event-list-wrap" aria-label="Recent events">
   <h2 class="section-title">Last 3 days</h2>
   {% if grouped_events %}
+    <p class="first-row-hint" data-hint="first-row" hidden>
+      <span>Tap to edit · swipe left to delete</span>
+      <button type="button" class="hint-dismiss" aria-label="Dismiss hint">×</button>
+    </p>
     <ul class="event-list" id="event-list">
       {% for group in grouped_events %}
         <li class="day-header" data-day="{{ group.day }}" aria-label="{{ group.label }}">{{ group.label }}</li>
