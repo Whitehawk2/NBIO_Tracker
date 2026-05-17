@@ -1208,6 +1208,23 @@
     });
   }
 
+  // Tap-to-show-detail on reports timeline marks (#11.2 follow-up).
+  // SVG <title> children only render on hover, so touch devices saw no
+  // tooltip. Bind click handlers; on tap we read the rect's <title>
+  // text and surface it in a transient toast.
+  function wireTimelineMarks() {
+    $$(".timeline .mark").forEach((rect) => {
+      const title = rect.querySelector("title");
+      if (!title) return;
+      rect.style.cursor = "pointer";
+      rect.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const text = title.textContent.trim();
+        if (text) showToast(text, 4000);
+      });
+    });
+  }
+
   // ----- wire tiles (tap = modal, long-press = log now)
   function wireTiles() {
     const map = {
@@ -1312,6 +1329,7 @@
     wireTiles();
     wireExistingRows();
     wireCopySummary();
+    wireTimelineMarks();
     wireSyncDot();
     wireHints();
     refreshRelTimes();

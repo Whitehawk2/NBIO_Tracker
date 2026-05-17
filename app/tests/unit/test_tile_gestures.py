@@ -213,6 +213,31 @@ def test_row_html_includes_notes_icon_branch():
     assert "ev.notes" in block, "the notes-icon emission in rowHTML must be conditional on ev.notes"
 
 
+def test_timeline_marks_wired_for_tap_to_show_detail():
+    """
+    On Android Chrome the SVG `<title>` element only renders on hover
+    (which touch devices don't have). User: 'feedings on reports
+    timeline still not clickable, no way to know per-feeding cc amount.'
+
+    Fix: a `wireTimelineMarks()` function binds click handlers to each
+    `.timeline .mark` rect. On click it reads the `<title>` text and
+    surfaces it via the existing toast.
+    """
+    src = _src()
+    assert "function wireTimelineMarks" in src, (
+        "expected a `wireTimelineMarks()` function in app.js so timeline "
+        "marks are tappable on touch devices"
+    )
+    idx = src.find("function wireTimelineMarks")
+    block = src[idx : idx + 600]
+    assert ".timeline .mark" in block or "timeline .mark" in block, (
+        "wireTimelineMarks must target `.timeline .mark` rects"
+    )
+    assert "showToast" in block, (
+        "wireTimelineMarks must call showToast() with the mark's title text"
+    )
+
+
 def test_sse_deleted_handler_suppresses_own_echo():
     """
     Critical reactive-refresh bug: `doSoftDelete` calls

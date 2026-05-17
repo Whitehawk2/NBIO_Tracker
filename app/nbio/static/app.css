@@ -470,6 +470,9 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline .mark-feed { fill: var(--feed); }
 .timeline .mark-wee  { fill: var(--wee); }
 .timeline .mark-poo  { fill: var(--poo); }
+/* Tap target — wireTimelineMarks binds click on .mark to show details. */
+.timeline .mark { cursor: pointer; }
+.timeline .mark:hover, .timeline .mark:active { opacity: 0.8; }
 .timeline .now-line  { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 3 3; }
 .timeline-legend {
   display: flex; gap: 14px; font-size: 12px; color: var(--text-muted);
