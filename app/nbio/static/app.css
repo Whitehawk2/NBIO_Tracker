@@ -179,7 +179,9 @@ a { color: var(--accent); text-decoration: none; }
   box-shadow: var(--shadow);
 }
 .tile:active { transform: scale(.985); }
+.tile-breast,
 .tile-feed { background: linear-gradient(135deg, var(--feed-bg), var(--bg-elev) 70%); }
+.tile-formula { background: linear-gradient(135deg, var(--feed-bg), var(--bg-elev) 70%); }
 .tile-wee  { background: linear-gradient(135deg, var(--wee-bg),  var(--bg-elev) 70%); }
 .tile-poo  { background: linear-gradient(135deg, var(--poo-bg),  var(--bg-elev) 70%); }
 
@@ -268,6 +270,9 @@ a { color: var(--accent); text-decoration: none; }
 
 /* segmented */
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
+/* segmented-wrap: same look but wraps to multiple rows (used by the formula
+   volume picker which has 8 chips + custom — too many for one row on a phone) */
+.segmented-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; }
 .seg {
   appearance: none; border: 1px solid var(--border); background: var(--bg-elev);
   padding: 14px; border-radius: var(--radius); font-size: 16px; font-weight: 600;

@@ -213,9 +213,9 @@
     return { el: wrap, getDate };
   }
 
-  // ----- feed modal
+  // ----- feed modal (breast)
   async function openFeedModal(prefill) {
-    const backdrop = makeModalShell("🤱 Log feed");
+    const backdrop = makeModalShell("🤱 Log breast feed");
     const body = backdrop.querySelector(".modal-body");
 
     const time = buildTimeChips(prefill?.offsetMin || 0);
@@ -279,6 +279,146 @@
         occurred_at: time.getDate().toISOString(),
         feed_side: side,
         feed_duration_min: dur,
+        notes: notes.value.trim() || null,
+        skip_dup_check: holdFired,
+      });
+    });
+    body.appendChild(submit);
+    document.body.appendChild(backdrop);
+  }
+
+  // ----- formula modal (bottle)
+  // Mirrors openFeedModal — same time chips + notes + 700ms-hold-to-skip-dup,
+  // but with brand chips (Materna / Nutrilon / Custom) and volume chips
+  // (30…240 cc + Custom) instead of side + duration. Smart-defaults pull
+  // the last formula brand+volume from /api/feeds/last.
+  async function openFormulaModal(prefill) {
+    const backdrop = makeModalShell("🍼 Log formula");
+    const body = backdrop.querySelector(".modal-body");
+
+    const time = buildTimeChips(prefill?.offsetMin || 0);
+    body.appendChild(time.el);
+
+    // Smart-default lookup: if no prefill brand/volume, fetch the last formula
+    // event and use its brand+volume as the defaults.
+    let defaultBrand = prefill?.formula_brand || null;
+    let defaultVolume = prefill?.formula_volume_ml ?? null;
+    if (!defaultBrand && !defaultVolume) {
+      try {
+        const r = await fetch(cfg.lastFeedUrl || "/api/feeds/last").then((r) => r.json());
+        if (r && r.last && r.last.type === "formula") {
+          defaultBrand = r.last.formula_brand || null;
+          defaultVolume = r.last.formula_volume_ml ?? null;
+        }
+      } catch (_) { /* keep nulls */ }
+    }
+
+    // brand chips
+    const brandLabel = label("Brand");
+    const brandSeg = document.createElement("div"); brandSeg.className = "segmented";
+    let brand = defaultBrand;
+    const brandChoices = ["Materna", "Nutrilon", "Custom"];
+    const customBrandInput = document.createElement("input");
+    customBrandInput.type = "text";
+    customBrandInput.placeholder = "brand name…";
+    customBrandInput.style.display = "none";
+    if (brand && !brandChoices.includes(brand) && brand !== "Custom") {
+      // Existing custom value — show input pre-filled
+      customBrandInput.value = brand;
+      customBrandInput.style.display = "";
+    }
+    for (const b of brandChoices) {
+      const btn = document.createElement("button");
+      btn.className = "seg";
+      btn.textContent = b.toUpperCase();
+      btn.dataset.brand = b;
+      const isSelected =
+        (b === brand) ||
+        (b === "Custom" && brand && !brandChoices.includes(brand));
+      if (isSelected) btn.classList.add("selected");
+      btn.addEventListener("click", () => {
+        haptic(8);
+        brandSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === btn));
+        if (b === "Custom") {
+          customBrandInput.style.display = "";
+          brand = customBrandInput.value.trim() || null;
+          setTimeout(() => customBrandInput.focus(), 0);
+        } else {
+          customBrandInput.style.display = "none";
+          brand = b;
+        }
+      });
+      brandSeg.appendChild(btn);
+    }
+    customBrandInput.addEventListener("input", () => { brand = customBrandInput.value.trim() || null; });
+    body.append(brandLabel, wrapSection(brandSeg));
+    body.append(wrapSection(customBrandInput));
+
+    // volume chips
+    const volLabel = label("Amount (cc)");
+    const volSeg = document.createElement("div"); volSeg.className = "segmented segmented-wrap";
+    let volume = defaultVolume;
+    const volChoices = [30, 60, 90, 120, 150, 180, 210, 240];
+    const customVolInput = document.createElement("input");
+    customVolInput.type = "number";
+    customVolInput.min = "1"; customVolInput.max = "500"; customVolInput.placeholder = "cc";
+    customVolInput.style.display = "none";
+    if (volume != null && !volChoices.includes(volume)) {
+      customVolInput.value = String(volume);
+      customVolInput.style.display = "";
+    }
+    for (const v of volChoices) {
+      const btn = document.createElement("button");
+      btn.className = "seg";
+      btn.textContent = `${v}`;
+      btn.dataset.vol = String(v);
+      if (v === volume) btn.classList.add("selected");
+      btn.addEventListener("click", () => {
+        haptic(8);
+        volSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === btn));
+        customVolInput.style.display = "none";
+        volume = v;
+      });
+      volSeg.appendChild(btn);
+    }
+    const customVolBtn = document.createElement("button");
+    customVolBtn.className = "seg";
+    customVolBtn.textContent = "CUSTOM";
+    if (volume != null && !volChoices.includes(volume)) customVolBtn.classList.add("selected");
+    customVolBtn.addEventListener("click", () => {
+      haptic(8);
+      volSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === customVolBtn));
+      customVolInput.style.display = "";
+      volume = parseInt(customVolInput.value, 10) || null;
+      setTimeout(() => customVolInput.focus(), 0);
+    });
+    volSeg.appendChild(customVolBtn);
+    customVolInput.addEventListener("input", () => {
+      const n = parseInt(customVolInput.value, 10);
+      volume = (isNaN(n) || n < 1) ? null : n;
+    });
+    body.append(volLabel, wrapSection(volSeg));
+    body.append(wrapSection(customVolInput));
+
+    // notes
+    const notesLabel = label("Notes (optional)");
+    const notes = document.createElement("input"); notes.type = "text"; notes.placeholder = "anything to remember…";
+    notes.value = prefill?.notes || "";
+    body.append(notesLabel, wrapSection(notes));
+
+    // submit
+    const submit = document.createElement("button");
+    submit.className = "btn-primary"; submit.textContent = prefill ? "Save changes" : "Save Formula";
+    let holdTimer = null, holdFired = false;
+    submit.addEventListener("touchstart", () => { holdFired = false; holdTimer = setTimeout(() => { holdFired = true; haptic(40); }, 700); });
+    submit.addEventListener("touchend",   () => { clearTimeout(holdTimer); });
+    submit.addEventListener("click", async () => {
+      submit.disabled = true;
+      await submitForm(backdrop, prefill, {
+        type: "formula",
+        occurred_at: time.getDate().toISOString(),
+        formula_brand: brand,
+        formula_volume_ml: volume,
         notes: notes.value.trim() || null,
         skip_dup_check: holdFired,
       });
@@ -608,12 +748,13 @@
       id: full.id,
       feed_side: full.feed_side, feed_duration_min: full.feed_duration_min,
       poo_quality: full.poo_quality, notes: full.notes,
+      formula_brand: full.formula_brand, formula_volume_ml: full.formula_volume_ml,
       offsetMin: Math.max(0, Math.round((Date.now() - new Date(full.occurred_at).getTime()) / 60000)),
     };
     if (full.type === "breast") openFeedModal(prefill);
+    else if (full.type === "formula") openFormulaModal(prefill);
     else if (full.type === "wee") openWeeModal(prefill);
     else openPooModal(prefill);
-    // formula editing routes to its own modal — added in stage 5
   }
 
   async function doSoftDelete(row) {
@@ -772,10 +913,15 @@
 
   // ----- wire tiles (tap = modal, long-press = log now)
   function wireTiles() {
-    const map = { breast: openFeedModal, wee: openWeeModal, poo: openPooModal };
+    const map = {
+      breast: openFeedModal,
+      formula: openFormulaModal,
+      wee: openWeeModal,
+      poo: openPooModal,
+    };
     $$(".tile").forEach((tile) => {
       const type = tile.dataset.type;
-      if (!(type in map)) return;  // formula tile gets wired in stage 5
+      if (!(type in map)) return;
       let pressTimer = null, longFired = false;
       const start = () => {
         longFired = false;

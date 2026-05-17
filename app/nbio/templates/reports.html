@@ -73,13 +73,21 @@
   <h2 class="section-title">Daily totals (last 14 days)</h2>
   <table>
     <thead>
-      <tr><th>Day</th><th>Feeds</th><th>Wees</th><th>Poos</th><th>Avg feed</th></tr>
+      <tr>
+        <th>Day</th>
+        <th title="Breast feeds">🤱</th>
+        <th title="Formula feeds">🍼</th>
+        <th>Wees</th>
+        <th>Poos</th>
+        <th>Avg breast</th>
+      </tr>
     </thead>
     <tbody id="totals-body">
       {% for row in totals %}
         <tr>
           <td>{{ row.label or row.day }}</td>
-          <td>{{ row.feed }}</td>
+          <td>{{ row.get('breast', 0) }}</td>
+          <td>{{ row.get('formula', 0) }}</td>
           <td>{{ row.wee }}</td>
           <td>{{ row.poo }}</td>
           <td>{{ '%.0f min' | format(row.avg_feed_min) if row.avg_feed_min else '—' }}</td>

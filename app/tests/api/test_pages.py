@@ -128,6 +128,89 @@ def test_reports_today_counts_render_in_big_numbers(client):
     assert "feeds" in big_block
 
 
+def test_index_renders_breast_and_formula_tiles(client):
+    """4 tiles total post-#5: BREAST, FORMULA, WEE, POO."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'data-type="breast"' in r.text
+    assert 'data-type="formula"' in r.text
+    assert "BREAST" in r.text
+    assert "FORMULA" in r.text
+
+
+def test_index_renders_formula_event_row_with_brand_and_volume(client):
+    """A logged formula entry shows up with brand + volume in the row."""
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": "2026-05-16T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 120,
+            "idempotency_key": "idem-pg-formula-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "🍼" in r.text
+    assert "Materna" in r.text
+    assert "120 cc" in r.text
+
+
+def test_reports_renders_breast_and_formula_columns(client):
+    """Totals table breaks out breast vs formula as separate columns."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    # 2 breast + 1 formula today
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "idempotency_key": "idem-rpts-bf-1",
+            "created_by_device": "device-test",
+        },
+    )
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T05:00:00.000Z",
+            "feed_side": "R",
+            "feed_duration_min": 12,
+            "idempotency_key": "idem-rpts-bf-2",
+            "created_by_device": "device-test",
+        },
+    )
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T07:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 120,
+            "idempotency_key": "idem-rpts-bf-3",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # Header has the emoji column titles for breast / formula
+    thead_start = r.text.find("<thead>")
+    thead_end = r.text.find("</thead>", thead_start)
+    thead = r.text[thead_start:thead_end]
+    assert "🤱" in thead
+    assert "🍼" in thead
+    # tbody has 2 breast + 1 formula for today
+    tbody_start = r.text.find('id="totals-body"')
+    tbody_end = r.text.find("</tbody>", tbody_start)
+    tbody = r.text[tbody_start:tbody_end]
+    assert "<td>2</td>" in tbody
+    assert "<td>1</td>" in tbody
+
+
 def test_reports_totals_table_contains_data_rows(client):
     """The totals table body has at least one <tr> when events exist."""
     today = datetime.now(UTC).strftime("%Y-%m-%d")

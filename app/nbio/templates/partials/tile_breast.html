@@ -1,16 +1,16 @@
-<button class="tile tile-feed" data-type="breast" aria-label="Log breast feed">
+<button class="tile tile-breast" data-type="breast" aria-label="Log breast feed">
   <div class="tile-head">
     <span class="emoji" aria-hidden="true">🤱</span>
-    <span class="label">FEED</span>
+    <span class="label">BREAST</span>
   </div>
-  <div class="tile-ago" id="ago-feed">
-    {% if today.last.feed %}
+  <div class="tile-ago" id="ago-breast">
+    {% if today.last.feed and today.last.feed.type == 'breast' %}
       <span data-rel="{{ today.last.feed.occurred_at }}">{{ today.last.feed.occurred_at | relative }}</span>
       {% if today.last.feed.actor_color %}
         <span class="actor-dot" style="background: {{ today.last.feed.actor_color }}" title="{{ today.last.feed.actor_name or '' }}"></span>
       {% endif %}
     {% else %}
-      <span class="muted">no feeds yet</span>
+      <span class="muted">no recent</span>
     {% endif %}
   </div>
 </button>
