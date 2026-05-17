@@ -126,3 +126,105 @@ def test_last_event_of_each_type_ignores_deleted(conn):
     _, e, _ = create_event(conn, _evt("breast", "i1", "2026-05-16T03:00:00.000Z"))
     soft_delete_event(conn, e["id"])
     assert last_event_of_each_type(conn) == {}
+
+
+# ---------------------------------------------------------------------------
+# Local-tz bucketing (issue #28 finding #1)
+#
+# User reported: poo logged at 00:44 local BST appeared under "Yesterday" in
+# the Last-3-days overview, but correctly under "Today" in the event list.
+# Cause: today_counts / daily_totals bucketed by UTC date; the event list
+# already converted to local-tz before bucketing.
+#
+# These tests pin the new local-tz bucketing in repo: events near local
+# midnight bucket by the LOCAL date, not UTC.
+# ---------------------------------------------------------------------------
+
+
+def test_today_counts_buckets_event_at_local_midnight_correctly(conn, monkeypatch, freezer):
+    """
+    BST: an event at UTC 23:30 on day D is local 00:30 on day D+1. With
+    local bucketing, the event counts as "today" when "today" = D+1.
+    """
+    from nbio import config
+
+    monkeypatch.setattr(config.settings, "tz", "Europe/London")
+    # Freeze "now" at 2026-05-17 02:00 BST = 2026-05-17 01:00 UTC
+    freezer.move_to("2026-05-17T01:00:00Z")
+
+    # Event at local 00:30 BST on 2026-05-17 = UTC 23:30 on 2026-05-16
+    create_event(conn, _evt("breast", "midnight", "2026-05-16T23:30:00.000Z"))
+    counts = today_counts(conn)
+    assert counts["feed"] == 1, (
+        f"event at local 00:30 BST should count under TODAY's bucket; got {counts}"
+    )
+
+
+def test_today_counts_buckets_yesterday_event_correctly_in_local_tz(conn, monkeypatch, freezer):
+    """Symmetric: an event at local 22:00 yesterday should NOT count as today."""
+    from nbio import config
+
+    monkeypatch.setattr(config.settings, "tz", "Europe/London")
+    freezer.move_to("2026-05-17T01:00:00Z")  # 02:00 BST today
+    # Event at local 22:00 BST on 2026-05-16 = UTC 21:00 on 2026-05-16
+    create_event(conn, _evt("breast", "yesterday-late", "2026-05-16T21:00:00.000Z"))
+    counts = today_counts(conn)
+    assert counts["feed"] == 0
+
+
+def test_daily_totals_buckets_event_by_local_date(conn, monkeypatch, freezer):
+    """
+    Same event as above (local 00:30 BST = UTC 23:30 prev day) — should
+    appear in daily_totals under the LOCAL date 2026-05-17, not 2026-05-16.
+    """
+    from nbio import config
+
+    monkeypatch.setattr(config.settings, "tz", "Europe/London")
+    freezer.move_to("2026-05-17T02:00:00Z")  # 03:00 BST → plenty of room past local midnight
+
+    create_event(conn, _evt("breast", "boundary", "2026-05-16T23:30:00.000Z"))
+    rows = daily_totals(conn, days=14)
+    by_day = {r["day"]: r for r in rows}
+    assert "2026-05-17" in by_day, (
+        f"expected event bucketed under 2026-05-17 (local); got days {list(by_day)}"
+    )
+    assert by_day["2026-05-17"]["breast"] == 1
+    # And NOT under 2026-05-16
+    assert "2026-05-16" not in by_day or by_day["2026-05-16"].get("breast", 0) == 0
+
+
+def test_daily_totals_in_utc_unchanged_when_tz_is_utc(conn, monkeypatch, freezer):
+    """Regression: with tz=UTC the bucketing matches the old behaviour."""
+    from nbio import config
+
+    monkeypatch.setattr(config.settings, "tz", "UTC")
+    freezer.move_to("2026-05-17T02:00:00Z")
+
+    create_event(conn, _evt("breast", "utc-late", "2026-05-16T23:30:00.000Z"))
+    rows = daily_totals(conn, days=14)
+    by_day = {r["day"]: r for r in rows}
+    # UTC → event date = 2026-05-16
+    assert "2026-05-16" in by_day
+    assert by_day["2026-05-16"]["breast"] == 1
+
+
+def test_today_counts_in_eastern_us_buckets_morning_utc_under_previous_day(
+    conn, monkeypatch, freezer
+):
+    """
+    Negative-offset side: America/New_York is UTC-4 in May. An event at
+    UTC 03:00 on day D is local 23:00 on day D-1. With local bucketing,
+    that event is YESTERDAY in local terms.
+    """
+    from nbio import config
+
+    monkeypatch.setattr(config.settings, "tz", "America/New_York")
+    # Freeze "now" at 2026-05-16 12:00 UTC = 2026-05-16 08:00 EDT
+    freezer.move_to("2026-05-16T12:00:00Z")
+
+    # Event at UTC 03:00 = local 23:00 on 2026-05-15 (yesterday in EDT)
+    create_event(conn, _evt("breast", "neg-tz", "2026-05-16T03:00:00.000Z"))
+    counts = today_counts(conn)
+    assert counts["feed"] == 0, (
+        f"event at local 23:00 yesterday EDT should NOT count as today; got {counts}"
+    )
