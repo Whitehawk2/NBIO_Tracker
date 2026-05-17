@@ -143,7 +143,9 @@ class TestTimelineMarks:
         ]
         marks = pages._timeline_marks(events, "2026-05-16")
         assert len(marks) == 1
-        assert marks[0]["type"] == "breast"
+        # breast → feed (timeline doesn't distinguish; both render as
+        # `.mark-feed` which has fill: var(--feed)).
+        assert marks[0]["type"] == "feed"
         # 03:00 UTC → 3*3600 seconds → x = 0.125
         assert abs(marks[0]["x"] - 0.125) < 0.001
 
@@ -152,12 +154,58 @@ class TestTimelineMarks:
             {"occurred_at": "2026-05-16XX bad", "type": "breast"},
             {"occurred_at": "2026-05-16T03:00:00Z", "type": "wee"},
         ]
-        # Both startswith "2026-05-16" so the date prefix check passes.
-        # The fromisoformat will then raise on the bad one — the function
-        # continues without it.
         marks = pages._timeline_marks(events, "2026-05-16")
         assert len(marks) == 1
         assert marks[0]["type"] == "wee"
+
+    def test_unknown_type_is_skipped(self):
+        """
+        Defensive: if `e['type']` is something we don't recognise (shouldn't
+        happen given EventType is constrained at the model layer, but
+        guards against future schema drift), the mark is skipped rather
+        than rendered with a missing class.
+        """
+        events = [
+            {"occurred_at": "2026-05-16T03:00:00Z", "type": "unknown"},
+            {"occurred_at": "2026-05-16T04:00:00Z", "type": "wee"},
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert marks[0]["type"] == "wee"
+
+    def test_breast_and_formula_map_to_feed(self):
+        events = [
+            {"occurred_at": "2026-05-16T01:00:00Z", "type": "breast"},
+            {"occurred_at": "2026-05-16T02:00:00Z", "type": "formula"},
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 2
+        assert all(m["type"] == "feed" for m in marks)
+
+    def test_local_date_bucketing(self, monkeypatch):
+        """
+        An event at 22:00 UTC on 2026-05-15 is 01:00 LOCAL on 2026-05-16
+        in a UTC+3 zone. _timeline_marks must bucket by LOCAL date, not
+        UTC prefix — otherwise the mark goes missing from the local-today
+        timeline (the v1.1.0 'poos missing from today' bug).
+        """
+        # Simulate UTC+3 by setting the process TZ.
+        import os
+        import time
+
+        monkeypatch.setenv("TZ", "Asia/Jerusalem")
+        time.tzset()
+        try:
+            events = [{"occurred_at": "2026-05-15T22:00:00Z", "type": "poo"}]
+            marks = pages._timeline_marks(events, "2026-05-16")
+            assert len(marks) == 1, (
+                "poo at 22:00 UTC = 01:00 local Jerusalem next day; must "
+                "appear in the 2026-05-16 LOCAL timeline"
+            )
+            assert marks[0]["type"] == "poo"
+        finally:
+            os.environ["TZ"] = "UTC"
+            time.tzset()
 
     def test_x_position_at_midnight(self):
         events = [{"occurred_at": "2026-05-16T00:00:00Z", "type": "breast"}]

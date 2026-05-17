@@ -139,18 +139,33 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
 
 
 def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str, Any]]:
-    """Compute x-positions (0..1) for events occurring on day_iso (UTC date)."""
+    """
+    Compute x-positions (0..1) for events occurring on day_iso (LOCAL date).
+
+    The mark's `type` is mapped to one of `feed` / `wee` / `poo` to match
+    the timeline CSS classes (.mark-feed / .mark-wee / .mark-poo).
+    Breast and formula events both map to `feed` — the reports timeline
+    doesn't distinguish (the daily-totals table below does).
+    """
+    type_to_mark = {"breast": "feed", "formula": "feed", "wee": "wee", "poo": "poo"}
     marks: list[dict[str, Any]] = []
     for e in events:
-        if not e["occurred_at"].startswith(day_iso):
-            continue
         try:
             dt = datetime.fromisoformat(e["occurred_at"].replace("Z", "+00:00"))
         except ValueError:
             continue
         local = dt.astimezone()
+        # Bucket by LOCAL date — previously the function compared the raw
+        # UTC prefix of `occurred_at` against day_iso, missing events that
+        # were on day_iso locally but the prior day in UTC (#28 #1 class
+        # of bug, but for the reports timeline this time).
+        if local.date().isoformat() != day_iso:
+            continue
         seconds = local.hour * 3600 + local.minute * 60 + local.second
-        marks.append({"x": seconds / 86400.0, "type": e["type"]})
+        mark_type = type_to_mark.get(e["type"])
+        if mark_type is None:
+            continue
+        marks.append({"x": seconds / 86400.0, "type": mark_type})
     return marks
 
 

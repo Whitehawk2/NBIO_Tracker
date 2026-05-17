@@ -197,6 +197,62 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
     assert 'class="counts"' in r.text
 
 
+def test_reports_timeline_breast_event_renders_feed_class(client):
+    """
+    The timeline mark for a breast event must use the `.mark-feed` CSS
+    class — that's the one with `fill: var(--feed)`. Previously the
+    `_timeline_marks` helper emitted `m.type = "breast"`, generating
+    `class='mark mark-breast'` with no matching CSS rule → mark rendered
+    BLACK (SVG default fill).
+
+    Same applies to formula. Both are conceptually "feeds" in the
+    reports view.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "breast",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "feed_side": "L",
+            "feed_duration_min": 15,
+            "idempotency_key": "idem-timeline-feed-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The mark class must be `mark-feed`, NOT `mark-breast`.
+    assert "mark-feed" in r.text, (
+        "breast events must render `class='mark mark-feed'` in the timeline "
+        "(maps to fill: var(--feed)). Without this they render BLACK."
+    )
+    assert "mark-breast" not in r.text, (
+        "timeline should not emit `mark-breast` — that class has no CSS "
+        "rule and renders BLACK. Map breast → feed in _timeline_marks."
+    )
+
+
+def test_reports_timeline_formula_event_renders_feed_class(client):
+    """Symmetric: formula events also map to mark-feed."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "formula",
+            "occurred_at": f"{today}T03:00:00.000Z",
+            "formula_brand": "Materna",
+            "formula_volume_ml": 120,
+            "idempotency_key": "idem-timeline-feed-2",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "mark-feed" in r.text
+    assert "mark-formula" not in r.text
+
+
 def test_reports_timeline_marks_use_wider_width(client):
     """
     The reports timeline marks were `<rect width="4">` — at Pixel 9's
