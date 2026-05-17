@@ -210,7 +210,10 @@ preflight
 if (( ! RESOLVE_ONLY )); then
   info "Fetching origin"
   git fetch --quiet origin
-  git fetch --quiet --tags origin
+  # --force overwrites locally-conflicting tags (a local v1.0.0 pointing at a
+  # different SHA than origin's v1.0.0 would otherwise fail the fetch). For an
+  # upgrade flow we always want origin's tag state to win.
+  git fetch --quiet --tags --force origin
 fi
 
 resolve_target
