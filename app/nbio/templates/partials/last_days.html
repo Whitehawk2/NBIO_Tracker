@@ -11,11 +11,11 @@
     </thead>
     <tbody>
       {% for row in last_days %}
-        <tr>
+        <tr data-day="{{ row.day }}">
           <td class="day-col">{{ row.label }}</td>
-          <td>{{ row.feed }}</td>
-          <td>{{ row.wee }}</td>
-          <td>{{ row.poo }}{% if row.poo == 0 %} <span class="hint" title="no poo logged that day">·</span>{% endif %}</td>
+          <td data-col="feed">{{ row.feed }}</td>
+          <td data-col="wee">{{ row.wee }}</td>
+          <td data-col="poo">{{ row.poo }}{% if row.poo == 0 %} <span class="hint" title="no poo logged that day">·</span>{% endif %}</td>
         </tr>
       {% endfor %}
     </tbody>

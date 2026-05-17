@@ -128,6 +128,47 @@ def test_reports_today_counts_render_in_big_numbers(client):
     assert "feeds" in big_block
 
 
+# ---------------------------------------------------------------------------
+# Reactive overview refresh (issue #28 #2) — these tests pin the stable
+# `data-*` selectors that app.js::bumpOverviews depends on. The actual
+# DOM-mutation behaviour isn't unit-testable without a browser harness;
+# Pi-side manual verification covers that.
+# ---------------------------------------------------------------------------
+
+
+def test_today_card_count_cells_have_stable_selectors(client):
+    """today-card has `<b data-count="feed">…</b>` etc. on each count."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert '<b data-count="feed">' in r.text
+    assert '<b data-count="wee">' in r.text
+    assert '<b data-count="poo">' in r.text
+
+
+def test_today_card_last_of_each_rows_have_stable_selectors(client):
+    """The 'last of each' list rows have `data-last="feed"` etc."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert 'data-last="feed"' in r.text
+    assert 'data-last="wee"' in r.text
+    assert 'data-last="poo"' in r.text
+
+
+def test_last_days_rows_have_stable_selectors(client):
+    """Each row in the mini-table has `data-day="YYYY-MM-DD"` + `data-col` cells."""
+    r = client.get("/")
+    assert r.status_code == 200
+    # At least one day-row + the three data columns
+    import re
+
+    assert re.search(r'<tr data-day="\d{4}-\d{2}-\d{2}"', r.text), (
+        "last-days rows should expose `data-day` attribute for JS targeting"
+    )
+    assert 'data-col="feed"' in r.text
+    assert 'data-col="wee"' in r.text
+    assert 'data-col="poo"' in r.text
+
+
 def test_index_renders_breast_and_formula_tiles(client):
     """4 tiles total post-#5: BREAST, FORMULA, WEE, POO."""
     r = client.get("/")
