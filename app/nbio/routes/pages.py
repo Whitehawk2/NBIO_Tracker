@@ -125,19 +125,35 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     grouped_events = _group_events_by_local_day(events)
     last_days = _last_days_rows(repo.daily_totals(conn, days=4), n=3)
     baby = repo.baby(conn)
+    today = _today_card(conn)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "baby": baby,
             "baby_age": _age_from_dob(baby.get("dob") if baby else None, now_local.date()),
-            "today": _today_card(conn),
+            "today": today,
+            "vitd_overdue": _vitd_overdue(today["counts"], now_local.hour),
             "events": events,
             "grouped_events": grouped_events,
             "last_days": last_days,
             "devices": repo.list_devices(conn),
         },
     )
+
+
+def _vitd_overdue(today_counts: dict[str, int], local_hour: int) -> bool:
+    """
+    Triggers the late-day visual nudge on the vit D banner.
+
+    True when:
+      - today's vit D count is 0 (not given), AND
+      - the local hour is >= 18 (6pm or later)
+
+    The CSS class `.vitd-banner.is-late` is applied server-side so
+    cold loads after 18:00 don't flash through the muted state.
+    """
+    return today_counts.get("vitd", 0) == 0 and local_hour >= 18
 
 
 def _age_from_dob(dob_iso: str | None, today_local: date) -> str | None:

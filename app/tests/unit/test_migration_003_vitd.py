@@ -93,7 +93,9 @@ def test_migration_003_expands_type_check_to_include_vitd(post_002_db):
         """INSERT INTO events (type, baby_id, occurred_at, idempotency_key, created_by_device)
            VALUES ('vitd', 1, '2026-05-20T09:00:00.000Z', 'idem-vitd-1', 'dev-1')"""
     )
-    row = post_002_db.execute("SELECT type FROM events WHERE idempotency_key='idem-vitd-1'").fetchone()
+    row = post_002_db.execute(
+        "SELECT type FROM events WHERE idempotency_key='idem-vitd-1'"
+    ).fetchone()
     assert row["type"] == "vitd"
 
 
@@ -109,11 +111,56 @@ def test_migration_003_still_rejects_unknown_types(post_002_db):
 
 def test_migration_003_preserves_existing_events(post_002_db):
     """Pre-existing rows survive the rebuild verbatim."""
+    # (type, occurred_at, feed_side, dur, poo_q, notes, idem, dev, brand, ml)
     rows = [
-        ("breast", "2026-05-16T03:00:00.000Z", "L", 15, None, "good", "idem-pre-1", "dev-1", "M", 100),
-        ("formula", "2026-05-16T06:00:00.000Z", None, None, None, None, "idem-pre-2", "dev-1", "M", 80),
-        ("wee", "2026-05-16T08:00:00.000Z", None, None, None, None, "idem-pre-3", "dev-1", None, None),
-        ("poo", "2026-05-16T10:00:00.000Z", None, None, 4, "soft", "idem-pre-4", "dev-1", None, None),
+        (
+            "breast",
+            "2026-05-16T03:00:00.000Z",
+            "L",
+            15,
+            None,
+            "good",
+            "idem-pre-1",
+            "dev-1",
+            "M",
+            100,
+        ),
+        (
+            "formula",
+            "2026-05-16T06:00:00.000Z",
+            None,
+            None,
+            None,
+            None,
+            "idem-pre-2",
+            "dev-1",
+            "M",
+            80,
+        ),
+        (
+            "wee",
+            "2026-05-16T08:00:00.000Z",
+            None,
+            None,
+            None,
+            None,
+            "idem-pre-3",
+            "dev-1",
+            None,
+            None,
+        ),
+        (
+            "poo",
+            "2026-05-16T10:00:00.000Z",
+            None,
+            None,
+            4,
+            "soft",
+            "idem-pre-4",
+            "dev-1",
+            None,
+            None,
+        ),
     ]
     for r in rows:
         post_002_db.execute(
@@ -130,7 +177,8 @@ def test_migration_003_preserves_existing_events(post_002_db):
     ).fetchall()
     assert len(after) == 4
     assert [r["type"] for r in after] == ["breast", "formula", "wee", "poo"]
-    assert [r["idempotency_key"] for r in after] == ["idem-pre-1", "idem-pre-2", "idem-pre-3", "idem-pre-4"]
+    expected_idems = ["idem-pre-1", "idem-pre-2", "idem-pre-3", "idem-pre-4"]
+    assert [r["idempotency_key"] for r in after] == expected_idems
     # Formula row keeps brand + volume.
     formula_row = next(r for r in after if r["type"] == "formula")
     assert formula_row["formula_brand"] == "M"

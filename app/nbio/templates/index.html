@@ -6,6 +6,24 @@
 
 {% include "partials/last_days.html" %}
 
+<section class="vitd-banner{% if today.counts.vitd %} is-given{% endif %}{% if vitd_overdue %} is-late{% endif %}"
+         data-vitd-banner
+         {% if today.last and today.last.vitd %}data-last-vitd-id="{{ today.last.vitd.id }}"{% endif %}
+         aria-label="Vitamin D">
+  <span class="emoji" aria-hidden="true">💊</span>
+  {% if today.counts.vitd and today.last.vitd %}
+    <span class="lbl">Vitamin D <span class="ok" aria-hidden="true">✓</span></span>
+    <span class="when" data-rel="{{ today.last.vitd.occurred_at }}">{{ today.last.vitd.occurred_at | hhmm }}</span>
+    {% if today.last.vitd.actor_color %}
+      <span class="actor-dot" style="background: {{ today.last.vitd.actor_color }}"
+            title="{{ today.last.vitd.actor_name or '' }}"></span>
+    {% endif %}
+  {% else %}
+    <span class="lbl">Vitamin D — not yet</span>
+    <button type="button" class="btn-vitd" data-vitd-give>Give now</button>
+  {% endif %}
+</section>
+
 <section class="tiles" aria-label="Quick log">
   {% include "partials/tile_breast.html" %}
   {% include "partials/tile_formula.html" %}

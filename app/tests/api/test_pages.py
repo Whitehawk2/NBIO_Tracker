@@ -53,6 +53,65 @@ def _assert_is_reports(html: str) -> None:
         assert marker not in html, f"reports page contains index-only marker: {marker!r}"
 
 
+def test_index_shows_vitd_banner_not_given_state(client):
+    """Fresh DB → banner reads 'Vitamin D — not yet' with a Give now button."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-vitd-banner" in r.text
+    assert "not yet" in r.text or "not given" in r.text.lower()
+    assert "data-vitd-give" in r.text  # Give now button
+
+
+def test_index_shows_vitd_banner_given_state_after_post(client):
+    """After a vit D event today, banner flips to the given state."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-vitd-banner",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-vitd-banner" in r.text
+    assert "is-given" in r.text
+    # The Give now button is gone in the given state.
+    assert "data-vitd-give" not in r.text
+
+
+def test_event_row_renders_vitd_emoji(client):
+    """An event of type='vitd' shows the 💊 emoji in its row."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-vitd-emoji",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    # The row's emoji span carries 💊 for vitd type.
+    import re
+
+    m = re.search(
+        r'<li class="event-row"[^>]*data-type="vitd"[^>]*>(.*?)</li>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "vitd event row not found"
+    assert "💊" in m.group(1), "vitd row must render the 💊 emoji"
+
+
 def test_index_renders_index_template(client):
     """A fresh client → / returns the index template (not reports)."""
     r = client.get("/")
@@ -95,9 +154,7 @@ def test_settings_display_has_three_theme_cards(client):
     r = client.get("/settings")
     assert r.status_code == 200
     for value in ("warm", "latte", "mocha"):
-        assert f'data-theme-value="{value}"' in r.text, (
-            f"missing theme card for theme={value!r}"
-        )
+        assert f'data-theme-value="{value}"' in r.text, f"missing theme card for theme={value!r}"
     # Exactly three (not more, not fewer).
     assert r.text.count("data-theme-value=") == 3
 

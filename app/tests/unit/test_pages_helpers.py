@@ -135,6 +135,28 @@ class TestLastDaysRows:
 # ---------- _timeline_marks --------------------------------------------------
 
 
+class TestVitdOverdue:
+    """`_vitd_overdue` decides whether the banner gets the .is-late class."""
+
+    def test_not_late_before_18_when_not_given(self):
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=17) is False
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=9) is False
+
+    def test_late_at_or_after_18_when_not_given(self):
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=18) is True
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=23) is True
+
+    def test_never_late_once_given(self):
+        """Logged today → calm regardless of hour."""
+        assert pages._vitd_overdue({"vitd": 1}, local_hour=23) is False
+        assert pages._vitd_overdue({"vitd": 3}, local_hour=20) is False
+
+    def test_missing_vitd_key_treated_as_zero(self):
+        """Defensive: missing key (older today_counts shape) is fine."""
+        assert pages._vitd_overdue({}, local_hour=20) is True
+        assert pages._vitd_overdue({}, local_hour=10) is False
+
+
 class TestAgeFromDob:
     """`_age_from_dob` renders compact baby ages for the header display."""
 

@@ -1,6 +1,6 @@
 <li class="event-row" data-id="{{ event.id }}" data-type="{{ event.type }}" data-idem="{{ event.idempotency_key }}"{% if event.formula_volume_ml %} data-formula-volume-ml="{{ event.formula_volume_ml }}"{% endif %} aria-label="Tap to edit; swipe left to delete">
   <span class="ev-emoji" aria-hidden="true">
-    {% if event.type == 'breast' %}🤱{% elif event.type == 'formula' %}🍼{% elif event.type == 'wee' %}💦{% else %}💩{% endif %}
+    {% if event.type == 'breast' %}🤱{% elif event.type == 'formula' %}🍼{% elif event.type == 'wee' %}💦{% elif event.type == 'vitd' %}💊{% else %}💩{% endif %}
   </span>
   <span class="ev-time">{{ event.occurred_at | hhmm }}</span>
   <span class="ev-rel" data-rel="{{ event.occurred_at }}">{{ event.occurred_at | relative }}</span>

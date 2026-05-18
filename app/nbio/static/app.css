@@ -110,6 +110,49 @@ html.dark[data-theme="warm"] {
   box-shadow: 0 0 0 1px var(--border) inset;
 }
 
+/* ============ Vitamin D banner ============ */
+/* Once-per-day surface for the daily Vit D drop. Three visual states:
+   - default (not given): muted bg, normal weight
+   - .is-late (not given AND local hour ≥ 18): warmer bg + bold copy
+   - .is-given (logged today): calm bg with checkmark + timestamp
+   Server renders the right class on first paint; app.js handles the
+   reactive swap on tap and the hourly recompute of .is-late. */
+.vitd-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin: 8px 0 14px; padding: 10px 14px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  transition: background .25s ease;
+}
+.vitd-banner .emoji { font-size: 20px; }
+.vitd-banner .lbl   { color: var(--text-muted); }
+.vitd-banner .when {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.vitd-banner .ok { color: var(--feed); margin-left: 4px; }
+.vitd-banner .actor-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+}
+.vitd-banner .btn-vitd {
+  margin-left: auto;
+  appearance: none; -webkit-appearance: none;
+  border: 1px solid var(--vitd); background: transparent;
+  color: var(--vitd); font: inherit;
+  padding: 6px 12px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.vitd-banner.is-given { background: var(--feed-bg); cursor: pointer; }
+.vitd-banner.is-given .lbl { color: var(--text); }
+.vitd-banner.is-late {
+  background: color-mix(in srgb, var(--vitd) 18%, var(--bg-sunk));
+}
+.vitd-banner.is-late .lbl   { color: var(--vitd); font-weight: 600; }
+.vitd-banner.is-late .emoji { filter: brightness(1.1); }
+
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
 body {
