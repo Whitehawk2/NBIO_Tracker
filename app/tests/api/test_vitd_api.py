@@ -74,9 +74,7 @@ def test_vitd_event_in_list(client):
 
 def test_vitd_event_soft_delete(client):
     """DELETE /api/events/{id} flags the vit D row as soft-deleted."""
-    created = client.post(
-        "/api/events", json=_vitd_payload(idempotency_key="idem-vitd-del")
-    ).json()
+    created = client.post("/api/events", json=_vitd_payload(idempotency_key="idem-vitd-del")).json()
     ev_id = created["event"]["id"]
     r = client.delete(f"/api/events/{ev_id}")
     assert r.status_code == 200

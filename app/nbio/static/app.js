@@ -666,7 +666,12 @@
     // 📝 icon signals notes exist; the full text is revealed in the
     // edit modal. Inline notes text was dropped (long notes overlapped
     // the relative-time column on phones — v1.1.0 regression).
-    const emoji = ev.type === "breast" ? "🤱" : ev.type === "formula" ? "🍼" : ev.type === "wee" ? "💦" : "💩";
+    const emoji =
+      ev.type === "breast" ? "🤱"
+      : ev.type === "formula" ? "🍼"
+      : ev.type === "wee" ? "💦"
+      : ev.type === "vitd" ? "💊"
+      : "💩";
     const color = ev.actor_color || "#888";
     const notesIcon = ev.notes
       ? `<span class="ev-notes-icon" aria-label="has notes" title="has notes">📝</span>`
@@ -749,7 +754,10 @@
   // the optimistic update matches the server-rendered local-date bucketing
   // in pages._group_events_by_local_day / repo.daily_totals.
 
-  // Map event type → today-card count key (breast+formula combined as "feed")
+  // Map event type → today-card count key (breast+formula combined as "feed").
+  // Vit D doesn't have a today-card count cell — the banner reads
+  // `today.counts.vitd` server-side and renders state. JS handles the
+  // banner swap separately via renderVitdBanner.
   function countKey(eventType) {
     if (eventType === "breast" || eventType === "formula") return "feed";
     if (eventType === "wee" || eventType === "poo") return eventType;
@@ -771,6 +779,118 @@
   // (when cc total > 0) and empty (`no formula today`). When an
   // optimistic POST crosses the zero boundary in either direction,
   // we have to swap branches — not just edit a number.
+  // ----- Vit D banner reactive state (#8.5)
+  //
+  // Server renders the banner with the right class on first paint;
+  // these helpers swap state inline when an event lands without a
+  // reload. Tracks today's count via the banner's class list (single
+  // source of truth — same trick as `.fresh` rows).
+  function renderVitdBanner(ev, delta) {
+    const banner = document.querySelector("[data-vitd-banner]");
+    if (!banner) return;
+    const wasGiven = banner.classList.contains("is-given");
+    if (delta > 0) {
+      // Switch to given state.
+      banner.classList.add("is-given");
+      banner.classList.remove("is-late");
+      banner.dataset.lastVitdId = ev.id ?? "";
+      const time = fmtHHMM(ev.occurred_at);
+      const color = ev.actor_color || "";
+      const actorName = ev.actor_name || "";
+      const dot = color
+        ? `<span class="actor-dot" style="background:${color}" title="${escapeHtml(actorName)}"></span>`
+        : "";
+      banner.innerHTML =
+        `<span class="emoji" aria-hidden="true">💊</span>` +
+        `<span class="lbl">Vitamin D <span class="ok" aria-hidden="true">✓</span></span>` +
+        `<span class="when" data-rel="${ev.occurred_at}">${time}</span>${dot}`;
+    } else if (delta < 0 && wasGiven) {
+      // Switch back to empty state (only happens on the
+      // delete-the-only-vit-D-of-today path).
+      banner.classList.remove("is-given");
+      delete banner.dataset.lastVitdId;
+      banner.innerHTML =
+        `<span class="emoji" aria-hidden="true">💊</span>` +
+        `<span class="lbl">Vitamin D — not yet</span>` +
+        `<button type="button" class="btn-vitd" data-vitd-give>Give now</button>`;
+      refreshVitdLateClass();
+      // The Give-now click handler needs re-binding after innerHTML swap.
+      wireVitDBanner();
+    }
+  }
+
+  function refreshVitdLateClass() {
+    const banner = document.querySelector("[data-vitd-banner]");
+    if (!banner) return;
+    if (banner.classList.contains("is-given")) {
+      banner.classList.remove("is-late");
+      return;
+    }
+    const hour = new Date().getHours();
+    banner.classList.toggle("is-late", hour >= 18);
+  }
+
+  function wireVitDBanner() {
+    const banner = document.querySelector("[data-vitd-banner]");
+    if (!banner) return;
+    const giveBtn = banner.querySelector("[data-vitd-give]");
+    if (giveBtn && !giveBtn.__vitdWired) {
+      giveBtn.__vitdWired = true;
+      giveBtn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        haptic(12);
+        const idem = "vitd-" + uuid();
+        rememberOwnIdem(idem);
+        // Optimistic: render given state immediately.
+        const optimistic = {
+          id: "local:" + idem,
+          type: "vitd",
+          occurred_at: isoNow(),
+          actor_color: getDeviceColor(),
+          actor_name: getDeviceName(),
+          idempotency_key: idem,
+        };
+        renderVitdBanner(optimistic, +1);
+        try {
+          const r = await fetch(cfg.eventsUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Device-Id": getDeviceId(),
+            },
+            body: JSON.stringify({
+              type: "vitd",
+              occurred_at: optimistic.occurred_at,
+              idempotency_key: idem,
+              created_by_device: getDeviceId(),
+            }),
+          });
+          if (!r.ok) throw 0;
+          const data = await r.json();
+          if (data.event) {
+            // Replace optimistic id with the canonical one.
+            banner.dataset.lastVitdId = data.event.id ?? "";
+          }
+        } catch (_) {
+          showToast("Offline — Vit D will retry");
+          // Best-effort: leave optimistic state in place; SSE / refresh
+          // will reconcile.
+        }
+      });
+    }
+    if (!banner.__bannerWired) {
+      banner.__bannerWired = true;
+      banner.addEventListener("click", (e) => {
+        if (e.target.closest("[data-vitd-give]")) return;
+        if (!banner.classList.contains("is-given")) return;
+        const evId = banner.dataset.lastVitdId;
+        if (!evId || String(evId).startsWith("local:")) return;
+        openEditFor({ id: evId, type: "vitd" });
+      });
+    }
+  }
+
   function renderFormulaStrip(totalCC) {
     const strip = document.querySelector("[data-formula-strip]");
     if (!strip) return;
@@ -789,6 +909,14 @@
   }
 
   function bumpOverviews(ev, delta) {
+    // Vit D doesn't share the today-card count cells — it lives in its
+    // own banner. Handle inline + bail before the generic count path.
+    if (ev?.type === "vitd") {
+      const eventDay = localDay(ev.occurred_at);
+      const todayDay = localDay(new Date().toISOString());
+      if (eventDay === todayDay) renderVitdBanner(ev, delta);
+      return;
+    }
     const key = countKey(ev?.type);
     if (!key) return;
     const eventDay = localDay(ev.occurred_at);
@@ -1368,12 +1496,16 @@
     wireTimelineMarks();
     wireSyncDot();
     wireHints();
+    wireVitDBanner();
     refreshRelTimes();
     refreshBabyAge();
+    refreshVitdLateClass();
     setInterval(refreshRelTimes, 60 * 1000);
     // Baby age changes far slower than relative times — once an hour
     // is plenty (handles day-boundary rollovers on long-running PWAs).
     setInterval(refreshBabyAge, 60 * 60 * 1000);
+    // The 18:00 vit D nudge also wakes hourly.
+    setInterval(refreshVitdLateClass, 60 * 60 * 1000);
 
     connectSSE();
     bumpPending();

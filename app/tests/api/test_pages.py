@@ -1276,3 +1276,80 @@ def test_reports_totals_table_contains_data_rows(client):
     assert "<tr>" in tbody  # at least one data row
     # Avg-feed cell is "%.0f min" — for 15 and 16 min, avg = 15.5 → "16 min"
     assert "16 min" in tbody
+
+
+def test_reports_timeline_legend_includes_vitd(client):
+    """The Last 7 days timeline-legend must have a vit D entry alongside feed/wee/poo."""
+    r = client.get("/reports")
+    assert r.status_code == 200
+    legend_start = r.text.find('class="timeline-legend"')
+    assert legend_start != -1, "timeline-legend container not found"
+    legend_end = r.text.find("</div>", legend_start)
+    legend = r.text[legend_start:legend_end]
+    assert "lg-vitd" in legend, "legend must include the `lg-vitd` dot for #8.5"
+    assert "vit D" in legend, "legend must label the vit D entry"
+
+
+def test_reports_totals_includes_vitd_column(client):
+    """
+    The daily totals table gains a 💊 column showing ✓ for days with at
+    least one vit D event, `—` otherwise.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-rpts-vitd-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # Stable selector for the column.
+    assert 'data-col-totals="vitd"' in r.text, (
+        "reports totals table must have a column with `data-col-totals='vitd'`"
+    )
+    # The day with a vit D event shows ✓ in the totals row.
+    tbody_start = r.text.find('id="totals-body"')
+    tbody_end = r.text.find("</tbody>", tbody_start)
+    tbody = r.text[tbody_start:tbody_end]
+    assert "✓" in tbody, "today's totals row must show ✓ in the 💊 column"
+
+
+def test_reports_timeline_renders_vitd_mark(client):
+    """A vit D event renders with `class='mark mark-vitd'` in the timeline SVG."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-rpts-vitd-mark",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "mark-vitd" in r.text, (
+        "vit D events must render `class='mark mark-vitd'` so the gold fill rule applies"
+    )
+
+
+def test_reports_timeline_vitd_tooltip_says_vit_d(client):
+    """The vit D mark's <title> tooltip carries the human label 'Vit D'."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-rpts-vitd-tip",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The tooltip is `<title>HH:MM · Vit D</title>` for vit D events.
+    assert "Vit D" in r.text, "vit D timeline mark tooltip must carry the 'Vit D' label"

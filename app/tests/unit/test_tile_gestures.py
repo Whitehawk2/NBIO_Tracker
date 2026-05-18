@@ -354,3 +354,79 @@ def test_formula_volume_picker_uses_only_segmented_wrap():
         "volSeg must NOT include `.segmented` — its grid-auto-flow:column"
         " prevents the chips from wrapping. Use only `.segmented-wrap`."
     )
+
+
+def test_app_js_has_wire_vitd_banner():
+    """
+    `wireVitDBanner` must exist and bind the `[data-vitd-give]` button to
+    an optimistic POST flow against the events endpoint. Without this the
+    banner's "Give now" button is a no-op (the entire #8.5 flow falls back
+    to manual tile-tap log).
+    """
+    src = _src()
+    assert "function wireVitDBanner(" in src, (
+        "expected `wireVitDBanner()` function in app.js — drives the #8.5 banner"
+    )
+    idx = src.find("function wireVitDBanner(")
+    block = src[idx : idx + 2500]
+    assert "[data-vitd-give]" in block, (
+        "wireVitDBanner must look up the Give-now button via `[data-vitd-give]`"
+    )
+    assert '"vitd"' in block, "wireVitDBanner must POST `type: 'vitd'` events"
+    # Wired into init so the listener fires on first paint.
+    assert "wireVitDBanner();" in src, (
+        "wireVitDBanner() must be called from the DOMContentLoaded init block"
+    )
+
+
+def test_app_js_bump_overviews_handles_vitd():
+    """
+    `bumpOverviews` must branch on `ev.type === "vitd"` and route to the
+    banner renderer. Otherwise the vit D banner doesn't refresh until the
+    page is reloaded — same regression class as the formula_ml strip.
+    """
+    src = _src()
+    idx = src.find("function bumpOverviews(")
+    assert idx >= 0, "bumpOverviews() function not found in app.js"
+    block = src[idx : idx + 3000]
+    assert 'ev?.type === "vitd"' in block or 'ev.type === "vitd"' in block, (
+        "bumpOverviews must branch on `ev.type === 'vitd'` for the banner path"
+    )
+    assert "renderVitdBanner(" in block, (
+        "bumpOverviews's vitd branch must call `renderVitdBanner(ev, delta)`"
+    )
+
+
+def test_row_html_vitd_emoji():
+    """The event row's emoji map must include 💊 for type='vitd'."""
+    src = _src()
+    # Find rowHTML and check the emoji chain handles "vitd".
+    idx = src.find("function rowHTML(")
+    assert idx >= 0, "rowHTML() function not found in app.js"
+    block = src[idx : idx + 2000]
+    assert 'ev.type === "vitd"' in block, (
+        "rowHTML must branch on `ev.type === 'vitd'` for the 💊 emoji"
+    )
+    assert "💊" in block, "rowHTML must emit the 💊 emoji for vit D events"
+
+
+def test_refresh_vitd_late_class_exists():
+    """
+    `refreshVitdLateClass` keeps the after-18:00 nudge fresh on long-lived
+    PWA tabs (hourly setInterval). Without it the banner stays in its
+    not-yet-overdue state past the threshold.
+    """
+    src = _src()
+    assert "function refreshVitdLateClass(" in src, (
+        "expected `refreshVitdLateClass()` function in app.js for the 18:00 nudge"
+    )
+    idx = src.find("function refreshVitdLateClass(")
+    block = src[idx : idx + 600]
+    assert "getHours()" in block, (
+        "refreshVitdLateClass must read the local hour via `new Date().getHours()`"
+    )
+    assert "is-late" in block, "refreshVitdLateClass must toggle the `.is-late` class on the banner"
+    # Hourly heartbeat so it triggers on long-running PWA tabs.
+    assert "setInterval(refreshVitdLateClass" in src, (
+        "refreshVitdLateClass must be scheduled via setInterval in the init block"
+    )

@@ -392,6 +392,54 @@ def test_theme_preview_styled():
     )
 
 
+def test_vitd_banner_base_rule_exists():
+    """The `.vitd-banner` block holds the empty-state shell of the #8.5 banner."""
+    src = _src()
+    assert re.search(r"\.vitd-banner\s*\{", src), (
+        "expected `.vitd-banner { ... }` rule for the Vit D banner shell"
+    )
+
+
+def test_vitd_banner_given_state_styled():
+    """The given state recolours to feed-bg so it reads as calm/done."""
+    src = _src()
+    assert re.search(r"\.vitd-banner\.is-given\s*\{", src), (
+        "expected `.vitd-banner.is-given { ... }` rule for the given state"
+    )
+
+
+def test_vitd_banner_late_state_styled():
+    """The after-18:00 nudge warms the banner with `--vitd`."""
+    src = _src()
+    assert re.search(r"\.vitd-banner\.is-late\s*\{", src), (
+        "expected `.vitd-banner.is-late { ... }` rule for the after-18:00 nudge"
+    )
+
+
+def test_timeline_mark_vitd_css_rule():
+    """
+    `.timeline .mark-vitd { fill: var(--vitd) }` keeps the reports
+    timeline vit D mark gold-coloured. Without the rule the mark renders
+    BLACK (same class of bug as breast/formula → mark-feed).
+    """
+    src = _src()
+    m = re.search(r"\.timeline\s+\.mark-vitd\s*\{([^}]+)\}", src)
+    assert m, "expected `.timeline .mark-vitd { ... }` rule"
+    assert "var(--vitd)" in m.group(1), (
+        "`.timeline .mark-vitd` must fill with `var(--vitd)` so it reads gold"
+    )
+
+
+def test_timeline_legend_vitd_dot_css_rule():
+    """The legend dot for vit D needs its own CSS rule to pick up the gold token."""
+    src = _src()
+    m = re.search(r"\.timeline-legend\s+\.lg-vitd\s*\{([^}]+)\}", src)
+    assert m, "expected `.timeline-legend .lg-vitd { ... }` rule"
+    assert "var(--vitd)" in m.group(1), (
+        "`.lg-vitd` legend dot must use `var(--vitd)` for its background"
+    )
+
+
 def test_bottom_nav_is_horizontally_scrollable():
     """
     The bottom nav must NOT use a rigid `grid: repeat(3, 1fr)` because

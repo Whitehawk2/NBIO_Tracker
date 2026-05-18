@@ -598,6 +598,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline .mark-feed { fill: var(--feed); }
 .timeline .mark-wee  { fill: var(--wee); }
 .timeline .mark-poo  { fill: var(--poo); }
+.timeline .mark-vitd { fill: var(--vitd); }
 /* Tap target — wireTimelineMarks binds click on .mark to show details. */
 .timeline .mark { cursor: pointer; }
 .timeline .mark:hover, .timeline .mark:active { opacity: 0.8; }
@@ -610,6 +611,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline-legend .lg-feed { background: var(--feed); }
 .timeline-legend .lg-wee  { background: var(--wee); }
 .timeline-legend .lg-poo  { background: var(--poo); }
+.timeline-legend .lg-vitd { background: var(--vitd); }
 
 .heatmap-section { margin-top: 22px; }
 .heatmap-caption { margin: 0 4px 8px; line-height: 1.4; }
