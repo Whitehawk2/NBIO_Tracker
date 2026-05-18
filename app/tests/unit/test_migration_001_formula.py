@@ -226,14 +226,14 @@ def test_001_migration_keeps_idem_unique(old_db):
 
 def test_001_migration_idempotent_on_new_shape(tmp_path):
     """
-    Running 001 against a DB that already has the new shape (fresh install
-    via the post-migration SCHEMA) should be a no-op data-wise.
+    Running pending migrations against a DB already at the latest
+    user_version is a no-op. As new migrations land, bump the version
+    in this test to match the highest .sql file in the migrations dir.
     """
     c = sqlite3.connect(":memory:")
     c.row_factory = sqlite3.Row
-    # Simulate a fresh install at user_version=1 (post-migration)
-    c.execute("PRAGMA user_version = 1")
-    # No events table — apply_pending should skip 001 because user_version=1
+    # Simulate a fresh install at user_version=2 (post-001 + post-002)
+    c.execute("PRAGMA user_version = 2")
     applied = apply_pending(c, MIGRATIONS_DIR)
     assert applied == []
     c.close()

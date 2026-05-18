@@ -93,7 +93,7 @@ def test_schema_creates_expected_tables(tmp_path: Path):
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
         )
     }
-    assert names == {"babies", "devices", "events"}
+    assert names == {"babies", "devices", "events", "app_settings"}
     conn.close()
 
 

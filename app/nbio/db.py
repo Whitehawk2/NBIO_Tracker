@@ -42,6 +42,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_events_idem ON events(idempotency_key);
 CREATE INDEX IF NOT EXISTS ix_events_baby_time ON events(baby_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS ix_events_dup_window
     ON events(baby_id, type, occurred_at) WHERE deleted_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
+    tz          TEXT,
+    notes_md    TEXT,
+    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+INSERT OR IGNORE INTO app_settings (id) VALUES (1);
 """
 
 
