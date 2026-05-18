@@ -90,6 +90,50 @@ def test_settings_page_has_five_sections(client):
     assert r.text.count('<details name="settings-tab"') == 5
 
 
+def test_settings_display_has_three_theme_cards(client):
+    """Display section shows three theme cards: warm, latte, mocha."""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    for value in ("warm", "latte", "mocha"):
+        assert f'data-theme-value="{value}"' in r.text, (
+            f"missing theme card for theme={value!r}"
+        )
+    # Exactly three (not more, not fewer).
+    assert r.text.count("data-theme-value=") == 3
+
+
+def test_theme_cards_have_palette_preview_swatches(client):
+    """
+    Each theme card shows a 5-swatch preview row (bg / accent / feed /
+    poo / vitd) so the user can scan the palette before tapping.
+    """
+    r = client.get("/settings")
+    assert r.status_code == 200
+    import re
+
+    cards = re.findall(
+        r'<button[^>]+data-theme-value="(warm|latte|mocha)"[^>]*>(.*?)</button>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert len(cards) == 3
+    for theme, inner in cards:
+        assert 'class="theme-preview"' in inner, (
+            f"{theme} card must contain a `.theme-preview` swatch row"
+        )
+        # Five swatch <span> elements inside the preview row.
+        preview_m = re.search(
+            r'<span class="theme-preview"[^>]*>(.*?)</span>\s*</button>',
+            inner + "</button>",
+            flags=re.DOTALL,
+        )
+        assert preview_m, f"{theme} preview row not parseable"
+        swatch_count = preview_m.group(1).count("<span")
+        assert swatch_count == 5, (
+            f"{theme} preview must have 5 swatches (bg/accent/feed/poo/vitd); got {swatch_count}"
+        )
+
+
 def test_bottom_nav_has_three_columns(client):
     """A new Settings link sits next to Home + Reports in the bottom nav."""
     r = client.get("/")
