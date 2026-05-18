@@ -25,7 +25,7 @@ No accounts. The network (Tailscale) is the perimeter.
 1. [Architecture at a glance](#architecture-at-a-glance)
 2. [Quick start](#quick-start)
 3. [Server setup](#server-setup)
-4. [Tailscale integration](#tailscale-integration)
+4. [Networking — choosing how to expose the app](#networking--choosing-how-to-expose-the-app)
 5. [Installing on your phone](#installing-on-your-phone)
 6. [First-launch onboarding](#first-launch-onboarding)
 7. [Offline queue](#offline-queue)
@@ -64,8 +64,18 @@ Two containers, one bind-mounted `./data/` directory, served on a single port.
 
 ## Quick start
 
-Requirements: Docker + Docker Compose v2 on the host. A Tailscale-connected
-home server is the intended deployment, but any reachable host works.
+Requirements: Docker + Docker Compose v2 on the host. NBIO has **no auth** —
+pick a networking pattern that matches the trust boundary you want:
+
+> **Just trying it out locally?** → `./setup.sh`, open `http://localhost:8000`.
+>
+> **Both parents' phones on Wi-Fi (no Tailscale)?** → set `APP_BIND=0.0.0.0`
+> in `.env`, then `./setup.sh`. ⚠️ No auth — anyone on the LAN can
+> read / write events.
+>
+> **Want phones anywhere, HTTPS, PWA install?** → install Tailscale first,
+> then `./setup.sh`. The intended deployment; see
+> [Networking — choosing how to expose the app](#networking--choosing-how-to-expose-the-app).
 
 ```bash
 git clone https://github.com/Whitehawk2/NBIO_Tracker.git
@@ -123,7 +133,7 @@ below — it's a two-step manual dance the script collapses into one paste.
 |---|---|---|
 | `TZ` | `Europe/London` | Timezone for both containers and cron |
 | `BABY_NAME` | `Baby` | Display name; seeded on first boot |
-| `APP_PORT` | `8000` | Host port (mapped to container `:8000`) |
+| `APP_PORT` | `8000` | Host port (mapped to container `:8000`). Controls BOTH the Docker host-port mapping (`${APP_PORT}:8000`) AND the backend Tailscale serves from. Set `APP_PORT=9090` for a `9090:8000` mapping; Tailscale will serve from `localhost:9090`. |
 | `APP_BIND` | `127.0.0.1` | Host interface to bind. `127.0.0.1` = Tailscale-only (no LAN). `0.0.0.0` to expose on LAN. |
 | `RCLONE_REMOTE` | `gdrive` | Name of the rclone remote (see [backups](#google-drive-backups)) |
 | `RETAIN_LOCAL` | `7` | Local snapshots to keep in `data/backups/` |
@@ -335,57 +345,149 @@ this is harmless, but stick to plain `down` to be safe.
 
 ---
 
-## Tailscale integration
+## Networking — choosing how to expose the app
 
-NBIO has **no auth**. The threat model assumes only your tailnet can reach it.
-Three deployment patterns, ordered by ease:
+NBIO has **no auth**. The threat model assumes only your trusted network can
+reach it. Three deployment patterns, all first-class:
 
-### Pattern A — Raw HTTP on tailnet (simplest)
+| | Local-only | LAN-only | Tailscale (recommended) |
+|---|---|---|---|
+| `.env` `APP_BIND` | `127.0.0.1` (default) | `0.0.0.0` | `127.0.0.1` (default) |
+| Setup work | None | None | `tailscale up` once |
+| Cross-device access | None | Any LAN device | Any tailnet device |
+| HTTPS / PWA install elsewhere | localhost only | No (HTTP) | Yes (cert via Tailscale) |
+| Auth model | Process boundary | LAN trust | Tailnet membership |
+
+Glossary on first use: **tailnet** (your Tailscale virtual LAN); **MagicDNS**
+(automatic hostnames like `homepi.<tailnet>.ts.net`); **PWA** (the
+installable web-app shell the phone treats like a native app); **SSE**
+(server-sent events, the live-sync transport); **IDB outbox** (IndexedDB
+queue that holds writes until the phone is back online).
+
+### Pattern 1 — Local-only (default)
+
+Just you, just the host. No cross-device access needed.
+
+```bash
+./setup.sh
+# Open http://localhost:8000 (or whatever port you set via APP_PORT)
+```
+
+Verify:
+```bash
+curl -fsS http://localhost:8000/healthz   # → {"status":"ok"}
+docker compose ps                          # both services Up
+```
+
+### Pattern 2 — LAN-only (HTTP, no auth)
+
+Both parents' phones on the same Wi-Fi, no Tailscale, no HTTPS.
+
+> ⚠️ **No-auth warning**: anyone on your LAN can read AND write events.
+> If your LAN includes guest devices, smart-home gadgets, or untrusted
+> users, use Tailscale (Pattern 3) instead.
+
+```bash
+# In .env:
+APP_BIND=0.0.0.0
+./setup.sh
+# Open http://<host-ip>:8000 (find with `ip a` / `ifconfig`)
+```
+
+PWA features (service workers, install-as-app) won't work over plain HTTP
+unless you're hitting `localhost`. The app is still usable from a phone
+browser; it just can't be "installed".
+
+Verify:
+```bash
+curl -fsS http://<host-ip>:8000/healthz
+```
+
+### Pattern 3 — Tailscale (recommended)
+
+Both parents' phones anywhere. HTTPS via MagicDNS. PWA install works on
+every device. The intended deployment.
 
 1. Install Tailscale on the host: `curl -fsSL https://tailscale.com/install.sh | sh`
 2. `sudo tailscale up` (sign in once).
-3. Find the host's tailnet name: `tailscale status` — say it's `homepi`.
-4. Open `http://homepi:8000` on any device in your tailnet.
+3. `./setup.sh` — auto-registers `tailscale serve` for HTTPS (and prints
+   the exact command it runs; see [Tailscale troubleshooting](#tailscale-troubleshooting) if it fails).
+4. Open `https://<host>.<tailnet>.ts.net/` on any tailnet device.
 
-Works on day one. Downside: HTTP only. Most PWA features are fine over HTTP on
-a private network, but **service workers require either `https://` or
-`http://localhost`**, so Pattern A means the PWA install / offline cache only
-works if you happen to be browsing the box itself. Not what you want.
+This pairs with the default `APP_BIND=127.0.0.1` — the raw port is bound
+only to localhost, so the **only** path in from another device is through
+the Tailscale-served HTTPS endpoint.
 
-### Pattern B — `tailscale serve` for HTTPS via MagicDNS (recommended, automated)
-
-This gives you `https://homepi.<your-tailnet>.ts.net` with a Let's Encrypt cert
-issued automatically by Tailscale. Service workers and PWA install work
-everywhere. Both parents' phones reach the same hostname.
-
-**`./setup.sh` does this for you.** When Tailscale is installed and signed
-in, the script runs the equivalent of:
-
-```bash
-sudo tailscale serve --bg --https=443 http://localhost:8000
-```
-
-and prints the resulting `https://…ts.net/` URL in its summary. `./remove.sh`
-runs `tailscale serve reset` to clear the registration symmetrically.
-
-This pairs with the default `APP_BIND=127.0.0.1` in `.env` — the raw port is
-bound only to localhost, so the **only** path in from another device is
-through the Tailscale-served HTTPS endpoint.
-
-To override the auto-detected hostname (rare; only useful for custom MagicDNS
+To override the auto-detected hostname (rare; only for custom MagicDNS
 aliases), set `NBIO_TS_HOSTNAME=foo` before running `./setup.sh`.
 
-If you want to do it manually instead (e.g. the script can't get sudo):
-
+Manual (if the script can't get sudo or you're rebuilding state):
 ```bash
 sudo tailscale serve --bg --https=443 http://localhost:8000
 sudo tailscale serve status     # verify
 ```
 
-### Pattern C — `tailscale funnel` (NOT recommended)
+`./remove.sh` runs `tailscale serve reset` to clear the registration
+symmetrically.
 
-`tailscale funnel` exposes the service to the public internet. **Don't.** This
-app has no auth. Funnel is intentionally excluded from the threat model.
+Verify:
+```bash
+curl -fsS https://<host>.<tailnet>.ts.net/healthz
+sudo tailscale serve status
+```
+
+Want HTTP-on-tailnet instead of HTTPS (e.g. corporate Tailscale where you
+can't enable HTTPS certs)? Open `http://<host>:8000` after a `tailscale
+up` — it works on tailnet-internal devices, but PWA install / offline
+features only run if you're on the host itself (service workers require
+`https://` or `http://localhost`).
+
+> ❌ **`tailscale funnel` is intentionally excluded.** Funnel exposes the
+> service to the public internet; this app has no auth.
+
+### Changing the port (e.g. `9090:8000`)
+
+Set `APP_PORT=9090` in `.env`. This changes **both** the Docker host-port
+mapping (`9090:8000` — host 9090 → container's internal 8000) AND the
+backend Tailscale serves from (`localhost:9090`). One env var,
+both code paths.
+
+Useful when port 8000 is already taken on the host. Re-run `./setup.sh`
+after the change to re-register Tailscale on the new port.
+
+### Tailscale troubleshooting
+
+When `tailscale serve` fails, `./setup.sh` now prints the exact command,
+captures the daemon's first stderr line, and emits three recovery
+commands inline. For deeper tracing, run `./setup.sh --verbose` (or
+`NBIO_VERBOSE=1 ./setup.sh`) — it wraps the Tailscale + rclone blocks in
+`set -x`.
+
+Common errors:
+
+| Error | Cause | Fix |
+|---|---|---|
+| `HTTPS certs not enabled` | Admin-panel toggle off | Tailscale admin → DNS → enable **HTTPS Certificates** |
+| `MagicDNS not enabled` | Same admin panel | Tailscale admin → DNS → enable **MagicDNS** |
+| `not logged in` | `tailscaled` running but `tailscale up` not done | `sudo tailscale up` |
+| `failed to bind 443` | Another process owns 443 | `sudo lsof -i :443`; stop it, or pick a different serve port via `--https=<port>` |
+
+Inspect / stop / reset:
+
+```bash
+sudo tailscale serve status            # current mappings (add --json for raw)
+sudo tailscale serve reset             # clear everything (this app + others)
+journalctl -u tailscaled -f            # daemon logs (Linux) for cert issuance errors
+```
+
+Why sudo: `tailscale serve` writes to a root-owned state file. To drop
+the password prompt for CI / non-interactive runs:
+
+```
+%pi ALL=(ALL) NOPASSWD: /usr/bin/tailscale serve
+```
+
+(Replace `pi` with your sudo group / user.)
 
 ### Tailscale ACL example (optional)
 
@@ -430,8 +532,9 @@ at a time, so if you use another VPN you'll have to toggle.
 You want the PWA installed so it gets its own icon, full-screen mode, and
 Chrome's Background Sync API for offline-flush.
 
-1. **Make sure you can reach the app over Tailscale** (Pattern B above gives
-   you `https://homepi.<your-tailnet>.ts.net`).
+1. **Make sure you can reach the app over Tailscale** (the
+   [Tailscale pattern](#pattern-3--tailscale-recommended) above gives you
+   `https://homepi.<your-tailnet>.ts.net`).
 2. Open the URL in **Chrome** (Edge and Brave also work; Firefox's PWA install
    on Android is limited and not recommended for this app).
 3. Chrome usually shows a small "Install app" prompt at the bottom after a few
@@ -650,14 +753,17 @@ CSV / paediatrician export is not in v1. If you want it, open an issue — it's
 - `curl -i http://localhost:8000/healthz` on the host — `200 OK`?
 - `tailscale ping <host>` from your phone (Tailscale app → ping) — does it
   reach?
-- If using Pattern B (`tailscale serve`): `sudo tailscale serve status` shows
-  the current routing. Re-run the `tailscale serve` command if it's empty.
+- If using the [Tailscale pattern](#pattern-3--tailscale-recommended):
+  `sudo tailscale serve status` shows the current routing. Re-run the
+  `tailscale serve` command if it's empty, or see
+  [Tailscale troubleshooting](#tailscale-troubleshooting).
 
 ### `Install app` option missing on Android
 
 Chrome's install prompt requires:
-- The site to be served over `https://` (or `localhost`). Use Tailscale Serve
-  (Pattern B) for HTTPS on the tailnet.
+- The site to be served over `https://` (or `localhost`). Use the
+  [Tailscale pattern](#pattern-3--tailscale-recommended) for HTTPS on
+  the tailnet.
 - A valid `manifest.webmanifest` and a registered service worker — both are
   present in NBIO.
 - You've engaged with the page for ~30 s on this device.
