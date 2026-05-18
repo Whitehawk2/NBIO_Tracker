@@ -1193,6 +1193,42 @@
     $$("[data-rel]").forEach((el) => { el.textContent = fmtRel(el.dataset.rel); });
   }
 
+  // Header baby-age refresh (#6). The server renders the value on
+  // first paint; this keeps it correct across day-boundary rollovers
+  // when the PWA is left open overnight.
+  function ageFromDob(dobIso) {
+    if (!dobIso) return null;
+    const parts = dobIso.split("-");
+    if (parts.length !== 3) return null;
+    const dob = new Date(parts[0], +parts[1] - 1, +parts[2]);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const days = Math.floor((today - dob) / 86400000);
+    if (days < 0) return null;
+    if (days < 14) return days + "d";
+    if (days < 60) {
+      const w = Math.floor(days / 7);
+      const r = days - w * 7;
+      return r === 0 ? w + "w" : w + "w " + r + "d";
+    }
+    if (days < 365) {
+      const m = Math.floor(days / 30);
+      const r = days - m * 30;
+      const w = Math.floor(r / 7);
+      return w === 0 ? m + "m" : m + "m " + w + "w";
+    }
+    const y = Math.floor(days / 365);
+    const r = Math.floor((days - y * 365) / 30);
+    return r === 0 ? y + "y" : y + "y " + r + "m";
+  }
+  function refreshBabyAge() {
+    const el = $("[data-baby-age]");
+    if (!el) return;
+    const dob = el.dataset.dob;
+    const next = ageFromDob(dob);
+    if (next) el.textContent = next;
+  }
+
   // ----- copy summary (reports)
   function wireCopySummary() {
     const btn = $("#copy-summary");
@@ -1333,7 +1369,11 @@
     wireSyncDot();
     wireHints();
     refreshRelTimes();
+    refreshBabyAge();
     setInterval(refreshRelTimes, 60 * 1000);
+    // Baby age changes far slower than relative times — once an hour
+    // is plenty (handles day-boundary rollovers on long-running PWAs).
+    setInterval(refreshBabyAge, 60 * 60 * 1000);
 
     connectSSE();
     bumpPending();
