@@ -92,17 +92,32 @@ a { color: var(--accent); text-decoration: none; }
 /* ============ Bottom nav ============ */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  /* Horizontal flex with overflow-x so a narrow viewport gets a
+     graceful scroll instead of wrapping to a second row (Pixel 9
+     production report: rigid `grid: repeat(3, 1fr)` wrapped on
+     smaller phones). The mask-image fades the right edge so any
+     cut-off tab visibly teases scrollable content. */
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
   padding: 6px 8px calc(8px + var(--safe-bottom));
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: saturate(140%) blur(10px);
   -webkit-backdrop-filter: saturate(140%) blur(10px);
   border-top: 1px solid var(--border);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 94%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 0%, #000 94%, transparent 100%);
 }
+.bottom-nav::-webkit-scrollbar { display: none; }
 .nav-item {
+  flex: 1 1 auto;
+  min-width: 96px;
+  scroll-snap-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px; border-radius: var(--radius);
   color: var(--text-muted); font-size: 12px;
+  text-decoration: none;
 }
 .nav-item .ico { font-size: 22px; }
 .nav-item.active { color: var(--text); }
