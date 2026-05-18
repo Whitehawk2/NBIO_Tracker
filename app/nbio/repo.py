@@ -7,7 +7,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from .config import settings
-from .models import DeviceUpsert, EventCreate, EventPatch
+from .models import (
+    AppSettingsUpdate,
+    BabyUpdate,
+    DeviceUpsert,
+    EventCreate,
+    EventPatch,
+)
 
 EVENT_COLS = """
     e.id, e.baby_id, e.type, e.occurred_at,
@@ -431,3 +437,53 @@ def list_devices(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 def baby(conn: sqlite3.Connection) -> dict[str, Any] | None:
     r = conn.execute("SELECT id, name, dob FROM babies WHERE id = 1").fetchone()
     return dict(r) if r else None
+
+
+def update_baby(conn: sqlite3.Connection, patch: BabyUpdate) -> dict[str, Any]:
+    """PATCH the singleton babies (id=1) row. Returns the updated row."""
+    fields = patch.model_dump(exclude_unset=True)
+    if not fields:
+        out = baby(conn)
+        assert out is not None  # seeded at init_db
+        return out
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    args = [*fields.values(), 1]
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(f"UPDATE babies SET {sets} WHERE id = ?", args)
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    out = baby(conn)
+    assert out is not None
+    return out
+
+
+def app_settings_read(conn: sqlite3.Connection) -> dict[str, Any]:
+    """Return the singleton app_settings row. Never None — seeded by migration 002."""
+    r = conn.execute(
+        "SELECT id, tz, notes_md, updated_at FROM app_settings WHERE id = 1"
+    ).fetchone()
+    assert r is not None, "app_settings id=1 missing — migration 002 didn't run?"
+    return dict(r)
+
+
+def app_settings_update(conn: sqlite3.Connection, patch: AppSettingsUpdate) -> dict[str, Any]:
+    """PATCH the singleton app_settings (id=1) row. Returns the updated row."""
+    fields = patch.model_dump(exclude_unset=True)
+    if not fields:
+        return app_settings_read(conn)
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    args = [*fields.values(), _now_iso(), 1]
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            f"UPDATE app_settings SET {sets}, updated_at = ? WHERE id = ?",
+            args,
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return app_settings_read(conn)

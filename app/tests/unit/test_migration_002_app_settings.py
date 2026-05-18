@@ -21,7 +21,6 @@ import pytest
 
 from nbio.migrations import MIGRATIONS_DIR, apply_pending, current_version
 
-
 # v1.x events schema — what an install upgrading from v1.0.x has at
 # user_version=1 (post-001).
 POST_001_SCHEMA = """
@@ -81,10 +80,7 @@ def post_001_db():
 def test_migration_002_creates_app_settings_table(post_001_db):
     """app_settings must exist with the documented columns after running 002."""
     apply_pending(post_001_db, MIGRATIONS_DIR)
-    cols = {
-        row["name"]
-        for row in post_001_db.execute("PRAGMA table_info(app_settings)")
-    }
+    cols = {row["name"] for row in post_001_db.execute("PRAGMA table_info(app_settings)")}
     assert cols == {"id", "tz", "notes_md", "updated_at"}, (
         f"unexpected app_settings columns: {cols}"
     )
@@ -126,21 +122,12 @@ def test_migration_002_advances_user_version_to_2(post_001_db):
 
 def test_migration_002_existing_data_preserved(post_001_db):
     """Adding app_settings doesn't touch babies / devices / events."""
-    post_001_db.execute(
-        "INSERT INTO devices (id, name, color) VALUES ('dev-1', 'Mum', '#4F8BFF')"
-    )
+    post_001_db.execute("INSERT INTO devices (id, name, color) VALUES ('dev-1', 'Mum', '#4F8BFF')")
     post_001_db.execute(
         """INSERT INTO events (type, baby_id, occurred_at, idempotency_key, created_by_device)
            VALUES ('wee', 1, '2026-05-16T03:00:00.000Z', 'idem-pre-002', 'dev-1')"""
     )
     apply_pending(post_001_db, MIGRATIONS_DIR)
-    assert (
-        post_001_db.execute("SELECT COUNT(*) FROM devices").fetchone()[0] == 1
-    )
-    assert (
-        post_001_db.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
-    )
-    assert (
-        post_001_db.execute("SELECT name FROM babies WHERE id=1").fetchone()[0]
-        == "Test Baby"
-    )
+    assert post_001_db.execute("SELECT COUNT(*) FROM devices").fetchone()[0] == 1
+    assert post_001_db.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+    assert post_001_db.execute("SELECT name FROM babies WHERE id=1").fetchone()[0] == "Test Baby"
