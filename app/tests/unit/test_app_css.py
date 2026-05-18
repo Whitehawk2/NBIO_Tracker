@@ -296,6 +296,102 @@ def test_dark_overrides_scoped_under_warm_theme():
     )
 
 
+REQUIRED_THEME_TOKENS = (
+    "--bg",
+    "--bg-elev",
+    "--bg-sunk",
+    "--text",
+    "--text-muted",
+    "--border",
+    "--accent",
+    "--feed",
+    "--feed-bg",
+    "--wee",
+    "--wee-bg",
+    "--poo",
+    "--poo-bg",
+    "--vitd",  # new in #8 — needed by every theme
+)
+
+
+def _block(src: str, pattern: str) -> str | None:
+    """Return the body of the first `{ ... }` block matching `pattern`."""
+    m = re.search(pattern + r"\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    return m.group(1) if m else None
+
+
+def test_warm_palettes_include_vitd_token():
+    """`--vitd` (sunshine gold) must be defined in warm light AND dark."""
+    src = _src()
+    warm_light = _block(src, r":root,\s*\[data-theme=\"warm\"\]") or _block(
+        src, r'\[data-theme="warm"\]'
+    )
+    assert warm_light is not None
+    assert "--vitd" in warm_light, "warm light palette must define --vitd"
+    warm_dark = _block(src, r'html\.dark\[data-theme="warm"\]')
+    assert warm_dark is not None
+    assert "--vitd" in warm_dark, "warm dark palette must define --vitd"
+
+
+def test_latte_theme_block_exists_with_required_tokens():
+    src = _src()
+    body = _block(src, r'\[data-theme="latte"\]')
+    assert body is not None, (
+        'expected `[data-theme="latte"] { ... }` block in app.css (Catppuccin Latte)'
+    )
+    for token in REQUIRED_THEME_TOKENS:
+        assert token in body, f"Latte palette missing {token}"
+
+
+def test_latte_uses_lavender_accent():
+    src = _src()
+    body = _block(src, r'\[data-theme="latte"\]')
+    assert body is not None
+    accent = re.search(r"--accent\s*:\s*#7287fd", body)
+    assert accent, "Latte --accent must be Catppuccin Lavender #7287fd"
+
+
+def test_latte_has_no_html_dark_variant():
+    """Latte is ALWAYS light — no html.dark override should exist."""
+    src = _src()
+    assert not re.search(r'html\.dark\[data-theme="latte"\]\s*\{', src), (
+        "Latte must NOT have an html.dark variant (always-light by design)"
+    )
+
+
+def test_mocha_theme_block_exists_with_required_tokens():
+    src = _src()
+    body = _block(src, r'\[data-theme="mocha"\]')
+    assert body is not None, (
+        'expected `[data-theme="mocha"] { ... }` block in app.css (Catppuccin Mocha)'
+    )
+    for token in REQUIRED_THEME_TOKENS:
+        assert token in body, f"Mocha palette missing {token}"
+
+
+def test_mocha_uses_lavender_accent():
+    src = _src()
+    body = _block(src, r'\[data-theme="mocha"\]')
+    assert body is not None
+    accent = re.search(r"--accent\s*:\s*#b4befe", body)
+    assert accent, "Mocha --accent must be Catppuccin Lavender (dark variant) #b4befe"
+
+
+def test_mocha_has_no_html_dark_variant():
+    """Mocha is ALWAYS dark — no separate html.dark override."""
+    src = _src()
+    assert not re.search(r'html\.dark\[data-theme="mocha"\]\s*\{', src), (
+        "Mocha must NOT have an html.dark variant (always-dark by design)"
+    )
+
+
+def test_theme_preview_styled():
+    src = _src()
+    assert re.search(r"\.theme-preview\s*\{", src), (
+        "expected `.theme-preview { ... }` rule styling the swatch row under each theme card"
+    )
+
+
 def test_bottom_nav_is_horizontally_scrollable():
     """
     The bottom nav must NOT use a rigid `grid: repeat(3, 1fr)` because

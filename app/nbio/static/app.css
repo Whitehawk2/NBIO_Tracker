@@ -20,6 +20,7 @@
   --wee-bg: #d8e8f5;
   --poo: #d2a36a;       /* warm amber */
   --poo-bg: #f3e3cb;
+  --vitd: #e8b339;      /* sunshine gold (one drop per day) */
 
   --radius: 14px;
   --radius-lg: 22px;
@@ -43,7 +44,70 @@ html.dark[data-theme="warm"] {
   --wee-bg: #1c3548;
   --poo: #b88a4f;
   --poo-bg: #3a2c19;
+  --vitd: #f5c265;      /* brighter for dark-mode visibility */
   --shadow: 0 2px 16px rgba(0,0,0,.5);
+}
+
+/* ============ Theme: Catppuccin Latte (always light) ============ */
+/* No `html.dark` variant — picking Latte locks the palette to light
+   regardless of clock / system preference. The bootstrap script in
+   base.html may still set `html.dark`; it's a no-op for these blocks. */
+[data-theme="latte"] {
+  --bg: #dce0e8;        /* crust */
+  --bg-elev: #eff1f5;   /* base — elevated cards */
+  --bg-sunk: #e6e9ef;   /* mantle */
+  --text: #4c4f69;
+  --text-muted: #6c6f85;
+  --border: #ccd0da;    /* surface0 */
+  --accent: #7287fd;    /* lavender */
+
+  --feed: #40a02b;
+  --feed-bg: #d4e9bc;
+  --wee: #209fb5;       /* sapphire */
+  --wee-bg: #c2e0e8;
+  --poo: #fe640b;       /* peach */
+  --poo-bg: #fcd7b3;
+  --vitd: #df8e1d;      /* Catppuccin yellow */
+
+  --radius: 14px;
+  --radius-lg: 22px;
+  --shadow: 0 2px 12px rgba(76,79,105,.04), 0 1px 3px rgba(76,79,105,.06);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ============ Theme: Catppuccin Mocha (always dark) ============ */
+[data-theme="mocha"] {
+  --bg: #11111b;        /* crust */
+  --bg-elev: #1e1e2e;   /* base — elevated cards */
+  --bg-sunk: #181825;   /* mantle */
+  --text: #cdd6f4;
+  --text-muted: #a6adc8;
+  --border: #313244;
+  --accent: #b4befe;    /* lavender */
+
+  --feed: #a6e3a1;
+  --feed-bg: #1f2e22;
+  --wee: #89dceb;       /* sky */
+  --wee-bg: #1c2b32;
+  --poo: #fab387;       /* peach */
+  --poo-bg: #2e2520;
+  --vitd: #f9e2af;      /* Catppuccin yellow */
+
+  --radius: 14px;
+  --radius-lg: 22px;
+  --shadow: 0 2px 16px rgba(0,0,0,.5);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ============ Theme preview swatches ============ */
+.theme-preview { display: flex; gap: 4px; margin-top: 6px; }
+.theme-preview > span {
+  width: 14px; height: 14px; border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border) inset;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
