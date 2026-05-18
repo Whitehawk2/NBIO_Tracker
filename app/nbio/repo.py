@@ -272,7 +272,7 @@ def last_event_of_each_type(
     """
     out: dict[str, dict[str, Any]] = {}
 
-    for t in ("breast", "formula", "wee", "poo"):
+    for t in ("breast", "formula", "wee", "poo", "vitd"):
         row = conn.execute(
             f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
             "WHERE e.baby_id = ? AND e.type = ? AND e.deleted_at IS NULL "
@@ -313,7 +313,7 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
 
     offset = local_offset_modifier(settings.tz)
     today = local_today_str(settings.tz)
-    out = {"feed": 0, "wee": 0, "poo": 0, "formula_ml": 0}
+    out = {"feed": 0, "wee": 0, "poo": 0, "vitd": 0, "formula_ml": 0}
     cur = conn.execute(
         """
         SELECT type,
@@ -386,6 +386,7 @@ def daily_totals(
                 "feed": 0,
                 "wee": 0,
                 "poo": 0,
+                "vitd": 0,
                 "formula_ml": 0,
                 "avg_feed_min": None,
             },

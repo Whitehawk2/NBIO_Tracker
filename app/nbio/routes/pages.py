@@ -193,6 +193,8 @@ def _mark_tooltip(e: dict[str, Any], hhmm: str) -> str:
             parts.append(f"{e['formula_volume_ml']} cc")
     elif e["type"] == "poo" and e.get("poo_quality"):
         parts.append(f"type {e['poo_quality']}")
+    elif e["type"] == "vitd":
+        parts.append("Vit D")
     return " · ".join(parts)
 
 
@@ -209,7 +211,13 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
     the SVG `<rect>` so hover / long-press surfaces per-event details
     (time + side + duration for breast, time + brand + cc for formula).
     """
-    type_to_mark = {"breast": "feed", "formula": "feed", "wee": "wee", "poo": "poo"}
+    type_to_mark = {
+        "breast": "feed",
+        "formula": "feed",
+        "wee": "wee",
+        "poo": "poo",
+        "vitd": "vitd",
+    }
     marks: list[dict[str, Any]] = []
     for e in events:
         try:

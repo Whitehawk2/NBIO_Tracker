@@ -251,6 +251,15 @@ class TestTimelineMarks:
         assert len(marks) == 1
         assert marks[0]["type"] == "wee"
 
+    def test_vitd_event_maps_to_vitd_mark_with_tooltip(self):
+        """Vit D events get their own mark class + a 'Vit D' tooltip."""
+        events = [{"occurred_at": "2026-05-16T09:00:00Z", "type": "vitd"}]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert marks[0]["type"] == "vitd"
+        assert "Vit D" in marks[0]["tooltip"]
+        assert "09:00" in marks[0]["tooltip"]
+
     def test_breast_and_formula_map_to_feed(self):
         events = [
             {"occurred_at": "2026-05-16T01:00:00Z", "type": "breast"},
