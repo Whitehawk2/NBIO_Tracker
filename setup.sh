@@ -30,9 +30,14 @@
 #   NBIO_RETAIN_REMOTE_DAYS purge remote snapshots older than N days
 #   NBIO_TS_HOSTNAME        Tailscale hostname for the printed URL
 #                           (otherwise autodetected from `tailscale status`)
+#   NBIO_VERBOSE            =1 to trace the Tailscale + rclone blocks
+#                           via `set -x`. Same as --verbose.
 #
 # Flags:
 #   --dry-run   run steps 1-3 only (no docker build / up). Useful for CI.
+#   --verbose   echo every command the script runs in the Tailscale +
+#               rclone blocks (set -x within those sections). Same as
+#               NBIO_VERBOSE=1.
 #   --help      this help
 
 set -euo pipefail
@@ -42,6 +47,7 @@ DRY_RUN=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY_RUN=1 ;;
+    --verbose) NBIO_VERBOSE=1 ;;
     --help|-h)
       sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
       exit 0
@@ -51,6 +57,7 @@ for arg in "$@"; do
 done
 
 NONINTERACTIVE=${NBIO_NONINTERACTIVE:-0}
+VERBOSE=${NBIO_VERBOSE:-0}
 
 # ----- helpers ---------------------------------------------------------------
 info()  { printf '\033[1;34m::\033[0m %s\n' "$*"; }
@@ -265,12 +272,27 @@ if probe_tailscale; then
   if (( ${#TS_PREFIX} )); then
     info "  (using sudo — you may be prompted for a password)"
   fi
-  if $TS_PREFIX tailscale serve --bg --https=443 \
-       "http://localhost:${APP_PORT:-8000}" >/dev/null 2>&1; then
+  # Echo the exact command before running so a failure isn't opaque.
+  # `→` matches the success-line style used elsewhere in setup output.
+  TS_CMD="tailscale serve --bg --https=443 http://localhost:${APP_PORT:-8000}"
+  echo "  → ${TS_PREFIX:+sudo }${TS_CMD}"
+  # Capture stderr so we can surface the daemon's reason on failure.
+  (( VERBOSE )) && set -x
+  TS_ERR=$($TS_PREFIX tailscale serve --bg --https=443 \
+       "http://localhost:${APP_PORT:-8000}" 2>&1 >/dev/null) && TS_RC=0 || TS_RC=$?
+  (( VERBOSE )) && set +x
+  if (( TS_RC == 0 )); then
     TS_REGISTERED=1
     ok "tailscale serve registered → https://${TS_HOST:-<your-tailnet-host>}/"
   else
     warn "tailscale serve registration failed."
+    TS_REASON=$(printf '%s\n' "$TS_ERR" | head -1)
+    if [[ -n "$TS_REASON" ]]; then
+      warn "  reason: $TS_REASON"
+    fi
+    warn "  Inspect:    sudo tailscale serve status"
+    warn "  Re-try:     sudo ${TS_CMD}"
+    warn "  Clear all:  sudo tailscale serve reset"
     warn "Your tailnet may need MagicDNS + HTTPS Certificates enabled in the admin panel."
     warn "App is still reachable locally on http://localhost:${APP_PORT:-8000}."
   fi
