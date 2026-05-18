@@ -127,46 +127,32 @@ after Pi-side testing surfaced multiple production issues:
 Suite at **411 tests / 100% line + branch coverage** on `nbio/` at the
 close of this item. Ready to ship as v1.1.0.
 
-## 6. Clearer Tailscale troubleshooting — [#12](https://github.com/Whitehawk2/NBIO_Tracker/issues/12)
+## 6. ✅ Clearer Tailscale troubleshooting — [#12](https://github.com/Whitehawk2/NBIO_Tracker/issues/12)
 
-Follow-up to item 3 (#5). The new `setup.sh` Tailscale path is opaque
-when it goes wrong: the user can't see _what_ command was run, and
-doesn't know how to stop the serve without `./remove.sh`.
+**Status:** Done — shipped via [PR #50](https://github.com/Whitehawk2/NBIO_Tracker/pull/50).
 
-Plan:
-- Script transparency: echo the exact `tailscale serve` command before
-  invoking it; add `--verbose` / `NBIO_VERBOSE=1` that `set -x`s the
-  Tailscale + rclone blocks; on failure, surface stderr + three recovery
-  commands (`status` / re-try / `reset`).
-- README "Tailscale troubleshooting" subsection: MagicDNS / HTTPS Certs
-  toggles, common-errors table, inspect / partial-remove / full-reset
-  commands, `journalctl -u tailscaled -f`, sudo / NOPASSWD notes.
+- `setup.sh` echoes the exact `tailscale serve` command before invoking
+  it; new `--verbose` / `NBIO_VERBOSE=1` flag enables `set -x` around
+  the Tailscale + rclone blocks; on failure the script surfaces stderr
+  plus three recovery commands (`status` / re-try / `reset`).
+- README gains a "Tailscale troubleshooting" subsection covering
+  MagicDNS / HTTPS Certs toggles, a common-errors table, inspect /
+  partial-remove / full-reset commands, `journalctl -u tailscaled -f`,
+  and sudo / NOPASSWD notes.
 
-Acceptance: a failed Tailscale setup tells you what failed, why, and the
-three commands to recover — without leaving the script output.
+## 7. ✅ Validate setup + networking docs — [#13](https://github.com/Whitehawk2/NBIO_Tracker/issues/13)
 
-## 7. Validate setup + networking docs — [#13](https://github.com/Whitehawk2/NBIO_Tracker/issues/13)
+**Status:** Done — shipped via [PR #50](https://github.com/Whitehawk2/NBIO_Tracker/pull/50)
+(combined with #12 since the two issues overlapped heavily).
 
-Documentation has accreted across PRs #1, #9, #10 without an end-to-end
-re-read. Two specific failure modes:
-- The Tailscale path is over-represented; users who **don't** want
-  Tailscale can't easily find the "just expose on the LAN" answer.
-- Some commands may have drifted out of date.
-
-Plan:
-- Fresh-clone audit pass on the Pi. Note every drifted command and
-  cross-reference.
-- Restructure networking into three equal-weight patterns —
+- Networking restructured into three equal-weight patterns —
   Local-only / LAN-only / Tailscale — with a comparison table and a
-  copy-paste verify snippet at the end of each.
-- Top-of-README decision tree pointing at the right pattern in two lines.
+  copy-paste verify snippet at the end of each section.
+- Top-of-README decision tree (two lines) pointing at the right pattern.
 - LAN-only section carries an explicit no-auth warning.
-- Glossary on first use (tailnet, MagicDNS, PWA, SSE, IDB outbox).
-- Architecture diagram becomes deployment-pattern-agnostic.
-
-Acceptance: every command in the README runs cleanly against current
-`master`; a non-Tailscale reader can pick a path and reach the app within
-30 seconds.
+- Inline glossary on first use (tailnet, MagicDNS, PWA, SSE, IDB outbox).
+- Architecture diagram now deployment-pattern-agnostic.
+- Fresh-clone command audit done; drifted commands fixed.
 
 ## 8. ✅ Tests + GitHub Actions CI/CD — [#14](https://github.com/Whitehawk2/NBIO_Tracker/issues/14)
 
@@ -278,20 +264,23 @@ Carried over (accepted risk, revisit in v1.1.0 cycle):
 Also still owed: **"add Python 3.14 to CI matrix"** follow-up before
 ever bumping the runtime to 3.14-slim.
 
-## 13. Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
+## 13. ✅ Runtime-changeable settings — [#6](https://github.com/Whitehawk2/NBIO_Tracker/issues/6)
 
-Move things that currently live in env vars or first-launch onboarding
-onto a settings page editable from the running app:
+**Status:** Done — shipped via [PR #51](https://github.com/Whitehawk2/NBIO_Tracker/pull/51)
+(plus a horizontal-scroll bottom-nav polish fix landed alongside).
 
-- Baby name + DOB (currently env `BABY_NAME` only at boot, baked into
-  `babies` row at first start).
-- Per-device name + colour (currently localStorage; allow re-edit).
-- Future: timezone override, retention days, theme (see item 15).
-
-Schema: extend `babies` and `devices`; add a small `settings` table for
-truly global toggles. UI: minimal `/settings` page with HTMX form posts
-to a new `routes/settings.py`. Reuse existing `repo.upsert_device`
-where possible.
+- New `/settings` page reachable from a 3-column bottom nav
+  (Home / Reports / Settings) — baby name + DOB editable inline,
+  per-device name + colour editable, timezone override, hint reset,
+  and an `/api/server-info` panel + JSON/CSV event export.
+- Schema migration 002 adds the `app_settings` singleton table
+  (`id=1` CHECK enforced, holds `tz` + `notes_md`).
+- Header now auto-refreshes the baby age (cron hourly + `visibilitychange`).
+- Pre-paint theme bootstrap in `base.html` reads
+  `localStorage.nbio.theme` synchronously so picker swaps don't flash.
+- Future-auth seam in place: `current_actor` dependency stub +
+  `X-Device-Id` header convention, ready for per-actor enforcement
+  when the auth feature lands.
 
 ## 14. Nix flake: dev shell + installable package — [#7](https://github.com/Whitehawk2/NBIO_Tracker/issues/7)
 
@@ -325,21 +314,45 @@ tangentially helpful for the k8s scenario in item 2.
 The setup script from item 2 will print a header comment pointing Nix
 users here so the two paths stay clearly separated.
 
-## 15. Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
+## 15. ✅ Two additional Catppuccin themes — [#8](https://github.com/Whitehawk2/NBIO_Tracker/issues/8)
 
-(Blocked on item 13 — needs the settings UI to host the picker.)
+**Status:** Done — shipped via [PR #52](https://github.com/Whitehawk2/NBIO_Tracker/pull/52)
+(bundled with the Vitamin D tracker — see item 16).
 
-Add palettes alongside the current "warm" theme. Recommended starting
-pair from the Catppuccin family:
+- Three theme cards in Settings → Display: **Warm** (default, auto
+  light/dark), **Catppuccin Latte** (always light), **Catppuccin
+  Mocha** (always dark). Each card carries a 5-swatch palette preview
+  (bg / accent / feed / poo / vit D).
+- All three palettes share **Catppuccin Lavender** for `--accent`
+  (`#7287fd` light, `#b4befe` dark).
+- Design tokens refactored under a `[data-theme="<name>"]` selector
+  pattern; pre-paint bootstrap in `base.html` applies the choice
+  before first render to avoid flashing.
+- Warm theme auto-toggles light/dark on `html.dark`; Latte stays light
+  past sunset and Mocha stays dark at sunrise, by design.
 
-- **Catppuccin Latte** (light)
-- **Catppuccin Mocha** (dark)
+## 16. ✅ Vitamin D tracking — v1.1.0 deliverable (no prior issue)
 
-Wiring:
-- Refactor the design tokens at the top of `app/nbio/static/app.css`
-  into a `[data-theme="<name>"]` selector pattern (currently `:root`
-  + `html.dark`).
-- Add a theme picker to the settings UI from item 8.
-- Persist the choice per-device in `localStorage` and apply on the
-  bootstrap script in `base.html` to avoid a flash of wrong theme.
-- Keep the current "warm" palette as the default.
+**Status:** Done — shipped via [PR #52](https://github.com/Whitehawk2/NBIO_Tracker/pull/52).
+
+Pediatric guidance is one drop of vit D per day. Added a 5th event
+type + a once-daily surface so parents have a "did we give it?" answer
+at a glance.
+
+- Schema migration 003 widens the events `type` CHECK to include
+  `'vitd'`. SQLite 12-step rebuild; existing rows preserved; idempotent.
+  `user_version` 2 → 3.
+- Models / repo: `EventType` literal, `today_counts['vitd']`,
+  `last_event_of_each_type['vitd']`, `daily_totals[*].vitd`,
+  `_timeline_marks` + `_mark_tooltip` all aware of the new type.
+- UI: **Vit D banner above the tiles** with three states (empty,
+  given, late-day). After 18:00 local with no dose yet, the banner
+  warms (`color-mix` against `--vitd`) and the label bolds — purely
+  CSS-driven, no notifications. JS keeps the banner reactive
+  (`wireVitDBanner`, `renderVitdBanner`, `refreshVitdLateClass`,
+  `bumpOverviews` vitd branch).
+- Reports: 💊 column in the daily-totals table (✓ / —), a 4th legend
+  dot, and a `.mark-vitd` class on the timeline (gold fill via the
+  per-theme `--vitd` token).
+- 110 new tests across the suite (api, repo, models, migration,
+  helpers, JS source pins, CSS rule pins). Suite at **578 / 100%**.
