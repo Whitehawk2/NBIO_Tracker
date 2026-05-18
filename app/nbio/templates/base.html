@@ -14,8 +14,13 @@
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
   <link rel="stylesheet" href="/static/app.css">
   <script>
-    // Bootstrap dark mode before paint to avoid flash.
+    // Bootstrap theme + dark mode before paint to avoid flash.
+    // Theme is per-device (localStorage); dark is per-clock + system pref.
+    // `data-theme` MUST be set before paint or CSS variables fall through.
     (function () {
+      var theme = null;
+      try { theme = localStorage.getItem('nbio.theme'); } catch (_) { /* private mode */ }
+      document.documentElement.dataset.theme = theme || 'warm';
       var h = new Date().getHours();
       var nightByClock = h >= 19 || h < 7;
       var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;

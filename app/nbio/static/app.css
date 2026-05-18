@@ -1,5 +1,11 @@
 /* ============ Design tokens ============ */
-:root {
+/* Themed via `[data-theme="<name>"]` on <html>. The `:root` block sits
+   alongside `[data-theme="warm"]` so the no-attribute fallback (e.g.
+   pre-paint, JS disabled) still renders the warm palette. #8 will add
+   `[data-theme="latte"]` / `[data-theme="mocha"]` as new self-contained
+   blocks without changing the picker code. */
+:root,
+[data-theme="warm"] {
   --bg: #faf7f2;
   --bg-elev: #ffffff;
   --bg-sunk: #f1ece2;
@@ -23,7 +29,7 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-html.dark {
+html.dark[data-theme="warm"] {
   --bg: #0e0e10;
   --bg-elev: #1a1a1e;
   --bg-sunk: #131316;
