@@ -55,9 +55,15 @@ def test_app_settings_update_with_no_fields_returns_current_row(conn):
 def test_app_settings_update_bumps_updated_at(conn, freezer):
     """`updated_at` ticks on every successful update."""
     freezer.move_to("2026-05-18T12:00:00Z")
-    before = app_settings_read(conn)["updated_at"]
+    # Seed `before` via a real (non-empty) update so `updated_at` is
+    # taken from the frozen clock rather than the SQLite default that
+    # ran during fixture init — that default uses the real wall clock,
+    # which flaked the test once wall-clock-now passed the second
+    # move_to. (An empty AppSettingsUpdate() short-circuits before the
+    # UPDATE statement, so it doesn't tick `updated_at`.)
+    before = app_settings_update(conn, AppSettingsUpdate(tz="UTC"))["updated_at"]
     freezer.move_to("2026-05-18T13:00:00Z")
-    after = app_settings_update(conn, AppSettingsUpdate(tz="UTC"))["updated_at"]
+    after = app_settings_update(conn, AppSettingsUpdate(tz="Asia/Jerusalem"))["updated_at"]
     assert after > before
 
 
