@@ -85,24 +85,47 @@ on the Pi server (2026-05-16).
 Suite at 335 tests / 100% line + branch coverage on `master` at the
 close of this item.
 
-## 5. Nicer UI/UX hints for hidden affordances — [#11](https://github.com/Whitehawk2/NBIO_Tracker/issues/11)
+## 5. ✅ Nicer UI/UX hints for hidden affordances — [#11](https://github.com/Whitehawk2/NBIO_Tracker/issues/11)
 
-Several gestures in the app are undiscoverable without being told —
-swipe-left to delete, tap-to-edit on rows, long-press on a tile for
-skip-modal quick-log. Reported from the Pi: "it isn't clear you can
-delete an entry by swiping, and there's no button."
+**Status:** Done — shipped via [PR #46](https://github.com/Whitehawk2/NBIO_Tracker/pull/46),
+with a comprehensive regression-fix follow-up in
+[PR #48](https://github.com/Whitehawk2/NBIO_Tracker/pull/48).
 
-Plan: keep every existing gesture (they're 3am-good), but add discoverable
-fallbacks and one-time inline hints:
-- Per-row `⋯` menu (Edit / Delete) at the trailing edge.
-- One-shot inline hint under the first row on first launch.
-- Tile long-press caption visible for the first ~3 sessions.
-- `aria-label` + tap-to-toggle popover on the header sync dot.
-- Warmer empty-state copy: "Tap a tile above to log your first entry."
-- "Reset onboarding hints" button (lands once item 13 / #6 brings settings UI).
+[PR #46](https://github.com/Whitehawk2/NBIO_Tracker/pull/46) — the core hints work:
+- Per-row `⋯` Edit / Delete action sheet with `aria-label`, hover, cursor.
+- One-shot first-row hint above the event list ("Tap to edit · swipe left to delete").
+- Per-tile "Hold 3s to log instantly" caption.
+- Sync-dot tap-to-explain popover + state-aware aria-labels.
+- Empty-state copy nudges users to the tiles.
+- `:focus-visible` outlines, dark-mode `--text-muted` contrast bump,
+  notes-exists 📝 icon, distinct `.no-recent` tile placeholder.
+- Persistence via three `nbio.hint.<name>` localStorage flags
+  (`first_row`, `long_press`, `sync_dot`). Future #6 settings UI will
+  clear them via prefix filter.
 
-Acceptance: every primary gesture is discoverable in a fresh install's
-first session; dismissed hints stay gone per-device.
+[PR #48](https://github.com/Whitehawk2/NBIO_Tracker/pull/48) — v1.1.0 regression fixes
+after Pi-side testing surfaced multiple production issues:
+- White / black rectangles on new UI elements (defensive
+  `appearance: none` + solid backgrounds; today-card 4-tile dropped in
+  favour of a dedicated `today-formula-strip` row).
+- `Mater...` truncation on formula rows (event-row grid swapped to
+  `max-content` + `minmax(0, 1fr)`).
+- Reports timeline marks rendering BLACK (breast/formula classes mapped
+  to the existing `.mark-feed` rule) and missing today's poos (TZ bug:
+  bucket by local date, not UTC prefix).
+- Reactive cc refresh on POST (missing fields in optimistic dict) AND
+  on DELETE (double-decrement from `event.deleted` SSE own-echo —
+  fixed by an `ownDeletes` Map mirroring the existing `ownIdems`).
+- Tile-hint × button unclickable — root cause: `<button>` nested inside
+  `<button class='tile'>`. Wrapped each tile + hint in `<div class='tile-wrap'>`.
+- Long-notes overlap → inline notes text dropped; 📝 icon remains.
+- Per-day cc on each reports timeline strip + tap-to-show-detail
+  toast on every timeline mark (Android Chrome doesn't fire SVG
+  `<title>` on touch — needs a JS click handler).
+- 7-day heatmap caption added so it reads as a pattern tool.
+
+Suite at **411 tests / 100% line + branch coverage** on `nbio/` at the
+close of this item. Ready to ship as v1.1.0.
 
 ## 6. Clearer Tailscale troubleshooting — [#12](https://github.com/Whitehawk2/NBIO_Tracker/issues/12)
 
