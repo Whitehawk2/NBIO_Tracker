@@ -44,7 +44,7 @@ def _evt(t, idem, occurred_at, dur=None, brand=None, volume_ml=None):
 
 
 def test_today_counts_zero_when_empty(conn):
-    assert today_counts(conn) == {"feed": 0, "wee": 0, "poo": 0, "formula_ml": 0}
+    assert today_counts(conn) == {"feed": 0, "wee": 0, "poo": 0, "vitd": 0, "formula_ml": 0}
 
 
 def test_today_counts_aggregates_formula_volume_ml(conn):
@@ -84,7 +84,42 @@ def test_today_counts_aggregates_today_only(conn):
     create_event(conn, _evt("poo", "i3", f"{TODAY}T05:00:00.000Z"))
     create_event(conn, _evt("wee", "i4", "2020-01-01T00:00:00.000Z"))
     counts = today_counts(conn)
-    assert counts == {"feed": 2, "wee": 0, "poo": 1, "formula_ml": 0}
+    assert counts == {"feed": 2, "wee": 0, "poo": 1, "vitd": 0, "formula_ml": 0}
+
+
+def test_today_counts_includes_vitd_key(conn):
+    """`vitd` key is always present in today_counts (0 when none today)."""
+    counts = today_counts(conn)
+    assert "vitd" in counts
+    assert counts["vitd"] == 0
+
+
+def test_today_counts_counts_todays_vitd_events(conn):
+    create_event(conn, _evt("vitd", "v1", f"{TODAY}T09:00:00.000Z"))
+    counts = today_counts(conn)
+    assert counts["vitd"] == 1
+
+
+def test_today_counts_vitd_excludes_other_days(conn):
+    """A vitd event yesterday doesn't count for today."""
+    create_event(conn, _evt("vitd", "v1", "2026-05-15T09:00:00.000Z"))
+    counts = today_counts(conn)
+    assert counts["vitd"] == 0
+
+
+def test_last_event_of_each_type_includes_vitd(conn):
+    """`vitd` key surfaces when a vit D event exists."""
+    create_event(conn, _evt("vitd", "v1", f"{TODAY}T09:00:00.000Z"))
+    out = last_event_of_each_type(conn)
+    assert "vitd" in out
+    assert out["vitd"]["occurred_at"] == f"{TODAY}T09:00:00.000Z"
+
+
+def test_daily_totals_row_includes_vitd(conn):
+    create_event(conn, _evt("vitd", "v1", f"{TODAY}T09:00:00.000Z"))
+    rows = daily_totals(conn, days=14)
+    assert len(rows) == 1
+    assert rows[0]["vitd"] == 1
 
 
 def test_today_counts_ignores_deleted(conn):

@@ -53,6 +53,65 @@ def _assert_is_reports(html: str) -> None:
         assert marker not in html, f"reports page contains index-only marker: {marker!r}"
 
 
+def test_index_shows_vitd_banner_not_given_state(client):
+    """Fresh DB → banner reads 'Vitamin D — not yet' with a Give now button."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-vitd-banner" in r.text
+    assert "not yet" in r.text or "not given" in r.text.lower()
+    assert "data-vitd-give" in r.text  # Give now button
+
+
+def test_index_shows_vitd_banner_given_state_after_post(client):
+    """After a vit D event today, banner flips to the given state."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-vitd-banner",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-vitd-banner" in r.text
+    assert "is-given" in r.text
+    # The Give now button is gone in the given state.
+    assert "data-vitd-give" not in r.text
+
+
+def test_event_row_renders_vitd_emoji(client):
+    """An event of type='vitd' shows the 💊 emoji in its row."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-vitd-emoji",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    # The row's emoji span carries 💊 for vitd type.
+    import re
+
+    m = re.search(
+        r'<li class="event-row"[^>]*data-type="vitd"[^>]*>(.*?)</li>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert m, "vitd event row not found"
+    assert "💊" in m.group(1), "vitd row must render the 💊 emoji"
+
+
 def test_index_renders_index_template(client):
     """A fresh client → / returns the index template (not reports)."""
     r = client.get("/")
@@ -88,6 +147,48 @@ def test_settings_page_has_five_sections(client):
         assert f">{label}</summary>" in r.text, f"missing settings tab: {label}"
     # Five `<details>` elements total, all in the same exclusive-open group.
     assert r.text.count('<details name="settings-tab"') == 5
+
+
+def test_settings_display_has_three_theme_cards(client):
+    """Display section shows three theme cards: warm, latte, mocha."""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    for value in ("warm", "latte", "mocha"):
+        assert f'data-theme-value="{value}"' in r.text, f"missing theme card for theme={value!r}"
+    # Exactly three (not more, not fewer).
+    assert r.text.count("data-theme-value=") == 3
+
+
+def test_theme_cards_have_palette_preview_swatches(client):
+    """
+    Each theme card shows a 5-swatch preview row (bg / accent / feed /
+    poo / vitd) so the user can scan the palette before tapping.
+    """
+    r = client.get("/settings")
+    assert r.status_code == 200
+    import re
+
+    cards = re.findall(
+        r'<button[^>]+data-theme-value="(warm|latte|mocha)"[^>]*>(.*?)</button>',
+        r.text,
+        flags=re.DOTALL,
+    )
+    assert len(cards) == 3
+    for theme, inner in cards:
+        assert 'class="theme-preview"' in inner, (
+            f"{theme} card must contain a `.theme-preview` swatch row"
+        )
+        # Five swatch <span> elements inside the preview row.
+        preview_m = re.search(
+            r'<span class="theme-preview"[^>]*>(.*?)</span>\s*</button>',
+            inner + "</button>",
+            flags=re.DOTALL,
+        )
+        assert preview_m, f"{theme} preview row not parseable"
+        swatch_count = preview_m.group(1).count("<span")
+        assert swatch_count == 5, (
+            f"{theme} preview must have 5 swatches (bg/accent/feed/poo/vitd); got {swatch_count}"
+        )
 
 
 def test_bottom_nav_has_three_columns(client):
@@ -1175,3 +1276,80 @@ def test_reports_totals_table_contains_data_rows(client):
     assert "<tr>" in tbody  # at least one data row
     # Avg-feed cell is "%.0f min" — for 15 and 16 min, avg = 15.5 → "16 min"
     assert "16 min" in tbody
+
+
+def test_reports_timeline_legend_includes_vitd(client):
+    """The Last 7 days timeline-legend must have a vit D entry alongside feed/wee/poo."""
+    r = client.get("/reports")
+    assert r.status_code == 200
+    legend_start = r.text.find('class="timeline-legend"')
+    assert legend_start != -1, "timeline-legend container not found"
+    legend_end = r.text.find("</div>", legend_start)
+    legend = r.text[legend_start:legend_end]
+    assert "lg-vitd" in legend, "legend must include the `lg-vitd` dot for #8.5"
+    assert "vit D" in legend, "legend must label the vit D entry"
+
+
+def test_reports_totals_includes_vitd_column(client):
+    """
+    The daily totals table gains a 💊 column showing ✓ for days with at
+    least one vit D event, `—` otherwise.
+    """
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-rpts-vitd-1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # Stable selector for the column.
+    assert 'data-col-totals="vitd"' in r.text, (
+        "reports totals table must have a column with `data-col-totals='vitd'`"
+    )
+    # The day with a vit D event shows ✓ in the totals row.
+    tbody_start = r.text.find('id="totals-body"')
+    tbody_end = r.text.find("</tbody>", tbody_start)
+    tbody = r.text[tbody_start:tbody_end]
+    assert "✓" in tbody, "today's totals row must show ✓ in the 💊 column"
+
+
+def test_reports_timeline_renders_vitd_mark(client):
+    """A vit D event renders with `class='mark mark-vitd'` in the timeline SVG."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-rpts-vitd-mark",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "mark-vitd" in r.text, (
+        "vit D events must render `class='mark mark-vitd'` so the gold fill rule applies"
+    )
+
+
+def test_reports_timeline_vitd_tooltip_says_vit_d(client):
+    """The vit D mark's <title> tooltip carries the human label 'Vit D'."""
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "vitd",
+            "occurred_at": f"{today}T09:00:00.000Z",
+            "idempotency_key": "idem-rpts-vitd-tip",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # The tooltip is `<title>HH:MM · Vit D</title>` for vit D events.
+    assert "Vit D" in r.text, "vit D timeline mark tooltip must carry the 'Vit D' label"

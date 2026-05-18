@@ -20,6 +20,7 @@
   --wee-bg: #d8e8f5;
   --poo: #d2a36a;       /* warm amber */
   --poo-bg: #f3e3cb;
+  --vitd: #e8b339;      /* sunshine gold (one drop per day) */
 
   --radius: 14px;
   --radius-lg: 22px;
@@ -43,8 +44,114 @@ html.dark[data-theme="warm"] {
   --wee-bg: #1c3548;
   --poo: #b88a4f;
   --poo-bg: #3a2c19;
+  --vitd: #f5c265;      /* brighter for dark-mode visibility */
   --shadow: 0 2px 16px rgba(0,0,0,.5);
 }
+
+/* ============ Theme: Catppuccin Latte (always light) ============ */
+/* No `html.dark` variant — picking Latte locks the palette to light
+   regardless of clock / system preference. The bootstrap script in
+   base.html may still set `html.dark`; it's a no-op for these blocks. */
+[data-theme="latte"] {
+  --bg: #dce0e8;        /* crust */
+  --bg-elev: #eff1f5;   /* base — elevated cards */
+  --bg-sunk: #e6e9ef;   /* mantle */
+  --text: #4c4f69;
+  --text-muted: #6c6f85;
+  --border: #ccd0da;    /* surface0 */
+  --accent: #7287fd;    /* lavender */
+
+  --feed: #40a02b;
+  --feed-bg: #d4e9bc;
+  --wee: #209fb5;       /* sapphire */
+  --wee-bg: #c2e0e8;
+  --poo: #fe640b;       /* peach */
+  --poo-bg: #fcd7b3;
+  --vitd: #df8e1d;      /* Catppuccin yellow */
+
+  --radius: 14px;
+  --radius-lg: 22px;
+  --shadow: 0 2px 12px rgba(76,79,105,.04), 0 1px 3px rgba(76,79,105,.06);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ============ Theme: Catppuccin Mocha (always dark) ============ */
+[data-theme="mocha"] {
+  --bg: #11111b;        /* crust */
+  --bg-elev: #1e1e2e;   /* base — elevated cards */
+  --bg-sunk: #181825;   /* mantle */
+  --text: #cdd6f4;
+  --text-muted: #a6adc8;
+  --border: #313244;
+  --accent: #b4befe;    /* lavender */
+
+  --feed: #a6e3a1;
+  --feed-bg: #1f2e22;
+  --wee: #89dceb;       /* sky */
+  --wee-bg: #1c2b32;
+  --poo: #fab387;       /* peach */
+  --poo-bg: #2e2520;
+  --vitd: #f9e2af;      /* Catppuccin yellow */
+
+  --radius: 14px;
+  --radius-lg: 22px;
+  --shadow: 0 2px 16px rgba(0,0,0,.5);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ============ Theme preview swatches ============ */
+.theme-preview { display: flex; gap: 4px; margin-top: 6px; }
+.theme-preview > span {
+  width: 14px; height: 14px; border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--border) inset;
+}
+
+/* ============ Vitamin D banner ============ */
+/* Once-per-day surface for the daily Vit D drop. Three visual states:
+   - default (not given): muted bg, normal weight
+   - .is-late (not given AND local hour ≥ 18): warmer bg + bold copy
+   - .is-given (logged today): calm bg with checkmark + timestamp
+   Server renders the right class on first paint; app.js handles the
+   reactive swap on tap and the hourly recompute of .is-late. */
+.vitd-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin: 8px 0 14px; padding: 10px 14px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  transition: background .25s ease;
+}
+.vitd-banner .emoji { font-size: 20px; }
+.vitd-banner .lbl   { color: var(--text-muted); }
+.vitd-banner .when {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.vitd-banner .ok { color: var(--feed); margin-left: 4px; }
+.vitd-banner .actor-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+}
+.vitd-banner .btn-vitd {
+  margin-left: auto;
+  appearance: none; -webkit-appearance: none;
+  border: 1px solid var(--vitd); background: transparent;
+  color: var(--vitd); font: inherit;
+  padding: 6px 12px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.vitd-banner.is-given { background: var(--feed-bg); cursor: pointer; }
+.vitd-banner.is-given .lbl { color: var(--text); }
+.vitd-banner.is-late {
+  background: color-mix(in srgb, var(--vitd) 18%, var(--bg-sunk));
+}
+.vitd-banner.is-late .lbl   { color: var(--vitd); font-weight: 600; }
+.vitd-banner.is-late .emoji { filter: brightness(1.1); }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
@@ -491,6 +598,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline .mark-feed { fill: var(--feed); }
 .timeline .mark-wee  { fill: var(--wee); }
 .timeline .mark-poo  { fill: var(--poo); }
+.timeline .mark-vitd { fill: var(--vitd); }
 /* Tap target — wireTimelineMarks binds click on .mark to show details. */
 .timeline .mark { cursor: pointer; }
 .timeline .mark:hover, .timeline .mark:active { opacity: 0.8; }
@@ -503,6 +611,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline-legend .lg-feed { background: var(--feed); }
 .timeline-legend .lg-wee  { background: var(--wee); }
 .timeline-legend .lg-poo  { background: var(--poo); }
+.timeline-legend .lg-vitd { background: var(--vitd); }
 
 .heatmap-section { margin-top: 22px; }
 .heatmap-caption { margin: 0 4px 8px; line-height: 1.4; }

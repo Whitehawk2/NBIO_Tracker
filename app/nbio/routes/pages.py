@@ -125,19 +125,35 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     grouped_events = _group_events_by_local_day(events)
     last_days = _last_days_rows(repo.daily_totals(conn, days=4), n=3)
     baby = repo.baby(conn)
+    today = _today_card(conn)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "baby": baby,
             "baby_age": _age_from_dob(baby.get("dob") if baby else None, now_local.date()),
-            "today": _today_card(conn),
+            "today": today,
+            "vitd_overdue": _vitd_overdue(today["counts"], now_local.hour),
             "events": events,
             "grouped_events": grouped_events,
             "last_days": last_days,
             "devices": repo.list_devices(conn),
         },
     )
+
+
+def _vitd_overdue(today_counts: dict[str, int], local_hour: int) -> bool:
+    """
+    Triggers the late-day visual nudge on the vit D banner.
+
+    True when:
+      - today's vit D count is 0 (not given), AND
+      - the local hour is >= 18 (6pm or later)
+
+    The CSS class `.vitd-banner.is-late` is applied server-side so
+    cold loads after 18:00 don't flash through the muted state.
+    """
+    return today_counts.get("vitd", 0) == 0 and local_hour >= 18
 
 
 def _age_from_dob(dob_iso: str | None, today_local: date) -> str | None:
@@ -193,6 +209,8 @@ def _mark_tooltip(e: dict[str, Any], hhmm: str) -> str:
             parts.append(f"{e['formula_volume_ml']} cc")
     elif e["type"] == "poo" and e.get("poo_quality"):
         parts.append(f"type {e['poo_quality']}")
+    elif e["type"] == "vitd":
+        parts.append("Vit D")
     return " · ".join(parts)
 
 
@@ -209,7 +227,13 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
     the SVG `<rect>` so hover / long-press surfaces per-event details
     (time + side + duration for breast, time + brand + cc for formula).
     """
-    type_to_mark = {"breast": "feed", "formula": "feed", "wee": "wee", "poo": "poo"}
+    type_to_mark = {
+        "breast": "feed",
+        "formula": "feed",
+        "wee": "wee",
+        "poo": "poo",
+        "vitd": "vitd",
+    }
     marks: list[dict[str, Any]] = []
     for e in events:
         try:

@@ -113,11 +113,15 @@ def test_migration_002_idempotent_on_rerun(post_001_db):
     assert dict(rows_first[0]) == dict(rows_second[0])
 
 
-def test_migration_002_advances_user_version_to_2(post_001_db):
-    """user_version ticks 1 → 2 once 002 runs."""
+def test_migration_002_advances_user_version_past_1(post_001_db):
+    """
+    user_version starts at 1; apply_pending walks ALL outstanding
+    migrations. Today the latest is 3 (002 + 003). We only assert >1 here
+    because newer migrations are validated in their own test files.
+    """
     assert current_version(post_001_db) == 1
     apply_pending(post_001_db, MIGRATIONS_DIR)
-    assert current_version(post_001_db) == 2
+    assert current_version(post_001_db) >= 2
 
 
 def test_migration_002_existing_data_preserved(post_001_db):

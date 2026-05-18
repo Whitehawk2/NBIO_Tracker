@@ -135,6 +135,28 @@ class TestLastDaysRows:
 # ---------- _timeline_marks --------------------------------------------------
 
 
+class TestVitdOverdue:
+    """`_vitd_overdue` decides whether the banner gets the .is-late class."""
+
+    def test_not_late_before_18_when_not_given(self):
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=17) is False
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=9) is False
+
+    def test_late_at_or_after_18_when_not_given(self):
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=18) is True
+        assert pages._vitd_overdue({"vitd": 0}, local_hour=23) is True
+
+    def test_never_late_once_given(self):
+        """Logged today → calm regardless of hour."""
+        assert pages._vitd_overdue({"vitd": 1}, local_hour=23) is False
+        assert pages._vitd_overdue({"vitd": 3}, local_hour=20) is False
+
+    def test_missing_vitd_key_treated_as_zero(self):
+        """Defensive: missing key (older today_counts shape) is fine."""
+        assert pages._vitd_overdue({}, local_hour=20) is True
+        assert pages._vitd_overdue({}, local_hour=10) is False
+
+
 class TestAgeFromDob:
     """`_age_from_dob` renders compact baby ages for the header display."""
 
@@ -250,6 +272,15 @@ class TestTimelineMarks:
         marks = pages._timeline_marks(events, "2026-05-16")
         assert len(marks) == 1
         assert marks[0]["type"] == "wee"
+
+    def test_vitd_event_maps_to_vitd_mark_with_tooltip(self):
+        """Vit D events get their own mark class + a 'Vit D' tooltip."""
+        events = [{"occurred_at": "2026-05-16T09:00:00Z", "type": "vitd"}]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert marks[0]["type"] == "vitd"
+        assert "Vit D" in marks[0]["tooltip"]
+        assert "09:00" in marks[0]["tooltip"]
 
     def test_breast_and_formula_map_to_feed(self):
         events = [
