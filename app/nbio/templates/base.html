@@ -33,6 +33,9 @@
     <div class="title">
       <span class="emoji">🍼</span>
       <span class="name">{% block header_title %}{{ baby.name if baby else 'NBIO' }}{% endblock %}</span>
+      {% if baby_age %}
+        <span class="baby-age" data-baby-age data-dob="{{ baby.dob }}">{{ baby_age }}</span>
+      {% endif %}
     </div>
     {% include "partials/sync_badge.html" %}
   </header>
@@ -47,6 +50,9 @@
     </a>
     <a href="/reports" class="nav-item {% block nav_reports %}{% endblock %}" aria-label="Reports">
       <span class="ico">📊</span><span>Reports</span>
+    </a>
+    <a href="/settings" class="nav-item {% block nav_settings %}{% endblock %}" aria-label="Settings">
+      <span class="ico">🛠️</span><span>Settings</span>
     </a>
   </nav>
 

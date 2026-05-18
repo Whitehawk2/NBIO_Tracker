@@ -135,6 +135,42 @@ class TestLastDaysRows:
 # ---------- _timeline_marks --------------------------------------------------
 
 
+class TestAgeFromDob:
+    """`_age_from_dob` renders compact baby ages for the header display."""
+
+    @pytest.mark.parametrize(
+        "dob,today,expected",
+        [
+            ("2026-05-16", date(2026, 5, 16), "0d"),
+            ("2026-05-04", date(2026, 5, 16), "12d"),
+            ("2026-05-09", date(2026, 5, 16), "7d"),  # boundary: <14d → days
+            ("2026-04-25", date(2026, 5, 16), "3w"),  # 21d clean weeks
+            ("2026-04-20", date(2026, 5, 16), "3w 5d"),  # 26d → 3w 5d
+            ("2026-03-17", date(2026, 5, 16), "2m"),  # 60d → months
+            ("2026-02-16", date(2026, 5, 16), "2m 4w"),  # 89d → 2m 29d → 2m + 4w
+            ("2025-12-16", date(2026, 5, 16), "5m"),  # 151d → 5m + 1d → 5m
+            ("2024-05-16", date(2026, 5, 16), "2y"),
+            ("2023-11-16", date(2026, 5, 16), "2y 6m"),
+        ],
+    )
+    def test_renders_expected_format(self, dob, today, expected):
+        assert pages._age_from_dob(dob, today) == expected
+
+    def test_none_dob_returns_none(self):
+        assert pages._age_from_dob(None, date(2026, 5, 16)) is None
+
+    def test_empty_string_returns_none(self):
+        assert pages._age_from_dob("", date(2026, 5, 16)) is None
+
+    def test_invalid_format_returns_none(self):
+        assert pages._age_from_dob("not-a-date", date(2026, 5, 16)) is None
+        assert pages._age_from_dob("20-04-2026", date(2026, 5, 16)) is None
+
+    def test_future_dob_returns_none(self):
+        """Defensive: a dob in the future shouldn't render as negative days."""
+        assert pages._age_from_dob("2027-01-01", date(2026, 5, 16)) is None
+
+
 class TestDayFormulaCc:
     def test_sums_formula_volume_for_day(self):
         events = [

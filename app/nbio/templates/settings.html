@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Settings — NBIO{% endblock %}
+{% block nav_settings %}active{% endblock %}
+{% block content %}
+
+<section id="settings-page" class="settings-page" aria-label="Settings">
+  <h1 class="page-title">Settings</h1>
+
+  {# Each <details> uses the same `name=` so only one is open at a
+     time on browsers that support exclusive-accordion. (Chrome 120+,
+     Safari 17.4+, FF 132+.) On older browsers all five open
+     independently — harmless. settings.js has a tiny polyfill. #}
+
+  <details name="settings-tab" class="settings-section" open data-section="baby">
+    <summary>Baby</summary>
+    <form id="baby-form" autocomplete="off" novalidate>
+      <div class="field">
+        <label class="modal-label" for="baby-name">Name</label>
+        <input id="baby-name" name="name" type="text" maxlength="40"
+               value="{{ baby.name if baby else '' }}">
+      </div>
+      <div class="field">
+        <label class="modal-label" for="baby-dob">Date of birth</label>
+        <input id="baby-dob" name="dob" type="date"
+               value="{{ baby.dob or '' }}">
+      </div>
+      <button type="submit" class="btn-primary">Save</button>
+    </form>
+  </details>
+
+  <details name="settings-tab" class="settings-section" data-section="device">
+    <summary>This device</summary>
+    <form id="device-form" autocomplete="off" novalidate>
+      <div class="field">
+        <label class="modal-label" for="device-name">Display name</label>
+        <input id="device-name" name="name" type="text" maxlength="40"
+               placeholder="Mum / Dad / …">
+      </div>
+      <div class="field">
+        <label class="modal-label">Colour</label>
+        <div id="device-color-grid" class="device-color-grid"
+             role="radiogroup" aria-label="Pick a colour"></div>
+      </div>
+      <button type="submit" class="btn-primary">Save</button>
+    </form>
+  </details>
+
+  <details name="settings-tab" class="settings-section" data-section="display">
+    <summary>Display</summary>
+    <div class="field">
+      <p class="modal-label">Theme</p>
+      <div id="theme-grid" class="theme-grid" role="radiogroup" aria-label="Pick a theme">
+        <button type="button" class="theme-card" data-theme-value="warm">
+          <span class="theme-card-name">Warm</span>
+          <span class="theme-card-blurb">Default</span>
+        </button>
+      </div>
+      <p class="muted small">More themes coming with
+        <a href="https://github.com/Whitehawk2/NBIO_Tracker/issues/8">#8</a>.</p>
+    </div>
+  </details>
+
+  <details name="settings-tab" class="settings-section" data-section="data">
+    <summary>Data</summary>
+    <p class="muted">Download all events for backup, doctor visits, or a personal record.</p>
+    <div class="data-buttons">
+      <a id="export-json" class="btn-secondary" href="/api/export/events.json" download>Download JSON</a>
+      <a id="export-csv"  class="btn-secondary" href="/api/export/events.csv"  download>Download CSV</a>
+    </div>
+  </details>
+
+  <details name="settings-tab" class="settings-section" data-section="system">
+    <summary>System</summary>
+    <dl id="server-info" class="server-info">
+      <dt>Loading…</dt><dd></dd>
+    </dl>
+  </details>
+</section>
+
+<script src="/static/settings.js" defer></script>
+{% endblock %}

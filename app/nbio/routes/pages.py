@@ -124,11 +124,13 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     ]
     grouped_events = _group_events_by_local_day(events)
     last_days = _last_days_rows(repo.daily_totals(conn, days=4), n=3)
+    baby = repo.baby(conn)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
-            "baby": repo.baby(conn),
+            "baby": baby,
+            "baby_age": _age_from_dob(baby.get("dob") if baby else None, now_local.date()),
             "today": _today_card(conn),
             "events": events,
             "grouped_events": grouped_events,
@@ -136,6 +138,44 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
             "devices": repo.list_devices(conn),
         },
     )
+
+
+def _age_from_dob(dob_iso: str | None, today_local: date) -> str | None:
+    """
+    Render a compact baby age relative to `today_local`.
+    Returns None when `dob_iso` is None (header omits the span).
+
+    Examples:
+        2026-05-16 today, dob 2026-05-04 → "12d"
+        2026-05-16 today, dob 2026-04-25 → "3w"
+        2026-05-16 today, dob 2026-04-20 → "3w 5d"
+        2026-05-16 today, dob 2025-12-16 → "5m"
+        2026-05-16 today, dob 2024-05-16 → "2y"
+    """
+    if not dob_iso:
+        return None
+    try:
+        dob = datetime.strptime(dob_iso, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+    delta_days = (today_local - dob).days
+    if delta_days < 0:
+        return None
+    if delta_days < 14:
+        return f"{delta_days}d"
+    if delta_days < 60:
+        weeks = delta_days // 7
+        rem_days = delta_days - weeks * 7
+        return f"{weeks}w" if rem_days == 0 else f"{weeks}w {rem_days}d"
+    # ≥ ~2 months: months (30d) then years (365d)
+    if delta_days < 365:
+        months = delta_days // 30
+        rem_days = delta_days - months * 30
+        weeks = rem_days // 7
+        return f"{months}m" if weeks == 0 else f"{months}m {weeks}w"
+    years = delta_days // 365
+    rem_months = (delta_days - years * 365) // 30
+    return f"{years}y" if rem_months == 0 else f"{years}y {rem_months}m"
 
 
 def _mark_tooltip(e: dict[str, Any], hhmm: str) -> str:

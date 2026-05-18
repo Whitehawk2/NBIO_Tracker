@@ -19,10 +19,12 @@ import json
 import sqlite3
 import time
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse, Response
+from fastapi.templating import Jinja2Templates
 
 from .. import repo
 from ..auth import current_actor
@@ -32,7 +34,38 @@ from ..models import Actor, AppSettingsUpdate, BabyUpdate
 from ..sse import broker
 from ..version import static_assets_hash
 
-router = APIRouter(prefix="/api")
+TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+# Two prefix-less routers so the settings page lives at /settings and
+# the JSON API lives at /api/*. Both export from this module.
+api_router = APIRouter(prefix="/api")
+page_router = APIRouter()
+
+
+@page_router.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+    actor: Actor = Depends(current_actor),
+):
+    from .pages import _age_from_dob  # avoid circular import at module load
+
+    baby = repo.baby(conn)
+    today_local = datetime.now().astimezone().date()
+    return templates.TemplateResponse(
+        request,
+        "settings.html",
+        {
+            "baby": baby,
+            "baby_age": _age_from_dob(baby.get("dob") if baby else None, today_local),
+            "app_settings": repo.app_settings_read(conn),
+            "devices": repo.list_devices(conn),
+        },
+    )
+
+
+router = api_router  # back-compat for main.py's include_router(settings.router)
 
 # Captured at module import. Pyproject is read once; uptime is the
 # delta from this monotonic baseline (immune to wall-clock jumps).
