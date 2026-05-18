@@ -1,5 +1,11 @@
 /* ============ Design tokens ============ */
-:root {
+/* Themed via `[data-theme="<name>"]` on <html>. The `:root` block sits
+   alongside `[data-theme="warm"]` so the no-attribute fallback (e.g.
+   pre-paint, JS disabled) still renders the warm palette. #8 will add
+   `[data-theme="latte"]` / `[data-theme="mocha"]` as new self-contained
+   blocks without changing the picker code. */
+:root,
+[data-theme="warm"] {
   --bg: #faf7f2;
   --bg-elev: #ffffff;
   --bg-sunk: #f1ece2;
@@ -23,7 +29,7 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-html.dark {
+html.dark[data-theme="warm"] {
   --bg: #0e0e10;
   --bg-elev: #1a1a1e;
   --bg-sunk: #131316;
@@ -86,17 +92,32 @@ a { color: var(--accent); text-decoration: none; }
 /* ============ Bottom nav ============ */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-  display: grid; grid-template-columns: 1fr 1fr;
+  /* Horizontal flex with overflow-x so a narrow viewport gets a
+     graceful scroll instead of wrapping to a second row (Pixel 9
+     production report: rigid `grid: repeat(3, 1fr)` wrapped on
+     smaller phones). The mask-image fades the right edge so any
+     cut-off tab visibly teases scrollable content. */
+  display: flex;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
   padding: 6px 8px calc(8px + var(--safe-bottom));
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: saturate(140%) blur(10px);
   -webkit-backdrop-filter: saturate(140%) blur(10px);
   border-top: 1px solid var(--border);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 94%, transparent 100%);
+  mask-image: linear-gradient(to right, #000 0%, #000 94%, transparent 100%);
 }
+.bottom-nav::-webkit-scrollbar { display: none; }
 .nav-item {
+  flex: 1 1 auto;
+  min-width: 96px;
+  scroll-snap-align: center;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 8px; border-radius: var(--radius);
   color: var(--text-muted); font-size: 12px;
+  text-decoration: none;
 }
 .nav-item .ico { font-size: 22px; }
 .nav-item.active { color: var(--text); }
@@ -542,3 +563,85 @@ textarea:focus-visible,
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* ============ Header baby-age ============ */
+.baby-age {
+  font-size: 13px; color: var(--text-muted); font-weight: 500;
+  margin-left: 6px; font-variant-numeric: tabular-nums;
+}
+
+/* ============ Settings page ============ */
+.settings-page .page-title {
+  font-size: 22px; font-weight: 700; margin: 8px 4px 14px;
+}
+.settings-page .settings-section {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.settings-page .settings-section > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 16px; font-weight: 700;
+  padding: 14px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.settings-page .settings-section > summary::-webkit-details-marker { display: none; }
+.settings-page .settings-section > summary::after {
+  content: "›"; font-size: 22px; color: var(--text-muted);
+  transition: transform .15s ease;
+}
+.settings-page .settings-section[open] > summary::after { transform: rotate(90deg); }
+.settings-page .settings-section[open] {
+  padding-bottom: 14px;
+}
+.settings-page .settings-section > :not(summary) {
+  margin: 0 16px 0;
+  padding-top: 8px;
+}
+.settings-page .field { display: grid; gap: 6px; margin-bottom: 14px; }
+.settings-page input[type="text"],
+.settings-page input[type="date"] {
+  width: 100%; padding: 12px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--bg);
+  color: var(--text); font-size: 16px;
+}
+
+.device-color-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px;
+}
+.device-color-grid button {
+  appearance: none; -webkit-appearance: none;
+  height: 44px; border: 2px solid transparent; border-radius: var(--radius);
+  cursor: pointer;
+}
+.device-color-grid button.selected {
+  border-color: var(--text); box-shadow: 0 0 0 2px var(--bg-elev) inset;
+}
+
+.theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.theme-card {
+  appearance: none; -webkit-appearance: none;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 14px; border: 1px solid var(--border); background: var(--bg-sunk);
+  border-radius: var(--radius); cursor: pointer; font: inherit; color: inherit;
+  text-align: left;
+}
+.theme-card.selected { border-color: var(--accent); border-width: 2px; padding: 13px; }
+.theme-card-name { font-weight: 700; font-size: 16px; }
+.theme-card-blurb { font-size: 12px; color: var(--text-muted); }
+
+.data-buttons {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.data-buttons .btn-secondary { text-align: center; text-decoration: none; }
+
+.server-info {
+  display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px;
+  font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.server-info dt { color: var(--text-muted); }
+.server-info dd { margin: 0; word-break: break-all; }

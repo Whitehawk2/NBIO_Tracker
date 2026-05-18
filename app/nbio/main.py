@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from .db import init_db
-from .routes import devices, events, health, pages, stream, sw
+from .routes import devices, events, health, pages, settings, stream, sw
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -27,4 +27,6 @@ app.include_router(health.router)
 app.include_router(pages.router)
 app.include_router(events.router)
 app.include_router(devices.router)
+app.include_router(settings.api_router)
+app.include_router(settings.page_router)
 app.include_router(stream.router)

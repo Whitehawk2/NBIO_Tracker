@@ -213,6 +213,23 @@ def test_tile_hint_background_uses_solid_color():
     assert "var(--" in bg_value, f".tile-hint background must use a CSS variable; got {bg_value!r}"
 
 
+def _dark_token_block(src: str) -> str:
+    """
+    Return the body of the dark-mode token block. Accepts either the
+    legacy `html.dark { ... }` or the v1.1.0+ themed
+    `html.dark[data-theme="warm"] { ... }`. Tests pin token *values*;
+    the selector shape is the theming refactor's concern.
+    """
+    for pattern in (
+        r'html\.dark\[data-theme="warm"\]\s*\{([^}]+)\}',
+        r"html\.dark\s*\{([^}]+)\}",
+    ):
+        m = re.search(pattern, src, flags=re.DOTALL)
+        if m:
+            return m.group(1)
+    raise AssertionError("no dark token block found in app.css")
+
+
 def test_dark_mode_feed_color_brightened():
     """
     The reports timeline feed marks were `#5fa088` in dark mode —
@@ -222,11 +239,9 @@ def test_dark_mode_feed_color_brightened():
     with a brighter dark-mode feed colour for better salience.
     """
     src = _src()
-    m = re.search(r"html\.dark\s*\{([^}]+)\}", src, flags=re.DOTALL)
-    assert m, "html.dark token block not found"
-    block = m.group(1)
+    block = _dark_token_block(src)
     feed = re.search(r"--feed\s*:\s*([#0-9a-fA-F]+)", block)
-    assert feed, "html.dark must declare --feed"
+    assert feed, "dark block must declare --feed"
     value = feed.group(1).lower()
     assert value != "#5fa088", "dark-mode --feed must be bumped from the low-salience value #5fa088"
     # New value should be visibly brighter: each channel ~>= 0x70.
@@ -237,16 +252,13 @@ def test_dark_mode_feed_color_brightened():
 
 def test_dark_mode_text_muted_bumped():
     """
-    `html.dark` `--text-muted` must be the bumped contrast value
+    Dark-mode `--text-muted` must be the bumped contrast value
     (~#a0a0a8). The previous `#8a8a93` was borderline AA on `--bg-elev`.
     """
     src = _src()
-    # Grab the html.dark block.
-    m = re.search(r"html\.dark\s*\{([^}]+)\}", src, flags=re.DOTALL)
-    assert m, "html.dark token block not found in app.css"
-    block = m.group(1)
+    block = _dark_token_block(src)
     muted = re.search(r"--text-muted\s*:\s*([#a-zA-Z0-9]+)\s*;", block)
-    assert muted, "html.dark must declare --text-muted"
+    assert muted, "dark block must declare --text-muted"
     value = muted.group(1).lower()
     assert value != "#8a8a93", (
         "dark-mode --text-muted must be bumped from the borderline-AA value #8a8a93"
@@ -255,4 +267,116 @@ def test_dark_mode_text_muted_bumped():
     # #8a8a93 (so each channel ~>= 0x95).
     assert re.match(r"#[9-f][0-9a-f]{5}$", value), (
         f"dark-mode --text-muted should be >= #909090-ish for AA on --bg-elev; got {value}"
+    )
+
+
+def test_data_theme_warm_selector_exists():
+    """
+    The theming refactor (#6 wiring for #8): light tokens live under
+    `[data-theme="warm"]` (alongside `:root` for the no-attribute
+    fallback). #8 Catppuccin themes will plug in as new `[data-theme=…]`
+    blocks without touching the picker.
+    """
+    src = _src()
+    assert re.search(r'\[data-theme="warm"\]\s*\{', src), (
+        'expected a `[data-theme="warm"] { ... }` rule defining light tokens '
+        "(the refactor that wires #8 themes)"
+    )
+
+
+def test_dark_overrides_scoped_under_warm_theme():
+    """
+    Dark tokens must be scoped under the theme name so #8 can ship
+    its own `html.dark[data-theme="mocha"]` block self-contained.
+    """
+    src = _src()
+    assert re.search(r'html\.dark\[data-theme="warm"\]\s*\{', src), (
+        'expected `html.dark[data-theme="warm"] { ... }` scoping the warm '
+        "theme's dark-mode overrides (refactor for #8)"
+    )
+
+
+def test_bottom_nav_is_horizontally_scrollable():
+    """
+    The bottom nav must NOT use a rigid `grid: repeat(3, 1fr)` because
+    that overflows / wraps on smaller phones (Pixel 9 report:
+    Settings tab dropped to a 2nd row on a regular Pixel 9). Switched
+    to flex + overflow-x: auto so narrow viewports get a horizontal
+    scroll (with a subtle right-edge mask as the "scrollable" hint)
+    while wide viewports still show all three side-by-side.
+    """
+    src = _src()
+    m = re.search(r"\.bottom-nav\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, "`.bottom-nav` rule not found"
+    body = m.group(1)
+    # Strip CSS comments so they don't accidentally satisfy the assertions.
+    body_no_comments = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    assert "display: flex" in body_no_comments, (
+        ".bottom-nav must use `display: flex` for horizontal scroll"
+    )
+    assert "overflow-x: auto" in body_no_comments, (
+        ".bottom-nav must declare `overflow-x: auto` so a narrow viewport "
+        "gets a scroll instead of wrapping to a second row"
+    )
+    # Negative: must NOT be the rigid grid that wrapped.
+    assert "repeat(3, 1fr)" not in body_no_comments, (
+        "`.bottom-nav` must not use the rigid `repeat(3, 1fr)` grid — it "
+        "wrapped on smaller phones (production feedback)"
+    )
+
+
+def test_bottom_nav_scrollbar_is_hidden():
+    """
+    The horizontal scroll exists only for narrow viewports; the
+    scrollbar itself shouldn't take vertical space and shouldn't be
+    visually loud. Hide via `scrollbar-width: none` (Firefox) +
+    `::-webkit-scrollbar { display: none }` (Chrome / Safari).
+    """
+    src = _src()
+    m = re.search(r"\.bottom-nav\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m
+    assert "scrollbar-width: none" in m.group(1), (
+        ".bottom-nav must hide the scrollbar via `scrollbar-width: none`"
+    )
+    # WebKit hide rule
+    assert re.search(
+        r"\.bottom-nav::-webkit-scrollbar\s*\{[^}]*display:\s*none",
+        src,
+        flags=re.DOTALL,
+    ), "expected `.bottom-nav::-webkit-scrollbar { display: none }` for Chrome/Safari"
+
+
+def test_bottom_nav_has_scroll_hint_mask():
+    """
+    Subtle UI hint that the nav can scroll: a fade-to-transparent
+    mask on the right edge. CSS `mask-image` keeps the leftmost N%
+    fully opaque and fades the right ~4-8% so any cut-off tab visibly
+    teases at scrollable content.
+    """
+    src = _src()
+    m = re.search(r"\.bottom-nav\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m
+    body = m.group(1)
+    mask_pattern = r"(-webkit-)?mask-image\s*:\s*linear-gradient"
+    assert re.search(mask_pattern, body), (
+        ".bottom-nav must declare a `mask-image` (and webkit alias) linear-gradient "
+        "for the subtle scroll-hint fade on the right edge"
+    )
+
+
+def test_nav_items_have_min_width_floor():
+    """
+    Each .nav-item carries a `min-width` so on the rare ultra-narrow
+    viewport the icon + label stay readable. With `flex: 1 1 auto`
+    they grow to fill wider viewports.
+    """
+    src = _src()
+    m = re.search(r"\.nav-item\s*\{([^}]+)\}", src, flags=re.DOTALL)
+    assert m, ".nav-item rule not found"
+    body = m.group(1)
+    assert re.search(r"min-width\s*:\s*\d+px", body), (
+        ".nav-item must declare a `min-width: Npx` so labels stay readable on narrow phones"
+    )
+    assert re.search(r"\bflex\s*:", body), (
+        ".nav-item must declare `flex:` so it grows to fill wider viewports"
     )

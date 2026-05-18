@@ -73,6 +73,54 @@ def test_index_baby_name_in_header(client):
     assert "Test Baby" in r.text
 
 
+def test_settings_page_renders(client):
+    """GET /settings → 200, distinct marker id='settings-page'."""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert 'id="settings-page"' in r.text
+
+
+def test_settings_page_has_five_sections(client):
+    """Five `<details>` tabs: Baby / This device / Display / Data / System."""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    for label in ("Baby", "This device", "Display", "Data", "System"):
+        assert f">{label}</summary>" in r.text, f"missing settings tab: {label}"
+    # Five `<details>` elements total, all in the same exclusive-open group.
+    assert r.text.count('<details name="settings-tab"') == 5
+
+
+def test_bottom_nav_has_three_columns(client):
+    """A new Settings link sits next to Home + Reports in the bottom nav."""
+    r = client.get("/")
+    assert r.status_code == 200
+    # The Settings nav item.
+    assert 'href="/settings"' in r.text
+    assert 'aria-label="Settings"' in r.text
+
+
+def test_header_shows_baby_age_when_dob_set(client):
+    """After setting dob, the header carries a `data-baby-age` span."""
+    client.patch("/api/babies", json={"dob": "2026-04-20"})
+    r = client.get("/")
+    assert r.status_code == 200
+    import re
+
+    # Age span carries a `data-baby-age` attribute + a `data-dob` for
+    # client-side recompute (handled by app.js, tested separately).
+    m = re.search(r"<span[^>]*data-baby-age[^>]*>([^<]+)</span>", r.text)
+    assert m, "expected `<span data-baby-age>` in header after dob set"
+    # Age string format: digits + d/w/m/y, e.g. "4w 2d" or "12d".
+    assert re.search(r"\d+\s*[dwmy]", m.group(1))
+
+
+def test_header_omits_age_when_dob_unset(client):
+    """No `data-baby-age` span if dob is null (the default)."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-baby-age" not in r.text
+
+
 def test_index_shows_event_in_grouped_list(client):
     """An event posted via the API appears in the grouped event list."""
     client.post("/api/events", json=_payload(idempotency_key="idem-index-1"))
