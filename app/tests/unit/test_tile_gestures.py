@@ -430,3 +430,51 @@ def test_refresh_vitd_late_class_exists():
     assert "setInterval(refreshVitdLateClass" in src, (
         "refreshVitdLateClass must be scheduled via setInterval in the init block"
     )
+
+
+def test_open_edit_for_dispatches_vitd_to_its_own_modal():
+    """
+    Tapping a vit D event row must NOT fall through to `openPooModal` —
+    the user-reported bug was the edit affordance opening the poo modal
+    (with stool quality chips and a 'Save Poo' button) for vit D events.
+    `openEditFor` must dispatch `type === "vitd"` to its own modal.
+    """
+    src = _src()
+    idx = src.find("async function openEditFor(")
+    assert idx >= 0, "openEditFor() function not found in app.js"
+    block = src[idx : idx + 1500]
+    assert 'full.type === "vitd"' in block, (
+        "openEditFor must branch on `full.type === 'vitd'` so vit D rows don't "
+        "open the poo modal (production bug: tapping a vit D row showed the poo "
+        "quality chips + 'Save Poo' button)"
+    )
+    assert "openVitdModal(" in block, (
+        "openEditFor's vitd branch must dispatch to `openVitdModal(prefill)`"
+    )
+
+
+def test_open_vitd_modal_uses_time_and_notes_only():
+    """
+    Vit D events only carry `occurred_at` + optional `notes` (no side,
+    no duration, no quality, no volume). The modal must reflect that —
+    just a time-chip picker + a notes input + a submit button. Pinning
+    these so a future regression doesn't, say, accidentally show poo
+    quality chips.
+    """
+    src = _src()
+    idx = src.find("function openVitdModal(")
+    assert idx >= 0, "openVitdModal() function not found in app.js"
+    block = src[idx : idx + 1500]
+    # Must build the time-chip picker like the other modals.
+    assert "buildTimeChips(" in block, (
+        "openVitdModal must call buildTimeChips for the retro-time picker"
+    )
+    # Submits with `type: 'vitd'` (so the back-end stores the right type).
+    assert '"vitd"' in block, "openVitdModal must POST events with `type: 'vitd'`"
+    # The modal title must surface the 💊 affordance.
+    assert "💊" in block, "openVitdModal title must include the 💊 emoji"
+    # MUST NOT contain poo-quality wiring (the bug we're fixing).
+    assert "poo_quality" not in block, (
+        "openVitdModal must NOT carry poo_quality — that's how the buggy "
+        "fall-through to openPooModal showed up. Keep it minimal: time + notes."
+    )

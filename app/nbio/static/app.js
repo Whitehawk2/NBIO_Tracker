@@ -1082,7 +1082,42 @@
     if (full.type === "breast") openFeedModal(prefill);
     else if (full.type === "formula") openFormulaModal(prefill);
     else if (full.type === "wee") openWeeModal(prefill);
+    else if (full.type === "vitd") openVitdModal(prefill);
     else openPooModal(prefill);
+  }
+
+  // Vit D events carry only `occurred_at` + optional `notes`; same
+  // minimal shape as wee. Without this modal, tapping a vit D row
+  // would fall through to the poo modal (production bug — quality
+  // chips + "Save Poo" button on a vit D event).
+  function openVitdModal(prefill) {
+    const backdrop = makeModalShell("💊 Log Vit D");
+    const body = backdrop.querySelector(".modal-body");
+    const time = buildTimeChips(prefill?.offsetMin || 0);
+    body.appendChild(time.el);
+    const notesLabel = label("Notes (optional)");
+    const notes = document.createElement("input");
+    notes.type = "text";
+    notes.placeholder = "with bottle, etc.";
+    notes.value = prefill?.notes || "";
+    body.append(notesLabel, wrapSection(notes));
+    const submit = document.createElement("button");
+    submit.className = "btn-primary";
+    submit.textContent = prefill ? "Save changes" : "Save Vit D";
+    let holdFired = false, holdTimer = null;
+    submit.addEventListener("touchstart", () => { holdTimer = setTimeout(() => { holdFired = true; haptic(40); }, 700); });
+    submit.addEventListener("touchend",   () => clearTimeout(holdTimer));
+    submit.addEventListener("click", async () => {
+      submit.disabled = true;
+      await submitForm(backdrop, prefill, {
+        type: "vitd",
+        occurred_at: time.getDate().toISOString(),
+        notes: notes.value.trim() || null,
+        skip_dup_check: holdFired,
+      });
+    });
+    body.appendChild(submit);
+    document.body.appendChild(backdrop);
   }
 
   async function doSoftDelete(row) {
