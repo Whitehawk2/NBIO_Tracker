@@ -296,8 +296,7 @@ class TestTummyDurationStr:
     def test_sec_takes_precedence_over_min(self):
         """When both are set, sec wins (it's the more precise value)."""
         assert (
-            pages._tummy_duration_str({"feed_duration_min": 5, "feed_duration_sec": 95})
-            == "1m 35s"
+            pages._tummy_duration_str({"feed_duration_min": 5, "feed_duration_sec": 95}) == "1m 35s"
         )
 
     def test_both_null_returns_empty(self):

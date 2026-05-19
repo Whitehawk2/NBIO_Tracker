@@ -135,6 +135,7 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     baby = repo.baby(conn)
     today = _today_card(conn)
     latest_weight = repo.growth_latest(conn)
+    tummy_totals = repo.today_totals(conn)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -145,7 +146,10 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
             "today": today,
             "vitd_overdue": _vitd_overdue(today["counts"], now_local.hour),
             "tummy_overdue": _tummy_overdue(today["counts"], now_local.hour),
-            "tummy_today_min": repo.today_totals(conn)["tummy_time_min"],
+            "tummy_today_sec": tummy_totals["tummy_time_sec"],
+            "tummy_today_dur": _tummy_duration_str(
+                {"feed_duration_sec": tummy_totals["tummy_time_sec"]}
+            ),
             "events": events,
             "grouped_events": grouped_events,
             "last_days": last_days,

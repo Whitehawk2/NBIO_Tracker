@@ -578,19 +578,41 @@ def test_open_tummy_timer_modal_reads_localstorage():
 def test_open_tummy_log_modal_duration_chips():
     """
     Tummy quick-log modal uses segmented-wrap chips with the 3/5/7/10/15
-    duration values. Default = 5.
+    duration values + a CUSTOM chip surfacing a numeric input. Default = 5.
     """
     src = _src()
     assert "function openTummyLogModal(" in src, (
         "expected `openTummyLogModal()` function for the quick-log flow"
     )
     idx = src.find("function openTummyLogModal(")
-    block = src[idx : idx + 2500]
+    block = src[idx : idx + 3500]
     assert "segmented-wrap" in block, "tummy duration picker must use .segmented-wrap"
     # The five duration choices must appear.
     for n in (3, 5, 7, 10, 15):
         assert f"{n}" in block, f"tummy duration chips must include {n}"
-    assert '"tummy_time"' in block, "openTummyLogModal must POST `type: 'tummy_time'`"
+    # CUSTOM chip surfaces a numeric input for non-preset durations.
+    assert "CUSTOM" in block, "openTummyLogModal must offer a CUSTOM duration chip"
+    assert 'type = "number"' in block, "CUSTOM chip must reveal a number input"
+    # Posts `type: "tummy_time"` (within the same modal function body).
+    assert "tummy_time" in block, "openTummyLogModal must POST `type: 'tummy_time'`"
+
+
+def test_open_tummy_timer_writes_seconds_not_minutes():
+    """Timer must POST `feed_duration_sec` (sub-minute precision), not
+    the old `feed_duration_min: Math.max(1, Math.floor(ms/60000))` which
+    forced any session ≥1ms to be at least 1 minute (v1.1.1 follow-up)."""
+    src = _src()
+    idx = src.find("function openTummyTimerModal(")
+    assert idx >= 0
+    block = src[idx : idx + 3000]
+    assert "feed_duration_sec" in block, (
+        "timer must POST feed_duration_sec for sub-minute precision"
+    )
+    # The old floor-to-min pattern must NOT come back.
+    assert "Math.floor(elapsedMs / 60000)" not in block, (
+        "timer must not floor-to-min the elapsed duration"
+    )
+    assert "Math.max(1, Math.floor" not in block, "timer must not clamp <1min sessions to 1 min"
 
 
 def test_open_vitd_modal_uses_time_and_notes_only():

@@ -113,10 +113,13 @@ def test_index_shows_tummy_banner_done_state_after_post(client):
     assert r.status_code == 200
     assert "data-tummy-banner" in r.text
     assert "is-given" in r.text
-    # Session count + minutes total surface in the banner text.
+    # Session count + duration total surface in the banner text.
     assert "Tummy today" in r.text
-    # The Start-timer button is hidden in the done state (replaced with Add another).
-    assert "data-tummy-start" not in r.text
+    # Both Add another (quick-log) AND ▶ (timer) must remain accessible in
+    # the done state — locking the timer behind the first session was a
+    # v1.1.1 follow-up bug.
+    assert "data-tummy-log" in r.text
+    assert "data-tummy-start" in r.text
 
 
 def test_event_row_renders_tummy_emoji(client):

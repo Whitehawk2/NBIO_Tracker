@@ -185,6 +185,13 @@ html.dark[data-theme="warm"] {
 .tummy-banner .btn-tummy-timer {
   background: var(--tummy); color: var(--bg-elev);
 }
+/* In the done state we also surface the timer button next to "Add
+   another", but it's compact (just ▶) to avoid crowding the banner. */
+.tummy-banner.is-given .btn-tummy-timer {
+  padding: 6px 10px;
+  font-size: 14px;
+  line-height: 1;
+}
 /* The first button after the not-yet label pushes both buttons to the
    right; subsequent buttons just space themselves. */
 .tummy-banner .lbl + .btn-tummy { margin-left: auto; }

@@ -903,15 +903,33 @@
   // first paint; these helpers swap state inline when a tummy session
   // lands without a reload. Banner shows session count + minute total,
   // both stashed in dataset attrs so we can recompute without re-fetching.
+  // Format a seconds total as "Xm Ys" / "Xm" / "Ys" / "0s" for the banner.
+  // Mirrors the server-side `_tummy_duration_str` helper so banner copy
+  // matches event-row + tooltip after a reload.
+  function fmtTummyDur(sec) {
+    sec = Math.max(0, Math.floor(sec || 0));
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return s === 0 ? `${m}m` : `${m}m ${s}s`;
+  }
+
   function renderTummyBanner(ev, delta) {
     const banner = document.querySelector("[data-tummy-banner]");
     if (!banner) return;
-    const minDelta = (ev && ev.feed_duration_min ? +ev.feed_duration_min : 0) * delta;
-    const curMin = parseInt(banner.dataset.tummyTodayMin || "0", 10) || 0;
+    // Seconds is the canonical unit post-006. Read whichever the event
+    // brought (timer → sec; chip → both); fall back to min*60.
+    const evSec = ev && (
+      ev.feed_duration_sec != null
+        ? +ev.feed_duration_sec
+        : (ev.feed_duration_min != null ? +ev.feed_duration_min * 60 : 0)
+    );
+    const secDelta = (evSec || 0) * delta;
+    const curSec = parseInt(banner.dataset.tummyTodaySec || "0", 10) || 0;
     const curCount = parseInt(banner.dataset.tummyTodayCount || "0", 10) || 0;
-    const nextMin = Math.max(0, curMin + minDelta);
+    const nextSec = Math.max(0, curSec + secDelta);
     const nextCount = Math.max(0, curCount + delta);
-    banner.dataset.tummyTodayMin = String(nextMin);
+    banner.dataset.tummyTodaySec = String(nextSec);
     banner.dataset.tummyTodayCount = String(nextCount);
     if (nextCount > 0) {
       banner.classList.add("is-given");
@@ -920,11 +938,12 @@
       banner.innerHTML =
         `<span class="emoji" aria-hidden="true">🤸</span>` +
         `<span class="lbl">Tummy today ` +
-          `<b data-tummy-min>${nextMin}</b> min · ` +
+          `<b data-tummy-dur>${fmtTummyDur(nextSec)}</b> · ` +
           `<b data-tummy-count>${nextCount}</b> ` +
           `<span data-tummy-sessions-word>${word}</span>` +
         `</span>` +
-        `<button type="button" class="btn-tummy" data-tummy-log>Add another</button>`;
+        `<button type="button" class="btn-tummy" data-tummy-log>Add another</button>` +
+        `<button type="button" class="btn-tummy btn-tummy-timer" data-tummy-start>▶</button>`;
     } else {
       banner.classList.remove("is-given");
       banner.innerHTML =
@@ -994,13 +1013,16 @@
       stop.disabled = true;
       clearInterval(timerId);
       const elapsedMs = Date.now() - startedAt;
-      const minutes = Math.max(1, Math.floor(elapsedMs / 60000));
+      // Round to the nearest whole second. No floor-to-min, no Math.max(1)
+      // — 35-second sessions are real and should be recorded as 35s, not
+      // rounded up to "1 min" (v1.1.1 follow-up).
+      const seconds = Math.max(1, Math.round(elapsedMs / 1000));
       const occurredAt = new Date(startedAt).toISOString();
       clearTummyTimer();
       await submitForm(backdrop, null, {
         type: "tummy_time",
         occurred_at: occurredAt,
-        feed_duration_min: minutes,
+        feed_duration_sec: seconds,
         skip_dup_check: true,
       });
     });
@@ -1306,7 +1328,9 @@
   }
 
   // Tummy time modal — duration chips (segmented-wrap, same pattern as
-  // formula volume) + retro time chips + notes. Default duration = 5.
+  // formula volume) + retro time chips + notes. Default duration = 5min.
+  // The CUSTOM chip surfaces a numeric input for sessions that don't
+  // match the presets (e.g. 8 min, 20 min).
   function openTummyLogModal(prefill) {
     const backdrop = makeModalShell("🤸 Log tummy time");
     const body = backdrop.querySelector(".modal-body");
@@ -1318,7 +1342,18 @@
     durSeg.className = "segmented-wrap";
     const choices = [3, 5, 7, 10, 15];
     let duration = prefill?.feed_duration_min ?? 5;
-    if (!choices.includes(duration)) duration = 5;
+    const customInput = document.createElement("input");
+    customInput.type = "number";
+    customInput.min = "1";
+    customInput.max = "240";
+    customInput.placeholder = "minutes";
+    customInput.style.display = "none";
+    if (duration != null && !choices.includes(duration)) {
+      customInput.value = String(duration);
+      customInput.style.display = "";
+    }
+    const setSelected = (btn) =>
+      durSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === btn));
     for (const v of choices) {
       const btn = document.createElement("button");
       btn.className = "seg" + (v === duration ? " selected" : "");
@@ -1327,11 +1362,30 @@
       btn.addEventListener("click", () => {
         haptic(8);
         duration = v;
-        durSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === btn));
+        customInput.style.display = "none";
+        setSelected(btn);
       });
       durSeg.appendChild(btn);
     }
+    const customBtn = document.createElement("button");
+    customBtn.className = "seg";
+    customBtn.textContent = "CUSTOM";
+    customBtn.dataset.dur = "custom";
+    if (duration != null && !choices.includes(duration)) customBtn.classList.add("selected");
+    customBtn.addEventListener("click", () => {
+      haptic(8);
+      setSelected(customBtn);
+      customInput.style.display = "";
+      duration = parseInt(customInput.value, 10) || null;
+      setTimeout(() => customInput.focus(), 0);
+    });
+    durSeg.appendChild(customBtn);
+    customInput.addEventListener("input", () => {
+      const n = parseInt(customInput.value, 10);
+      duration = (isNaN(n) || n < 1) ? null : n;
+    });
     body.append(durLabel, wrapSection(durSeg));
+    body.append(wrapSection(customInput));
 
     const notesLabel = label("Notes (optional)");
     const notes = document.createElement("input");
@@ -1347,11 +1401,18 @@
     submit.addEventListener("touchstart", () => { holdTimer = setTimeout(() => { holdFired = true; haptic(40); }, 700); });
     submit.addEventListener("touchend",   () => clearTimeout(holdTimer));
     submit.addEventListener("click", async () => {
+      if (duration == null || duration < 1) {
+        showToast("Enter a duration (min) or pick a chip");
+        return;
+      }
       submit.disabled = true;
       await submitForm(backdrop, prefill, {
         type: "tummy_time",
         occurred_at: time.getDate().toISOString(),
         feed_duration_min: duration,
+        // Mirror in seconds too so reads/aggregations work consistently
+        // regardless of which path created the row.
+        feed_duration_sec: duration * 60,
         notes: notes.value.trim() || null,
         skip_dup_check: holdFired,
       });
