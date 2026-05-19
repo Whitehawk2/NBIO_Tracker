@@ -5,6 +5,16 @@ Roadmap for NBIO Tracker, in descending order of priority.
 Each item is also tracked as a GitHub issue (linked below) — close the issue
 when done, and tick the item here. The two views are kept in sync manually.
 
+---
+
+> 🎯 **v1.1.1 shipped (2026-05-19).** Three small follow-ups: tummy time
+> tracking (banner + quick-log + timer), weight tracking (settings UI +
+> reports chart), breastfeeding default = "both". Partially addresses
+> [#55](https://github.com/Whitehawk2/NBIO_Tracker/issues/55) (growth log
+> — weight only; length / head_circ + WHO percentiles still open).
+
+---
+
 ## 1. ✅ Verify and merge PR #2 (UX phase 1) — [#3](https://github.com/Whitehawk2/NBIO_Tracker/issues/3)
 
 **Status:** Done — merged and verified on the Pi server (2026-05-16).
