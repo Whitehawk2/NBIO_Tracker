@@ -157,6 +157,120 @@ class TestVitdOverdue:
         assert pages._vitd_overdue({}, local_hour=10) is False
 
 
+class TestWeightHistoryContext:
+    """`_weight_history_context` builds the reports section's data shape."""
+
+    def test_empty_when_no_growth_rows(self, conn):
+        ctx = pages._weight_history_context(conn)
+        assert ctx == {"has_data": False}
+
+    def test_single_measurement(self, conn):
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        growth_create(
+            conn,
+            GrowthCreate(
+                measured_at="2026-05-16",
+                weight_g=3420,
+                idempotency_key="idem-w-single",
+                created_by_device="dev",
+            ),
+        )
+        ctx = pages._weight_history_context(conn)
+        assert ctx["has_data"] is True
+        assert len(ctx["rows"]) == 1
+        assert ctx["latest"]["weight_g"] == 3420
+        assert ctx["latest"]["delta_g"] is None
+        # One point in the chart.
+        assert len(ctx["chart_points"]) == 1
+
+    def test_delta_positive_negative_zero(self, conn):
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-01", 3300, "idem-w-1"),
+            ("2026-05-08", 3420, "idem-w-2"),  # +120
+            ("2026-05-15", 3380, "idem-w-3"),  # -40
+            ("2026-05-22", 3380, "idem-w-4"),  # 0
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        # Rows are returned latest-first for the table.
+        labels = [r["label"] for r in ctx["rows"]]
+        assert labels == ["2026-05-22", "2026-05-15", "2026-05-08", "2026-05-01"]
+        # Classes encode sign for CSS coloring.
+        classes = {r["label"]: r["delta_class"] for r in ctx["rows"]}
+        assert classes["2026-05-08"] == "delta-up"
+        assert classes["2026-05-15"] == "delta-down"
+        assert classes["2026-05-22"] == "delta-flat"
+        assert classes["2026-05-01"] == ""  # no previous → empty class
+        # Latest delta is the most recent diff.
+        assert ctx["latest"]["delta_g"] == 0
+
+    def test_chart_points_x_normalized_to_0_1000(self, conn):
+        """First measurement → x=0; last → x=1000."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        growth_create(
+            conn,
+            GrowthCreate(
+                measured_at="2026-05-01",
+                weight_g=3300,
+                idempotency_key="idem-x-a",
+                created_by_device="dev",
+            ),
+        )
+        growth_create(
+            conn,
+            GrowthCreate(
+                measured_at="2026-05-22",
+                weight_g=3500,
+                idempotency_key="idem-x-b",
+                created_by_device="dev",
+            ),
+        )
+        ctx = pages._weight_history_context(conn)
+        pts = ctx["chart_points"]
+        assert pts[0]["x"] == 0
+        assert pts[-1]["x"] == 1000
+
+    def test_chart_y_inverted_so_heavier_is_higher(self, conn):
+        """SVG y axis grows downward — heavier weight = SMALLER y."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-01", 3300, "idem-y-a"),
+            ("2026-05-22", 3500, "idem-y-b"),
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        pts = ctx["chart_points"]
+        # The heavier point (3500g) must plot HIGHER (smaller y) than 3300g.
+        heavier = next(p for p in pts if p["weight_g"] == 3500)
+        lighter = next(p for p in pts if p["weight_g"] == 3300)
+        assert heavier["y"] < lighter["y"]
+
+
 class TestTummyOverdue:
     """`_tummy_overdue` decides whether the tummy banner gets `.is-late`."""
 

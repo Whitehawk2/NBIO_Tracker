@@ -455,6 +455,78 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
     assert 'class="counts"' in r.text
 
 
+def test_reports_weight_history_hidden_when_empty(client):
+    """Fresh DB → weight history section is not rendered."""
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "data-weight-history" not in r.text
+
+
+def test_reports_weight_history_renders_with_data(client):
+    """One weight row → weight history section appears with the latest."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-reports-w1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "data-weight-history" in r.text
+    assert "Weight history" in r.text
+    assert "3,420 g" in r.text
+    # Single-measurement helper text appears (chart needs ≥2 points).
+    assert "few days" in r.text.lower()
+
+
+def test_reports_weight_history_renders_chart_with_two_points(client):
+    """Two weight rows → SVG chart + 2 dots appear."""
+    for d, w, idem in [
+        ("2026-05-08", 3300, "idem-reports-w2a"),
+        ("2026-05-15", 3420, "idem-reports-w2b"),
+    ]:
+        client.post(
+            "/api/growth",
+            json={
+                "measured_at": d,
+                "weight_g": w,
+                "idempotency_key": idem,
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert 'class="weight-chart"' in r.text
+    # Polyline string + 2 circle dots present.
+    assert "<polyline" in r.text
+    assert r.text.count('class="weight-dot"') == 2
+
+
+def test_reports_weight_history_table_has_delta_for_subsequent_rows(client):
+    """The latest table row shows the +/− delta from the previous one."""
+    for d, w, idem in [
+        ("2026-05-08", 3300, "idem-reports-d1"),
+        ("2026-05-15", 3420, "idem-reports-d2"),  # +120
+    ]:
+        client.post(
+            "/api/growth",
+            json={
+                "measured_at": d,
+                "weight_g": w,
+                "idempotency_key": idem,
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # +120 g delta + delta-up class on the latest row.
+    assert "+120 g" in r.text
+    assert "delta-up" in r.text
+
+
 def test_reports_heatmap_carries_explainer_text(client):
     """
     The 7-day heatmap had a title but no caption explaining what the

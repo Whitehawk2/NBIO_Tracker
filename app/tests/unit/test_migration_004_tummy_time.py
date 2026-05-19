@@ -151,9 +151,7 @@ def test_migration_004_preserves_existing_events(post_003_db):
             r,
         )
     apply_pending(post_003_db, MIGRATIONS_DIR)
-    after = post_003_db.execute(
-        "SELECT type, idempotency_key FROM events ORDER BY id"
-    ).fetchall()
+    after = post_003_db.execute("SELECT type, idempotency_key FROM events ORDER BY id").fetchall()
     assert [r["type"] for r in after] == ["breast", "vitd", "poo"]
     assert [r["idempotency_key"] for r in after] == [
         "idem-pre-1",
