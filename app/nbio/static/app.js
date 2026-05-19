@@ -243,10 +243,13 @@
     let side = prefill?.feed_side || null;
     let defaultSide = side;
     if (!defaultSide) {
+      // First-ever feed (no last_side history): prefer "both" — user
+      // feedback flagged the previous "L" fallback as wrong. Inversion
+      // (L→R, R→L) is preserved for subsequent feeds.
       try {
         const r = await fetch(cfg.lastSideUrl).then((r) => r.json());
-        defaultSide = r.last_side === "L" ? "R" : r.last_side === "R" ? "L" : "L";
-      } catch (_) { defaultSide = "L"; }
+        defaultSide = r.last_side === "L" ? "R" : r.last_side === "R" ? "L" : "both";
+      } catch (_) { defaultSide = "both"; }
       side = defaultSide;
     }
     for (const s of ["L", "R", "both"]) {
