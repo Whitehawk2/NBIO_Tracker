@@ -272,7 +272,7 @@ def last_event_of_each_type(
     """
     out: dict[str, dict[str, Any]] = {}
 
-    for t in ("breast", "formula", "wee", "poo", "vitd"):
+    for t in ("breast", "formula", "wee", "poo", "vitd", "tummy_time"):
         row = conn.execute(
             f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
             "WHERE e.baby_id = ? AND e.type = ? AND e.deleted_at IS NULL "
@@ -313,7 +313,7 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
 
     offset = local_offset_modifier(settings.tz)
     today = local_today_str(settings.tz)
-    out = {"feed": 0, "wee": 0, "poo": 0, "vitd": 0, "formula_ml": 0}
+    out = {"feed": 0, "wee": 0, "poo": 0, "vitd": 0, "tummy_time": 0, "formula_ml": 0}
     cur = conn.execute(
         """
         SELECT type,
@@ -334,6 +334,29 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
         if r["type"] == "formula":
             out["formula_ml"] += int(r["volume_ml"] or 0)
     return out
+
+
+def today_totals(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
+    """
+    Per-day SUM aggregates that don't fit `today_counts` (which is a
+    count-by-type dict). Today's tummy-time minutes live here — the
+    banner shows "Tummy today · 8 min · 2 sessions" so it needs both
+    the count (from `today_counts`) and the minutes sum.
+    """
+    from .tz import local_offset_modifier, local_today_str
+
+    offset = local_offset_modifier(settings.tz)
+    today = local_today_str(settings.tz)
+    row = conn.execute(
+        """
+        SELECT COALESCE(SUM(feed_duration_min), 0) AS tummy_time_min
+        FROM events
+        WHERE baby_id = ? AND type = 'tummy_time' AND deleted_at IS NULL
+          AND substr(datetime(occurred_at, ?), 1, 10) = ?
+        """,
+        (baby_id, offset, today),
+    ).fetchone()
+    return {"tummy_time_min": int(row["tummy_time_min"] or 0)}
 
 
 def daily_totals(
@@ -366,6 +389,7 @@ def daily_totals(
                type,
                COUNT(*) AS n,
                AVG(feed_duration_min) AS avg_feed_min,
+               COALESCE(SUM(feed_duration_min), 0) AS duration_total,
                COALESCE(SUM(formula_volume_ml), 0) AS volume_ml
         FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
@@ -387,6 +411,8 @@ def daily_totals(
                 "wee": 0,
                 "poo": 0,
                 "vitd": 0,
+                "tummy_time": 0,
+                "tummy_time_min": 0,
                 "formula_ml": 0,
                 "avg_feed_min": None,
             },
@@ -394,6 +420,8 @@ def daily_totals(
         d[r["type"]] = r["n"]
         if r["type"] == "formula":
             d["formula_ml"] += int(r["volume_ml"] or 0)
+        if r["type"] == "tummy_time":
+            d["tummy_time_min"] += int(r["duration_total"] or 0)
         if r["type"] in ("breast", "formula"):
             d["feed"] = d["breast"] + d["formula"]
         if r["type"] == "breast" and r["avg_feed_min"] is not None:

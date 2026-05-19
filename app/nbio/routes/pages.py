@@ -134,6 +134,8 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
             "baby_age": _age_from_dob(baby.get("dob") if baby else None, now_local.date()),
             "today": today,
             "vitd_overdue": _vitd_overdue(today["counts"], now_local.hour),
+            "tummy_overdue": _tummy_overdue(today["counts"], now_local.hour),
+            "tummy_today_min": repo.today_totals(conn)["tummy_time_min"],
             "events": events,
             "grouped_events": grouped_events,
             "last_days": last_days,
@@ -154,6 +156,21 @@ def _vitd_overdue(today_counts: dict[str, int], local_hour: int) -> bool:
     cold loads after 18:00 don't flash through the muted state.
     """
     return today_counts.get("vitd", 0) == 0 and local_hour >= 18
+
+
+def _tummy_overdue(today_counts: dict[str, int], local_hour: int) -> bool:
+    """
+    Triggers the late-day visual nudge on the tummy time banner.
+
+    True when:
+      - today's tummy_time session count is 0 (none logged), AND
+      - the local hour is >= 16 (4pm or later)
+
+    The 16:00 threshold is earlier than the vit D one because tummy
+    time wants to be spread across the day — 4pm is when "haven't done
+    any yet" becomes worth nudging about.
+    """
+    return today_counts.get("tummy_time", 0) == 0 and local_hour >= 16
 
 
 def _age_from_dob(dob_iso: str | None, today_local: date) -> str | None:
@@ -211,6 +228,11 @@ def _mark_tooltip(e: dict[str, Any], hhmm: str) -> str:
         parts.append(f"type {e['poo_quality']}")
     elif e["type"] == "vitd":
         parts.append("Vit D")
+    elif e["type"] == "tummy_time":
+        if e.get("feed_duration_min"):
+            parts.append(f"Tummy {e['feed_duration_min']}min")
+        else:
+            parts.append("Tummy")
     return " · ".join(parts)
 
 
@@ -233,6 +255,7 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
         "wee": "wee",
         "poo": "poo",
         "vitd": "vitd",
+        "tummy_time": "tummy",
     }
     marks: list[dict[str, Any]] = []
     for e in events:
