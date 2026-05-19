@@ -50,6 +50,24 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 INSERT OR IGNORE INTO app_settings (id) VALUES (1);
+
+CREATE TABLE IF NOT EXISTS growth (
+    id                INTEGER PRIMARY KEY,
+    baby_id           INTEGER NOT NULL REFERENCES babies(id),
+    measured_at       TEXT NOT NULL,
+    weight_g          INTEGER CHECK (weight_g IS NULL OR weight_g BETWEEN 0 AND 30000),
+    length_mm         INTEGER,
+    head_circ_mm     INTEGER,
+    notes             TEXT,
+    idempotency_key   TEXT NOT NULL,
+    created_by_device TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at        TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_growth_idem ON growth(idempotency_key);
+CREATE INDEX IF NOT EXISTS ix_growth_baby_time ON growth(baby_id, measured_at DESC);
 """
 
 
