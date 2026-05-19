@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS events (
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at          TEXT,
     formula_brand       TEXT,
-    formula_volume_ml   INTEGER
+    formula_volume_ml   INTEGER,
+    feed_duration_sec   INTEGER
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_events_idem ON events(idempotency_key);

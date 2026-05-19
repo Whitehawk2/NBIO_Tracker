@@ -145,21 +145,26 @@ def test_today_counts_tummy_excludes_other_days(conn):
 
 
 def test_today_totals_zero_when_empty(conn):
-    """today_totals returns zero minutes when no tummy_time events exist."""
+    """today_totals returns zero seconds + zero minutes when no events exist."""
     from nbio.repo import today_totals
 
-    assert today_totals(conn) == {"tummy_time_min": 0}
+    assert today_totals(conn) == {"tummy_time_sec": 0, "tummy_time_min": 0}
 
 
 def test_today_totals_sums_tummy_minutes_today(conn):
-    """today_totals sums feed_duration_min across today's tummy_time events."""
+    """today_totals sums duration across today's tummy_time events.
+
+    Legacy rows have only `feed_duration_min` — aggregation COALESCEs
+    `_sec` first, then `_min * 60`, so the minutes-only path keeps
+    working post-006.
+    """
     from nbio.repo import today_totals
 
     create_event(conn, _evt("tummy_time", "tt1", f"{TODAY}T08:00:00.000Z", dur=5))
     create_event(conn, _evt("tummy_time", "tt2", f"{TODAY}T11:00:00.000Z", dur=3))
     # A tummy event yesterday must NOT bleed into today's total.
     create_event(conn, _evt("tummy_time", "tt3", "2026-05-15T08:00:00.000Z", dur=10))
-    assert today_totals(conn) == {"tummy_time_min": 8}
+    assert today_totals(conn) == {"tummy_time_sec": 8 * 60, "tummy_time_min": 8}
 
 
 def test_today_totals_excludes_deleted(conn):
@@ -168,7 +173,7 @@ def test_today_totals_excludes_deleted(conn):
 
     _, ev, _ = create_event(conn, _evt("tummy_time", "tt1", f"{TODAY}T08:00:00.000Z", dur=5))
     soft_delete_event(conn, ev["id"])
-    assert today_totals(conn) == {"tummy_time_min": 0}
+    assert today_totals(conn) == {"tummy_time_sec": 0, "tummy_time_min": 0}
 
 
 def test_last_event_of_each_type_includes_tummy_time(conn):

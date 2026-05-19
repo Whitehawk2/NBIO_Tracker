@@ -129,7 +129,7 @@
         <th>Wees</th>
         <th>Poos</th>
         <th data-col-totals="vitd" title="Vitamin D given that day">💊</th>
-        <th data-col-totals="tummy_time_min" title="Tummy time (minutes)">🤸 min</th>
+        <th data-col-totals="tummy_time_sec" title="Tummy time (total per day)">🤸</th>
         <th>Avg breast</th>
       </tr>
     </thead>
@@ -143,7 +143,7 @@
           <td>{{ row.wee }}</td>
           <td>{{ row.poo }}</td>
           <td>{{ '✓' if row.get('vitd', 0) else '—' }}</td>
-          <td>{{ row.get('tummy_time_min', 0) if row.get('tummy_time_min', 0) else '—' }}</td>
+          <td>{{ {'feed_duration_sec': row.get('tummy_time_sec', 0)} | tummy_dur if row.get('tummy_time_sec', 0) else '—' }}</td>
           <td>{{ '%.0f min' | format(row.avg_feed_min) if row.avg_feed_min else '—' }}</td>
         </tr>
       {% endfor %}

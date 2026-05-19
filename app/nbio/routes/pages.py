@@ -46,6 +46,14 @@ templates.env.filters["relative"] = _relative
 templates.env.filters["hhmm"] = _local_hhmm
 
 
+def _tummy_duration_filter(e: dict[str, Any]) -> str:
+    """Jinja filter wrapper around _tummy_duration_str (forward-declared)."""
+    return _tummy_duration_str(e)
+
+
+templates.env.filters["tummy_dur"] = _tummy_duration_filter
+
+
 def _today_card(conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "counts": repo.today_counts(conn),
@@ -231,11 +239,32 @@ def _mark_tooltip(e: dict[str, Any], hhmm: str) -> str:
     elif e["type"] == "vitd":
         parts.append("Vit D")
     elif e["type"] == "tummy_time":
-        if e.get("feed_duration_min"):
-            parts.append(f"Tummy {e['feed_duration_min']}min")
-        else:
-            parts.append("Tummy")
+        dur = _tummy_duration_str(e)
+        parts.append(f"Tummy {dur}" if dur else "Tummy")
     return " · ".join(parts)
+
+
+def _tummy_duration_str(e: dict[str, Any]) -> str:
+    """
+    Format a tummy_time event's duration for human display.
+
+    Prefers `feed_duration_sec` (post-006 precision) and falls back to
+    `feed_duration_min * 60`. Renders as:
+      - "Xm Ys"  for ≥ 60 seconds with a non-zero seconds remainder,
+      - "Xm"     for whole-minute durations (no remainder),
+      - "Ys"     for < 60 seconds,
+      - ""       when both columns are NULL.
+    """
+    sec = e.get("feed_duration_sec")
+    if sec is None and e.get("feed_duration_min") is not None:
+        sec = int(e["feed_duration_min"]) * 60
+    if sec is None:
+        return ""
+    sec = int(sec)
+    if sec < 60:
+        return f"{sec}s"
+    m, s = divmod(sec, 60)
+    return f"{m}m" if s == 0 else f"{m}m {s}s"
 
 
 def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str, Any]]:

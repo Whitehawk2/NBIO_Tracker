@@ -271,6 +271,39 @@ class TestWeightHistoryContext:
         assert heavier["y"] < lighter["y"]
 
 
+class TestTummyDurationStr:
+    """`_tummy_duration_str` formats tummy event durations for display."""
+
+    def test_seconds_only_under_60(self):
+        assert pages._tummy_duration_str({"feed_duration_sec": 42}) == "42s"
+
+    def test_seconds_under_60_zero_is_empty(self):
+        # Zero is meaningful — render as 0s, not "".
+        assert pages._tummy_duration_str({"feed_duration_sec": 0}) == "0s"
+
+    def test_seconds_exact_minute(self):
+        assert pages._tummy_duration_str({"feed_duration_sec": 60}) == "1m"
+        assert pages._tummy_duration_str({"feed_duration_sec": 300}) == "5m"
+
+    def test_seconds_with_remainder(self):
+        assert pages._tummy_duration_str({"feed_duration_sec": 95}) == "1m 35s"
+        assert pages._tummy_duration_str({"feed_duration_sec": 600 + 15}) == "10m 15s"
+
+    def test_falls_back_to_minutes_when_sec_missing(self):
+        """Pre-006 legacy rows have only feed_duration_min — still render."""
+        assert pages._tummy_duration_str({"feed_duration_min": 5}) == "5m"
+
+    def test_sec_takes_precedence_over_min(self):
+        """When both are set, sec wins (it's the more precise value)."""
+        assert (
+            pages._tummy_duration_str({"feed_duration_min": 5, "feed_duration_sec": 95})
+            == "1m 35s"
+        )
+
+    def test_both_null_returns_empty(self):
+        assert pages._tummy_duration_str({}) == ""
+
+
 class TestTummyOverdue:
     """`_tummy_overdue` decides whether the tummy banner gets `.is-late`."""
 
@@ -429,8 +462,33 @@ class TestTimelineMarks:
         marks = pages._timeline_marks(events, "2026-05-16")
         assert len(marks) == 1
         assert marks[0]["type"] == "tummy"
-        assert "Tummy 5min" in marks[0]["tooltip"]
+        # Legacy rows (no sec) still produce a minute-rendered tooltip.
+        assert "Tummy 5m" in marks[0]["tooltip"]
         assert "08:00" in marks[0]["tooltip"]
+
+    def test_tummy_time_tooltip_uses_seconds_when_present(self):
+        """Sec-only timer rows render sub-minute precision in the tooltip."""
+        events = [
+            {
+                "occurred_at": "2026-05-16T08:00:00Z",
+                "type": "tummy_time",
+                "feed_duration_sec": 95,  # 1m 35s
+            }
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert "Tummy 1m 35s" in marks[0]["tooltip"]
+
+    def test_tummy_time_tooltip_seconds_only_for_under_a_minute(self):
+        events = [
+            {
+                "occurred_at": "2026-05-16T08:00:00Z",
+                "type": "tummy_time",
+                "feed_duration_sec": 42,
+            }
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert "Tummy 42s" in marks[0]["tooltip"]
 
     def test_tummy_time_tooltip_without_duration(self):
         """Tummy event with no duration falls back to bare 'Tummy' label."""
@@ -438,7 +496,8 @@ class TestTimelineMarks:
         marks = pages._timeline_marks(events, "2026-05-16")
         assert len(marks) == 1
         assert "Tummy" in marks[0]["tooltip"]
-        assert "min" not in marks[0]["tooltip"]
+        assert "m" not in marks[0]["tooltip"].split("Tummy")[1]
+        assert "s" not in marks[0]["tooltip"].split("Tummy")[1]
 
     def test_breast_and_formula_map_to_feed(self):
         events = [

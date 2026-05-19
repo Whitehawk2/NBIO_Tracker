@@ -24,7 +24,7 @@ GROWTH_COLS = """
 
 EVENT_COLS = """
     e.id, e.baby_id, e.type, e.occurred_at,
-    e.feed_side, e.feed_duration_min, e.poo_quality, e.notes,
+    e.feed_side, e.feed_duration_min, e.feed_duration_sec, e.poo_quality, e.notes,
     e.formula_brand, e.formula_volume_ml,
     e.idempotency_key, e.created_by_device,
     e.created_at, e.updated_at, e.deleted_at,
@@ -145,11 +145,11 @@ def create_event(
             """
             INSERT INTO events (
                 baby_id, type, occurred_at,
-                feed_side, feed_duration_min, poo_quality, notes,
+                feed_side, feed_duration_min, feed_duration_sec, poo_quality, notes,
                 formula_brand, formula_volume_ml,
                 idempotency_key, created_by_device,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 baby_id,
@@ -157,6 +157,7 @@ def create_event(
                 payload.occurred_at,
                 payload.feed_side,
                 payload.feed_duration_min,
+                payload.feed_duration_sec,
                 payload.poo_quality,
                 payload.notes,
                 payload.formula_brand,
@@ -346,9 +347,15 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
 def today_totals(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
     """
     Per-day SUM aggregates that don't fit `today_counts` (which is a
-    count-by-type dict). Today's tummy-time minutes live here — the
-    banner shows "Tummy today · 8 min · 2 sessions" so it needs both
-    the count (from `today_counts`) and the minutes sum.
+    count-by-type dict). Today's tummy time lives here — banner needs
+    both the session count (from `today_counts`) and the duration sum.
+
+    Tummy duration is canonical in **seconds** post-migration-006:
+    new tummy rows from the timer write `feed_duration_sec`; quick-log
+    rows from the chips set both `_sec` and `_min`. Legacy rows
+    (pre-006) only have `_min`, so COALESCE picks `_sec` first then
+    falls back to `_min * 60`. The minutes key remains in the returned
+    dict for callers that only want the coarse view.
     """
     from .tz import local_offset_modifier, local_today_str
 
@@ -356,14 +363,18 @@ def today_totals(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
     today = local_today_str(settings.tz)
     row = conn.execute(
         """
-        SELECT COALESCE(SUM(feed_duration_min), 0) AS tummy_time_min
+        SELECT COALESCE(
+                  SUM(COALESCE(feed_duration_sec, feed_duration_min * 60)),
+                  0
+               ) AS tummy_time_sec
         FROM events
         WHERE baby_id = ? AND type = 'tummy_time' AND deleted_at IS NULL
           AND substr(datetime(occurred_at, ?), 1, 10) = ?
         """,
         (baby_id, offset, today),
     ).fetchone()
-    return {"tummy_time_min": int(row["tummy_time_min"] or 0)}
+    sec = int(row["tummy_time_sec"] or 0)
+    return {"tummy_time_sec": sec, "tummy_time_min": sec // 60}
 
 
 def daily_totals(
@@ -396,7 +407,8 @@ def daily_totals(
                type,
                COUNT(*) AS n,
                AVG(feed_duration_min) AS avg_feed_min,
-               COALESCE(SUM(feed_duration_min), 0) AS duration_total,
+               COALESCE(SUM(COALESCE(feed_duration_sec, feed_duration_min * 60)), 0)
+                   AS duration_total_sec,
                COALESCE(SUM(formula_volume_ml), 0) AS volume_ml
         FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
@@ -419,6 +431,7 @@ def daily_totals(
                 "poo": 0,
                 "vitd": 0,
                 "tummy_time": 0,
+                "tummy_time_sec": 0,
                 "tummy_time_min": 0,
                 "formula_ml": 0,
                 "avg_feed_min": None,
@@ -428,7 +441,9 @@ def daily_totals(
         if r["type"] == "formula":
             d["formula_ml"] += int(r["volume_ml"] or 0)
         if r["type"] == "tummy_time":
-            d["tummy_time_min"] += int(r["duration_total"] or 0)
+            sec_total = int(r["duration_total_sec"] or 0)
+            d["tummy_time_sec"] += sec_total
+            d["tummy_time_min"] = d["tummy_time_sec"] // 60
         if r["type"] in ("breast", "formula"):
             d["feed"] = d["breast"] + d["formula"]
         if r["type"] == "breast" and r["avg_feed_min"] is not None:

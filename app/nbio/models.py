@@ -16,6 +16,11 @@ class EventCreate(BaseModel):
     occurred_at: str  # ISO-8601 UTC
     feed_side: FeedSide | None = None
     feed_duration_min: int | None = Field(default=None, ge=0, le=600)
+    # Sub-minute precision for tummy time (timer). When set, takes
+    # precedence over feed_duration_min in displays; aggregations
+    # COALESCE(sec, min*60). Range 0..36000s (10h) to cover any
+    # plausible session.
+    feed_duration_sec: int | None = Field(default=None, ge=0, le=36000)
     poo_quality: int | None = Field(default=None, ge=1, le=7)
     notes: str | None = Field(default=None, max_length=500)
     # Formula-only: brand name (e.g. "Materna") and volume in ml (cc).
@@ -30,6 +35,7 @@ class EventPatch(BaseModel):
     occurred_at: str | None = None
     feed_side: FeedSide | None = None
     feed_duration_min: int | None = Field(default=None, ge=0, le=600)
+    feed_duration_sec: int | None = Field(default=None, ge=0, le=36000)
     poo_quality: int | None = Field(default=None, ge=1, le=7)
     notes: str | None = Field(default=None, max_length=500)
     formula_brand: str | None = Field(default=None, max_length=40)
