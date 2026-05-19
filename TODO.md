@@ -8,11 +8,17 @@ when done, and tick the item here. The two views are kept in sync manually.
 ---
 
 > 🎯 **v1.1.0 shipped (2026-05-18).** v1.2.0 scope is **TBD** — pick from the
-> 22 parked candidates below. Tracked in
+> 23 parked candidates below. Tracked in
 > [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/76).
 >
 > Recommended shortlist: **#54** Sleep tracking + **#63** Vitest JS tests
 > + **#65** GHCR pre-built images, optionally adding **#56** Pediatrician PDF.
+>
+> ⚠️ **P1 hygiene work**: [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78)
+> Test audit — replace hardcoded dates that drift with wall clock. Surfaced
+> by 3 simultaneous CI flakes on 2026-05-19, exactly 3 days after the home
+> page's last-3-days filter window kicked in. Should land before / alongside
+> v1.2.0 work.
 
 ---
 
@@ -396,6 +402,9 @@ v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/
 
 ### Engineering quality
 
+- ⚠️ [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78) **P1** ·
+  Test audit — replace hardcoded dates that depend on wall-clock proximity
+  *(S)*. Time-delayed flake risk; CLAUDE.md convention added.
 - 🆕 [#62](https://github.com/Whitehawk2/NBIO_Tracker/issues/62) **P2** ·
   Playwright E2E: happy-path + offline-flush + SSE *(M)*.
 - 🆕 [#63](https://github.com/Whitehawk2/NBIO_Tracker/issues/63) **P2** ·
