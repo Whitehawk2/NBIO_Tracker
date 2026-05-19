@@ -212,6 +212,57 @@ html.dark[data-theme="warm"] {
 }
 .weight-latest-line b { font-weight: 700; }
 
+/* Reports → Weight history section. */
+.weight-history { margin: 22px 0; }
+.weight-history .weight-latest {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.weight-history .weight-latest b { font-weight: 700; }
+.weight-history .delta { font-weight: 600; margin: 0 4px; }
+.weight-history .delta-up { color: var(--feed); }
+.weight-history .delta-down { color: var(--poo); }
+.weight-history .delta-flat { color: var(--text-muted); }
+.weight-history .small { font-size: 13px; }
+.weight-chart {
+  width: 100%; height: 200px;
+  background: var(--bg-sunk);
+  border-radius: 10px;
+  display: block;
+  margin: 4px 0 14px;
+}
+.weight-chart .weight-line {
+  stroke: var(--accent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}
+.weight-chart .weight-dot {
+  fill: var(--accent);
+  cursor: pointer;
+}
+.weight-chart .weight-dot:active,
+.weight-chart .weight-dot:hover { r: 8; }
+.weight-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.weight-table th, .weight-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.weight-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: .05em;
+}
+
 /* Tummy timer modal — big mono counter in the body. */
 .tummy-timer-counter {
   font-size: 56px;

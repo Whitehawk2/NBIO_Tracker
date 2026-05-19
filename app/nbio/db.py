@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE TABLE IF NOT EXISTS events (
     id                  INTEGER PRIMARY KEY,
     baby_id             INTEGER NOT NULL REFERENCES babies(id),
-    type                TEXT NOT NULL CHECK (type IN ('breast','formula','wee','poo','vitd','tummy_time')),
+    type                TEXT NOT NULL CHECK (type IN (
+        'breast','formula','wee','poo','vitd','tummy_time'
+    )),
     occurred_at         TEXT NOT NULL,
     feed_side           TEXT CHECK (feed_side IN ('L','R','both') OR feed_side IS NULL),
     feed_duration_min   INTEGER,

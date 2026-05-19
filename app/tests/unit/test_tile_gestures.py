@@ -474,9 +474,7 @@ def test_breast_modal_default_side_is_both_when_no_history():
         "the fetch catch-branch must also default to `both`, not `L`"
     )
     # Inversion semantics MUST still be present.
-    assert '=== "L" ? "R"' in block, (
-        "feed-modal inversion semantics (L→R) must be preserved"
-    )
+    assert '=== "L" ? "R"' in block, "feed-modal inversion semantics (L→R) must be preserved"
 
 
 def test_app_js_has_wire_tummy_banner():
@@ -514,9 +512,9 @@ def test_app_js_bump_overviews_handles_tummy_time():
     idx = src.find("function bumpOverviews(")
     assert idx >= 0
     block = src[idx : idx + 3000]
-    assert (
-        'ev?.type === "tummy_time"' in block or 'ev.type === "tummy_time"' in block
-    ), "bumpOverviews must branch on `ev.type === 'tummy_time'` for the banner path"
+    assert 'ev?.type === "tummy_time"' in block or 'ev.type === "tummy_time"' in block, (
+        "bumpOverviews must branch on `ev.type === 'tummy_time'` for the banner path"
+    )
     assert "renderTummyBanner(" in block, (
         "bumpOverviews's tummy branch must call `renderTummyBanner(ev, delta)`"
     )
@@ -567,8 +565,7 @@ def test_open_tummy_timer_modal_reads_localstorage():
     )
     # The timer key must be a constant.
     assert "nbio.tummy_timer_started_at" in src, (
-        "tummy timer must persist started_at under "
-        "`nbio.tummy_timer_started_at` in localStorage"
+        "tummy timer must persist started_at under `nbio.tummy_timer_started_at` in localStorage"
     )
     idx = src.find("function openTummyTimerModal(")
     block = src[idx : idx + 2500]
