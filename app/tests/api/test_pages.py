@@ -463,6 +463,64 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
     assert 'class="counts"' in r.text
 
 
+def test_header_weight_chip_absent_when_no_weight(client):
+    """No growth rows → header shows name + (maybe age) but no weight chip."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-baby-weight" not in r.text
+
+
+def test_header_weight_chip_present_after_growth_post(client):
+    """After a /api/growth POST, the latest weight appears in the header."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-hdr-weight",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-baby-weight" in r.text
+    assert "3,420 g" in r.text
+
+
+def test_reports_header_shows_weight_chip(client):
+    """The header banner is rendered the same on /reports."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-hdr-rpts",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "data-baby-weight" in r.text
+    assert "3,420 g" in r.text
+
+
+def test_settings_header_shows_weight_chip(client):
+    """And on /settings — base.html is shared across all three pages."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-hdr-stgs",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "data-baby-weight" in r.text
+    assert "3,420 g" in r.text
+
+
 def test_reports_weight_history_shows_empty_state(client):
     """Fresh DB → the weight section is visible with a 'no data yet' CTA."""
     r = client.get("/reports")

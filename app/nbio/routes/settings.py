@@ -53,15 +53,17 @@ def settings_page(
 
     baby = repo.baby(conn)
     today_local = datetime.now().astimezone().date()
+    growth_latest = repo.growth_latest(conn)
     return templates.TemplateResponse(
         request,
         "settings.html",
         {
             "baby": baby,
             "baby_age": _age_from_dob(baby.get("dob") if baby else None, today_local),
+            "baby_latest_weight_g": growth_latest["weight_g"] if growth_latest else None,
             "app_settings": repo.app_settings_read(conn),
             "devices": repo.list_devices(conn),
-            "growth_latest": repo.growth_latest(conn),
+            "growth_latest": growth_latest,
             "today_iso": today_local.isoformat(),
         },
     )

@@ -291,6 +291,26 @@
     else summary.insertBefore(line, summary.querySelector("button"));
     const btn = $("#weight-update-btn");
     if (btn) btn.textContent = "Update weight";
+    refreshHeaderWeight(growth.weight_g);
+  }
+
+  // Header sticky banner — keep the weight chip in sync with the latest
+  // measurement so the user sees the bump without a full reload.
+  function refreshHeaderWeight(grams) {
+    if (!grams) return;
+    let el = document.querySelector("[data-baby-weight]");
+    const text = `${fmtCommas(grams)} g`;
+    if (el) {
+      el.textContent = text;
+      return;
+    }
+    const titleDiv = document.querySelector(".app-header .title");
+    if (!titleDiv) return;
+    el = document.createElement("span");
+    el.className = "baby-weight";
+    el.dataset.babyWeight = "";
+    el.textContent = text;
+    titleDiv.appendChild(el);
   }
 
   function wireWeightForm() {

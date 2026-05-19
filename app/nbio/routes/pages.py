@@ -126,12 +126,14 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     last_days = _last_days_rows(repo.daily_totals(conn, days=4), n=3)
     baby = repo.baby(conn)
     today = _today_card(conn)
+    latest_weight = repo.growth_latest(conn)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "baby": baby,
             "baby_age": _age_from_dob(baby.get("dob") if baby else None, now_local.date()),
+            "baby_latest_weight_g": latest_weight["weight_g"] if latest_weight else None,
             "today": today,
             "vitd_overdue": _vitd_overdue(today["counts"], now_local.hour),
             "tummy_overdue": _tummy_overdue(today["counts"], now_local.hour),
@@ -425,10 +427,15 @@ def reports(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     max_h = max((max(row) for row in heatmap), default=1) or 1
     heatmap_day_labels = [_day_label(today - timedelta(days=i), today) for i in range(7)]
 
+    baby = repo.baby(conn)
+    latest_weight = repo.growth_latest(conn)
     return templates.TemplateResponse(
         request,
         "reports.html",
         {
+            "baby": baby,
+            "baby_age": _age_from_dob(baby.get("dob") if baby else None, today),
+            "baby_latest_weight_g": latest_weight["weight_g"] if latest_weight else None,
             "today": _today_card(conn),
             "totals": totals,
             "days_list": days_list,

@@ -808,6 +808,11 @@ textarea:focus-visible,
   font-size: 13px; color: var(--text-muted); font-weight: 500;
   margin-left: 6px; font-variant-numeric: tabular-nums;
 }
+.baby-weight {
+  font-size: 13px; color: var(--text-muted); font-weight: 500;
+  margin-left: 6px; font-variant-numeric: tabular-nums;
+}
+.baby-weight::before { content: "·"; margin-right: 6px; opacity: 0.6; }
 
 /* ============ Settings page ============ */
 .settings-page .page-title {
