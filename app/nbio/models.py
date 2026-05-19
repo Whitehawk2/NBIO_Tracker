@@ -75,6 +75,32 @@ class AppSettingsUpdate(BaseModel):
         return v
 
 
+class GrowthCreate(BaseModel):
+    """POST payload for /api/growth. weight_g is required in v1.1.1.
+
+    length_mm and head_circ_mm are accepted (forward-compat with #55)
+    but not exposed in the UI yet — they round-trip through the DB.
+    """
+
+    measured_at: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    weight_g: int = Field(ge=0, le=30000)
+    length_mm: int | None = Field(default=None, ge=0, le=2000)
+    head_circ_mm: int | None = Field(default=None, ge=0, le=1000)
+    notes: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=64)
+    created_by_device: str = Field(min_length=1, max_length=64)
+
+
+class GrowthPatch(BaseModel):
+    """PATCH payload — all fields optional, only present ones update."""
+
+    measured_at: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    weight_g: int | None = Field(default=None, ge=0, le=30000)
+    length_mm: int | None = Field(default=None, ge=0, le=2000)
+    head_circ_mm: int | None = Field(default=None, ge=0, le=1000)
+    notes: str | None = Field(default=None, max_length=500)
+
+
 class Actor(BaseModel):
     """
     The requestor as resolved by `auth.current_actor`. Today only
