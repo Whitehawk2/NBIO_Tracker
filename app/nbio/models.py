@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-EventType = Literal["breast", "formula", "wee", "poo", "vitd"]
+EventType = Literal["breast", "formula", "wee", "poo", "vitd", "tummy_time"]
 FeedSide = Literal["L", "R", "both"]
 # Future-auth seam: today `device` is the only kind. When session/JWT
 # auth lands, add `"user"` to this Literal; the rest of the app keeps
@@ -16,6 +16,11 @@ class EventCreate(BaseModel):
     occurred_at: str  # ISO-8601 UTC
     feed_side: FeedSide | None = None
     feed_duration_min: int | None = Field(default=None, ge=0, le=600)
+    # Sub-minute precision for tummy time (timer). When set, takes
+    # precedence over feed_duration_min in displays; aggregations
+    # COALESCE(sec, min*60). Range 0..36000s (10h) to cover any
+    # plausible session.
+    feed_duration_sec: int | None = Field(default=None, ge=0, le=36000)
     poo_quality: int | None = Field(default=None, ge=1, le=7)
     notes: str | None = Field(default=None, max_length=500)
     # Formula-only: brand name (e.g. "Materna") and volume in ml (cc).
@@ -30,6 +35,7 @@ class EventPatch(BaseModel):
     occurred_at: str | None = None
     feed_side: FeedSide | None = None
     feed_duration_min: int | None = Field(default=None, ge=0, le=600)
+    feed_duration_sec: int | None = Field(default=None, ge=0, le=36000)
     poo_quality: int | None = Field(default=None, ge=1, le=7)
     notes: str | None = Field(default=None, max_length=500)
     formula_brand: str | None = Field(default=None, max_length=40)
@@ -73,6 +79,32 @@ class AppSettingsUpdate(BaseModel):
         except ZoneInfoNotFoundError as e:
             raise ValueError(f"unknown timezone: {v!r}") from e
         return v
+
+
+class GrowthCreate(BaseModel):
+    """POST payload for /api/growth. weight_g is required in v1.1.1.
+
+    length_mm and head_circ_mm are accepted (forward-compat with #55)
+    but not exposed in the UI yet — they round-trip through the DB.
+    """
+
+    measured_at: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    weight_g: int = Field(ge=0, le=30000)
+    length_mm: int | None = Field(default=None, ge=0, le=2000)
+    head_circ_mm: int | None = Field(default=None, ge=0, le=1000)
+    notes: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=64)
+    created_by_device: str = Field(min_length=1, max_length=64)
+
+
+class GrowthPatch(BaseModel):
+    """PATCH payload — all fields optional, only present ones update."""
+
+    measured_at: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    weight_g: int | None = Field(default=None, ge=0, le=30000)
+    length_mm: int | None = Field(default=None, ge=0, le=2000)
+    head_circ_mm: int | None = Field(default=None, ge=0, le=1000)
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class Actor(BaseModel):

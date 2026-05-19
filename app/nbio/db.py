@@ -23,7 +23,9 @@ CREATE TABLE IF NOT EXISTS devices (
 CREATE TABLE IF NOT EXISTS events (
     id                  INTEGER PRIMARY KEY,
     baby_id             INTEGER NOT NULL REFERENCES babies(id),
-    type                TEXT NOT NULL CHECK (type IN ('breast','formula','wee','poo','vitd')),
+    type                TEXT NOT NULL CHECK (type IN (
+        'breast','formula','wee','poo','vitd','tummy_time'
+    )),
     occurred_at         TEXT NOT NULL,
     feed_side           TEXT CHECK (feed_side IN ('L','R','both') OR feed_side IS NULL),
     feed_duration_min   INTEGER,
@@ -35,7 +37,8 @@ CREATE TABLE IF NOT EXISTS events (
     updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
     deleted_at          TEXT,
     formula_brand       TEXT,
-    formula_volume_ml   INTEGER
+    formula_volume_ml   INTEGER,
+    feed_duration_sec   INTEGER
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_events_idem ON events(idempotency_key);
@@ -50,6 +53,24 @@ CREATE TABLE IF NOT EXISTS app_settings (
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 INSERT OR IGNORE INTO app_settings (id) VALUES (1);
+
+CREATE TABLE IF NOT EXISTS growth (
+    id                INTEGER PRIMARY KEY,
+    baby_id           INTEGER NOT NULL REFERENCES babies(id),
+    measured_at       TEXT NOT NULL,
+    weight_g          INTEGER CHECK (weight_g IS NULL OR weight_g BETWEEN 0 AND 30000),
+    length_mm         INTEGER,
+    head_circ_mm     INTEGER,
+    notes             TEXT,
+    idempotency_key   TEXT NOT NULL,
+    created_by_device TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    deleted_at        TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_growth_idem ON growth(idempotency_key);
+CREATE INDEX IF NOT EXISTS ix_growth_baby_time ON growth(baby_id, measured_at DESC);
 """
 
 

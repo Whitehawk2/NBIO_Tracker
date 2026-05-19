@@ -140,7 +140,7 @@ def test_row_html_includes_row_menu():
     src = _src()
     idx = src.find("function rowHTML(")
     assert idx >= 0
-    block = src[idx : idx + 1500]
+    block = src[idx : idx + 2000]
     assert "row-menu" in block, (
         "rowHTML must emit the `.row-menu` button so SSE-/optimistic-"
         "inserted rows match the server template"
@@ -451,6 +451,168 @@ def test_open_edit_for_dispatches_vitd_to_its_own_modal():
     assert "openVitdModal(" in block, (
         "openEditFor's vitd branch must dispatch to `openVitdModal(prefill)`"
     )
+
+
+def test_breast_modal_default_side_is_both_when_no_history():
+    """
+    First-ever feed (no `last_side` returned from the server) must default
+    to `both`, not `L`. User feedback (v1.1.0 follow-up) flagged the prior
+    `L` fallback as wrong: the right starting assumption when nothing is
+    known is "both" — parents commonly start with both breasts. Inversion
+    semantics (L→R, R→L) for subsequent feeds are preserved.
+    """
+    src = _src()
+    idx = src.find("async function openFeedModal(")
+    assert idx >= 0, "openFeedModal() function not found in app.js"
+    block = src[idx : idx + 2000]
+    # Both fallback branches (success + catch) must default to "both".
+    assert '=== "R" ? "L" : "both"' in block, (
+        'openFeedModal must default to "both" when last_side is null '
+        '(found "L" fallback — see v1.1.1 breast-default fix)'
+    )
+    assert 'defaultSide = "both"' in block, (
+        "the fetch catch-branch must also default to `both`, not `L`"
+    )
+    # Inversion semantics MUST still be present.
+    assert '=== "L" ? "R"' in block, "feed-modal inversion semantics (L→R) must be preserved"
+
+
+def test_app_js_has_wire_tummy_banner():
+    """
+    `wireTummyBanner` must exist and bind the `[data-tummy-log]` button to
+    the quick-log modal AND `[data-tummy-start]` to the timer modal.
+    """
+    src = _src()
+    assert "function wireTummyBanner(" in src, (
+        "expected `wireTummyBanner()` function in app.js for v1.1.1 tummy banner"
+    )
+    idx = src.find("function wireTummyBanner(")
+    block = src[idx : idx + 2500]
+    assert "[data-tummy-log]" in block, (
+        "wireTummyBanner must look up the Log button via `[data-tummy-log]`"
+    )
+    assert "[data-tummy-start]" in block, (
+        "wireTummyBanner must look up the Start-timer button via `[data-tummy-start]`"
+    )
+    assert "openTummyLogModal" in block, (
+        "wireTummyBanner must dispatch the Log button to openTummyLogModal"
+    )
+    assert "openTummyTimerModal" in block, (
+        "wireTummyBanner must dispatch the Start-timer button to openTummyTimerModal"
+    )
+    # Wired into init so the listener fires on first paint.
+    assert "wireTummyBanner();" in src, (
+        "wireTummyBanner() must be called from the DOMContentLoaded init block"
+    )
+
+
+def test_app_js_bump_overviews_handles_tummy_time():
+    """`bumpOverviews` must route tummy events to `renderTummyBanner`."""
+    src = _src()
+    idx = src.find("function bumpOverviews(")
+    assert idx >= 0
+    block = src[idx : idx + 3000]
+    assert 'ev?.type === "tummy_time"' in block or 'ev.type === "tummy_time"' in block, (
+        "bumpOverviews must branch on `ev.type === 'tummy_time'` for the banner path"
+    )
+    assert "renderTummyBanner(" in block, (
+        "bumpOverviews's tummy branch must call `renderTummyBanner(ev, delta)`"
+    )
+
+
+def test_row_html_tummy_emoji():
+    """rowHTML's emoji map must include 🤸 for type='tummy_time'."""
+    src = _src()
+    idx = src.find("function rowHTML(")
+    assert idx >= 0
+    block = src[idx : idx + 2500]
+    assert 'ev.type === "tummy_time"' in block, (
+        "rowHTML must branch on `ev.type === 'tummy_time'` for the 🤸 emoji"
+    )
+    assert "🤸" in block, "rowHTML must emit the 🤸 emoji for tummy_time events"
+
+
+def test_refresh_tummy_late_class_exists():
+    """
+    `refreshTummyLateClass` keeps the after-16:00 nudge fresh on long-lived
+    PWA tabs (hourly setInterval). Without it the banner stays in its
+    not-yet-overdue state past the threshold.
+    """
+    src = _src()
+    assert "function refreshTummyLateClass(" in src, (
+        "expected `refreshTummyLateClass()` function for the 16:00 tummy nudge"
+    )
+    idx = src.find("function refreshTummyLateClass(")
+    block = src[idx : idx + 600]
+    assert "getHours()" in block, (
+        "refreshTummyLateClass must read the local hour via `new Date().getHours()`"
+    )
+    assert "is-late" in block, "refreshTummyLateClass must toggle `.is-late`"
+    assert "setInterval(refreshTummyLateClass" in src, (
+        "refreshTummyLateClass must be scheduled via setInterval in init"
+    )
+
+
+def test_open_tummy_timer_modal_reads_localstorage():
+    """
+    Timer modal persists `started_at` in localStorage so backgrounding the
+    tab + reopening still shows the correct elapsed time. Pin the key
+    + the read.
+    """
+    src = _src()
+    assert "function openTummyTimerModal(" in src, (
+        "expected `openTummyTimerModal()` function for the timer flow"
+    )
+    # The timer key must be a constant.
+    assert "nbio.tummy_timer_started_at" in src, (
+        "tummy timer must persist started_at under `nbio.tummy_timer_started_at` in localStorage"
+    )
+    idx = src.find("function openTummyTimerModal(")
+    block = src[idx : idx + 2500]
+    assert "Date.now()" in block, (
+        "openTummyTimerModal must compute elapsed from Date.now() so it "
+        "survives tab background throttling"
+    )
+
+
+def test_open_tummy_log_modal_duration_chips():
+    """
+    Tummy quick-log modal uses segmented-wrap chips with the 3/5/7/10/15
+    duration values + a CUSTOM chip surfacing a numeric input. Default = 5.
+    """
+    src = _src()
+    assert "function openTummyLogModal(" in src, (
+        "expected `openTummyLogModal()` function for the quick-log flow"
+    )
+    idx = src.find("function openTummyLogModal(")
+    block = src[idx : idx + 3500]
+    assert "segmented-wrap" in block, "tummy duration picker must use .segmented-wrap"
+    # The five duration choices must appear.
+    for n in (3, 5, 7, 10, 15):
+        assert f"{n}" in block, f"tummy duration chips must include {n}"
+    # CUSTOM chip surfaces a numeric input for non-preset durations.
+    assert "CUSTOM" in block, "openTummyLogModal must offer a CUSTOM duration chip"
+    assert 'type = "number"' in block, "CUSTOM chip must reveal a number input"
+    # Posts `type: "tummy_time"` (within the same modal function body).
+    assert "tummy_time" in block, "openTummyLogModal must POST `type: 'tummy_time'`"
+
+
+def test_open_tummy_timer_writes_seconds_not_minutes():
+    """Timer must POST `feed_duration_sec` (sub-minute precision), not
+    the old `feed_duration_min: Math.max(1, Math.floor(ms/60000))` which
+    forced any session ≥1ms to be at least 1 minute (v1.1.1 follow-up)."""
+    src = _src()
+    idx = src.find("function openTummyTimerModal(")
+    assert idx >= 0
+    block = src[idx : idx + 3000]
+    assert "feed_duration_sec" in block, (
+        "timer must POST feed_duration_sec for sub-minute precision"
+    )
+    # The old floor-to-min pattern must NOT come back.
+    assert "Math.floor(elapsedMs / 60000)" not in block, (
+        "timer must not floor-to-min the elapsed duration"
+    )
+    assert "Math.max(1, Math.floor" not in block, "timer must not clamp <1min sessions to 1 min"
 
 
 def test_open_vitd_modal_uses_time_and_notes_only():

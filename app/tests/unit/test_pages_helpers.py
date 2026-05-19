@@ -157,6 +157,173 @@ class TestVitdOverdue:
         assert pages._vitd_overdue({}, local_hour=10) is False
 
 
+class TestWeightHistoryContext:
+    """`_weight_history_context` builds the reports section's data shape."""
+
+    def test_empty_when_no_growth_rows(self, conn):
+        ctx = pages._weight_history_context(conn)
+        assert ctx == {"has_data": False}
+
+    def test_single_measurement(self, conn):
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        growth_create(
+            conn,
+            GrowthCreate(
+                measured_at="2026-05-16",
+                weight_g=3420,
+                idempotency_key="idem-w-single",
+                created_by_device="dev",
+            ),
+        )
+        ctx = pages._weight_history_context(conn)
+        assert ctx["has_data"] is True
+        assert len(ctx["rows"]) == 1
+        assert ctx["latest"]["weight_g"] == 3420
+        assert ctx["latest"]["delta_g"] is None
+        # One point in the chart.
+        assert len(ctx["chart_points"]) == 1
+
+    def test_delta_positive_negative_zero(self, conn):
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-01", 3300, "idem-w-1"),
+            ("2026-05-08", 3420, "idem-w-2"),  # +120
+            ("2026-05-15", 3380, "idem-w-3"),  # -40
+            ("2026-05-22", 3380, "idem-w-4"),  # 0
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        # Rows are returned latest-first for the table.
+        labels = [r["label"] for r in ctx["rows"]]
+        assert labels == ["2026-05-22", "2026-05-15", "2026-05-08", "2026-05-01"]
+        # Classes encode sign for CSS coloring.
+        classes = {r["label"]: r["delta_class"] for r in ctx["rows"]}
+        assert classes["2026-05-08"] == "delta-up"
+        assert classes["2026-05-15"] == "delta-down"
+        assert classes["2026-05-22"] == "delta-flat"
+        assert classes["2026-05-01"] == ""  # no previous → empty class
+        # Latest delta is the most recent diff.
+        assert ctx["latest"]["delta_g"] == 0
+
+    def test_chart_points_x_normalized_to_0_1000(self, conn):
+        """First measurement → x=0; last → x=1000."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        growth_create(
+            conn,
+            GrowthCreate(
+                measured_at="2026-05-01",
+                weight_g=3300,
+                idempotency_key="idem-x-a",
+                created_by_device="dev",
+            ),
+        )
+        growth_create(
+            conn,
+            GrowthCreate(
+                measured_at="2026-05-22",
+                weight_g=3500,
+                idempotency_key="idem-x-b",
+                created_by_device="dev",
+            ),
+        )
+        ctx = pages._weight_history_context(conn)
+        pts = ctx["chart_points"]
+        assert pts[0]["x"] == 0
+        assert pts[-1]["x"] == 1000
+
+    def test_chart_y_inverted_so_heavier_is_higher(self, conn):
+        """SVG y axis grows downward — heavier weight = SMALLER y."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-01", 3300, "idem-y-a"),
+            ("2026-05-22", 3500, "idem-y-b"),
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        pts = ctx["chart_points"]
+        # The heavier point (3500g) must plot HIGHER (smaller y) than 3300g.
+        heavier = next(p for p in pts if p["weight_g"] == 3500)
+        lighter = next(p for p in pts if p["weight_g"] == 3300)
+        assert heavier["y"] < lighter["y"]
+
+
+class TestTummyDurationStr:
+    """`_tummy_duration_str` formats tummy event durations for display."""
+
+    def test_seconds_only_under_60(self):
+        assert pages._tummy_duration_str({"feed_duration_sec": 42}) == "42s"
+
+    def test_seconds_under_60_zero_is_empty(self):
+        # Zero is meaningful — render as 0s, not "".
+        assert pages._tummy_duration_str({"feed_duration_sec": 0}) == "0s"
+
+    def test_seconds_exact_minute(self):
+        assert pages._tummy_duration_str({"feed_duration_sec": 60}) == "1m"
+        assert pages._tummy_duration_str({"feed_duration_sec": 300}) == "5m"
+
+    def test_seconds_with_remainder(self):
+        assert pages._tummy_duration_str({"feed_duration_sec": 95}) == "1m 35s"
+        assert pages._tummy_duration_str({"feed_duration_sec": 600 + 15}) == "10m 15s"
+
+    def test_falls_back_to_minutes_when_sec_missing(self):
+        """Pre-006 legacy rows have only feed_duration_min — still render."""
+        assert pages._tummy_duration_str({"feed_duration_min": 5}) == "5m"
+
+    def test_sec_takes_precedence_over_min(self):
+        """When both are set, sec wins (it's the more precise value)."""
+        assert (
+            pages._tummy_duration_str({"feed_duration_min": 5, "feed_duration_sec": 95}) == "1m 35s"
+        )
+
+    def test_both_null_returns_empty(self):
+        assert pages._tummy_duration_str({}) == ""
+
+
+class TestTummyOverdue:
+    """`_tummy_overdue` decides whether the tummy banner gets `.is-late`."""
+
+    def test_not_late_before_16_when_none_logged(self):
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=15) is False
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=9) is False
+
+    def test_late_at_or_after_16_when_none_logged(self):
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=16) is True
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=23) is True
+
+    def test_never_late_once_one_session(self):
+        """Even one session today → calm regardless of hour."""
+        assert pages._tummy_overdue({"tummy_time": 1}, local_hour=22) is False
+        assert pages._tummy_overdue({"tummy_time": 3}, local_hour=20) is False
+
+    def test_missing_tummy_key_treated_as_zero(self):
+        assert pages._tummy_overdue({}, local_hour=20) is True
+        assert pages._tummy_overdue({}, local_hour=8) is False
+
+
 class TestAgeFromDob:
     """`_age_from_dob` renders compact baby ages for the header display."""
 
@@ -281,6 +448,55 @@ class TestTimelineMarks:
         assert marks[0]["type"] == "vitd"
         assert "Vit D" in marks[0]["tooltip"]
         assert "09:00" in marks[0]["tooltip"]
+
+    def test_tummy_time_event_maps_to_tummy_mark_with_tooltip(self):
+        """Tummy time events get their own mark class + duration tooltip."""
+        events = [
+            {
+                "occurred_at": "2026-05-16T08:00:00Z",
+                "type": "tummy_time",
+                "feed_duration_min": 5,
+            }
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert marks[0]["type"] == "tummy"
+        # Legacy rows (no sec) still produce a minute-rendered tooltip.
+        assert "Tummy 5m" in marks[0]["tooltip"]
+        assert "08:00" in marks[0]["tooltip"]
+
+    def test_tummy_time_tooltip_uses_seconds_when_present(self):
+        """Sec-only timer rows render sub-minute precision in the tooltip."""
+        events = [
+            {
+                "occurred_at": "2026-05-16T08:00:00Z",
+                "type": "tummy_time",
+                "feed_duration_sec": 95,  # 1m 35s
+            }
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert "Tummy 1m 35s" in marks[0]["tooltip"]
+
+    def test_tummy_time_tooltip_seconds_only_for_under_a_minute(self):
+        events = [
+            {
+                "occurred_at": "2026-05-16T08:00:00Z",
+                "type": "tummy_time",
+                "feed_duration_sec": 42,
+            }
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert "Tummy 42s" in marks[0]["tooltip"]
+
+    def test_tummy_time_tooltip_without_duration(self):
+        """Tummy event with no duration falls back to bare 'Tummy' label."""
+        events = [{"occurred_at": "2026-05-16T08:00:00Z", "type": "tummy_time"}]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert "Tummy" in marks[0]["tooltip"]
+        assert "m" not in marks[0]["tooltip"].split("Tummy")[1]
+        assert "s" not in marks[0]["tooltip"].split("Tummy")[1]
 
     def test_breast_and_formula_map_to_feed(self):
         events = [

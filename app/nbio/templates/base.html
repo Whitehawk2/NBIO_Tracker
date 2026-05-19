@@ -36,6 +36,9 @@
       {% if baby_age %}
         <span class="baby-age" data-baby-age data-dob="{{ baby.dob }}">{{ baby_age }}</span>
       {% endif %}
+      {% if baby_latest_weight_g %}
+        <span class="baby-weight" data-baby-weight>{{ '{:,}'.format(baby_latest_weight_g) }} g</span>
+      {% endif %}
     </div>
     {% include "partials/sync_badge.html" %}
   </header>

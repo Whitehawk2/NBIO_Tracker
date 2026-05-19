@@ -13,11 +13,18 @@ from .models import (
     DeviceUpsert,
     EventCreate,
     EventPatch,
+    GrowthCreate,
+    GrowthPatch,
 )
+
+GROWTH_COLS = """
+    id, baby_id, measured_at, weight_g, length_mm, head_circ_mm, notes,
+    idempotency_key, created_by_device, created_at, updated_at, deleted_at
+"""
 
 EVENT_COLS = """
     e.id, e.baby_id, e.type, e.occurred_at,
-    e.feed_side, e.feed_duration_min, e.poo_quality, e.notes,
+    e.feed_side, e.feed_duration_min, e.feed_duration_sec, e.poo_quality, e.notes,
     e.formula_brand, e.formula_volume_ml,
     e.idempotency_key, e.created_by_device,
     e.created_at, e.updated_at, e.deleted_at,
@@ -138,11 +145,11 @@ def create_event(
             """
             INSERT INTO events (
                 baby_id, type, occurred_at,
-                feed_side, feed_duration_min, poo_quality, notes,
+                feed_side, feed_duration_min, feed_duration_sec, poo_quality, notes,
                 formula_brand, formula_volume_ml,
                 idempotency_key, created_by_device,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 baby_id,
@@ -150,6 +157,7 @@ def create_event(
                 payload.occurred_at,
                 payload.feed_side,
                 payload.feed_duration_min,
+                payload.feed_duration_sec,
                 payload.poo_quality,
                 payload.notes,
                 payload.formula_brand,
@@ -272,7 +280,7 @@ def last_event_of_each_type(
     """
     out: dict[str, dict[str, Any]] = {}
 
-    for t in ("breast", "formula", "wee", "poo", "vitd"):
+    for t in ("breast", "formula", "wee", "poo", "vitd", "tummy_time"):
         row = conn.execute(
             f"SELECT {EVENT_COLS} FROM {EVENT_JOIN} "
             "WHERE e.baby_id = ? AND e.type = ? AND e.deleted_at IS NULL "
@@ -313,7 +321,7 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
 
     offset = local_offset_modifier(settings.tz)
     today = local_today_str(settings.tz)
-    out = {"feed": 0, "wee": 0, "poo": 0, "vitd": 0, "formula_ml": 0}
+    out = {"feed": 0, "wee": 0, "poo": 0, "vitd": 0, "tummy_time": 0, "formula_ml": 0}
     cur = conn.execute(
         """
         SELECT type,
@@ -334,6 +342,39 @@ def today_counts(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
         if r["type"] == "formula":
             out["formula_ml"] += int(r["volume_ml"] or 0)
     return out
+
+
+def today_totals(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, int]:
+    """
+    Per-day SUM aggregates that don't fit `today_counts` (which is a
+    count-by-type dict). Today's tummy time lives here — banner needs
+    both the session count (from `today_counts`) and the duration sum.
+
+    Tummy duration is canonical in **seconds** post-migration-006:
+    new tummy rows from the timer write `feed_duration_sec`; quick-log
+    rows from the chips set both `_sec` and `_min`. Legacy rows
+    (pre-006) only have `_min`, so COALESCE picks `_sec` first then
+    falls back to `_min * 60`. The minutes key remains in the returned
+    dict for callers that only want the coarse view.
+    """
+    from .tz import local_offset_modifier, local_today_str
+
+    offset = local_offset_modifier(settings.tz)
+    today = local_today_str(settings.tz)
+    row = conn.execute(
+        """
+        SELECT COALESCE(
+                  SUM(COALESCE(feed_duration_sec, feed_duration_min * 60)),
+                  0
+               ) AS tummy_time_sec
+        FROM events
+        WHERE baby_id = ? AND type = 'tummy_time' AND deleted_at IS NULL
+          AND substr(datetime(occurred_at, ?), 1, 10) = ?
+        """,
+        (baby_id, offset, today),
+    ).fetchone()
+    sec = int(row["tummy_time_sec"] or 0)
+    return {"tummy_time_sec": sec, "tummy_time_min": sec // 60}
 
 
 def daily_totals(
@@ -366,6 +407,8 @@ def daily_totals(
                type,
                COUNT(*) AS n,
                AVG(feed_duration_min) AS avg_feed_min,
+               COALESCE(SUM(COALESCE(feed_duration_sec, feed_duration_min * 60)), 0)
+                   AS duration_total_sec,
                COALESCE(SUM(formula_volume_ml), 0) AS volume_ml
         FROM events
         WHERE baby_id = ? AND deleted_at IS NULL
@@ -387,6 +430,9 @@ def daily_totals(
                 "wee": 0,
                 "poo": 0,
                 "vitd": 0,
+                "tummy_time": 0,
+                "tummy_time_sec": 0,
+                "tummy_time_min": 0,
                 "formula_ml": 0,
                 "avg_feed_min": None,
             },
@@ -394,6 +440,10 @@ def daily_totals(
         d[r["type"]] = r["n"]
         if r["type"] == "formula":
             d["formula_ml"] += int(r["volume_ml"] or 0)
+        if r["type"] == "tummy_time":
+            sec_total = int(r["duration_total_sec"] or 0)
+            d["tummy_time_sec"] += sec_total
+            d["tummy_time_min"] = d["tummy_time_sec"] // 60
         if r["type"] in ("breast", "formula"):
             d["feed"] = d["breast"] + d["formula"]
         if r["type"] == "breast" and r["avg_feed_min"] is not None:
@@ -459,6 +509,146 @@ def update_baby(conn: sqlite3.Connection, patch: BabyUpdate) -> dict[str, Any]:
     out = baby(conn)
     assert out is not None
     return out
+
+
+def fetch_growth(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] | None:
+    row = conn.execute(f"SELECT {GROWTH_COLS} FROM growth WHERE id = ?", (growth_id,)).fetchone()
+    return _row_to_dict(row)
+
+
+def fetch_growth_by_idem(conn: sqlite3.Connection, idem: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        f"SELECT {GROWTH_COLS} FROM growth WHERE idempotency_key = ?", (idem,)
+    ).fetchone()
+    return _row_to_dict(row)
+
+
+def growth_create(
+    conn: sqlite3.Connection, payload: GrowthCreate, baby_id: int = 1
+) -> tuple[str, dict[str, Any]]:
+    """
+    Returns (status, growth_dict).
+    status ∈ {"created", "already_exists"}.
+    """
+    existing = fetch_growth_by_idem(conn, payload.idempotency_key)
+    if existing is not None:
+        return "already_exists", existing
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        now = _now_iso()
+        cur = conn.execute(
+            """
+            INSERT INTO growth (
+                baby_id, measured_at, weight_g, length_mm, head_circ_mm,
+                notes, idempotency_key, created_by_device,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                baby_id,
+                payload.measured_at,
+                payload.weight_g,
+                payload.length_mm,
+                payload.head_circ_mm,
+                payload.notes,
+                payload.idempotency_key,
+                payload.created_by_device,
+                now,
+                now,
+            ),
+        )
+        new_id = cur.lastrowid
+        assert new_id is not None
+        conn.execute("COMMIT")
+    except sqlite3.IntegrityError:
+        conn.execute("ROLLBACK")
+        existing = fetch_growth_by_idem(conn, payload.idempotency_key)
+        if existing is not None:
+            return "already_exists", existing
+        raise
+
+    row = fetch_growth(conn, new_id)
+    assert row is not None
+    return "created", row
+
+
+def growth_list(
+    conn: sqlite3.Connection,
+    baby_id: int = 1,
+    include_deleted: bool = False,
+) -> list[dict[str, Any]]:
+    """All growth rows for baby, ASC by measured_at (chart-friendly order)."""
+    where = ["baby_id = ?"]
+    args: list[Any] = [baby_id]
+    if not include_deleted:
+        where.append("deleted_at IS NULL")
+    cur = conn.execute(
+        f"SELECT {GROWTH_COLS} FROM growth "
+        f"WHERE {' AND '.join(where)} ORDER BY measured_at ASC, id ASC",
+        args,
+    )
+    return [d for d in (_row_to_dict(r) for r in cur.fetchall()) if d is not None]
+
+
+def growth_latest(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, Any] | None:
+    """Most recent (by measured_at) non-deleted weight. None if no rows."""
+    row = conn.execute(
+        f"SELECT {GROWTH_COLS} FROM growth "
+        "WHERE baby_id = ? AND deleted_at IS NULL "
+        "ORDER BY measured_at DESC, id DESC LIMIT 1",
+        (baby_id,),
+    ).fetchone()
+    return _row_to_dict(row)
+
+
+def growth_patch(
+    conn: sqlite3.Connection, growth_id: int, patch: GrowthPatch
+) -> dict[str, Any] | None:
+    fields = patch.model_dump(exclude_unset=True)
+    if not fields:
+        return fetch_growth(conn, growth_id)
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    args = list(fields.values()) + [_now_iso(), growth_id]
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            f"UPDATE growth SET {sets}, updated_at = ? WHERE id = ?",
+            args,
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return fetch_growth(conn, growth_id)
+
+
+def growth_soft_delete(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] | None:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            "UPDATE growth SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+            (_now_iso(), _now_iso(), growth_id),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return fetch_growth(conn, growth_id)
+
+
+def growth_undelete(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] | None:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            "UPDATE growth SET deleted_at = NULL, updated_at = ? WHERE id = ?",
+            (_now_iso(), growth_id),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return fetch_growth(conn, growth_id)
 
 
 def app_settings_read(conn: sqlite3.Connection) -> dict[str, Any]:

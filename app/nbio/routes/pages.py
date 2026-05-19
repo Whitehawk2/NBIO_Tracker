@@ -46,6 +46,14 @@ templates.env.filters["relative"] = _relative
 templates.env.filters["hhmm"] = _local_hhmm
 
 
+def _tummy_duration_filter(e: dict[str, Any]) -> str:
+    """Jinja filter wrapper around _tummy_duration_str (forward-declared)."""
+    return _tummy_duration_str(e)
+
+
+templates.env.filters["tummy_dur"] = _tummy_duration_filter
+
+
 def _today_card(conn: sqlite3.Connection) -> dict[str, Any]:
     return {
         "counts": repo.today_counts(conn),
@@ -126,14 +134,22 @@ def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     last_days = _last_days_rows(repo.daily_totals(conn, days=4), n=3)
     baby = repo.baby(conn)
     today = _today_card(conn)
+    latest_weight = repo.growth_latest(conn)
+    tummy_totals = repo.today_totals(conn)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "baby": baby,
             "baby_age": _age_from_dob(baby.get("dob") if baby else None, now_local.date()),
+            "baby_latest_weight_g": latest_weight["weight_g"] if latest_weight else None,
             "today": today,
             "vitd_overdue": _vitd_overdue(today["counts"], now_local.hour),
+            "tummy_overdue": _tummy_overdue(today["counts"], now_local.hour),
+            "tummy_today_sec": tummy_totals["tummy_time_sec"],
+            "tummy_today_dur": _tummy_duration_str(
+                {"feed_duration_sec": tummy_totals["tummy_time_sec"]}
+            ),
             "events": events,
             "grouped_events": grouped_events,
             "last_days": last_days,
@@ -154,6 +170,21 @@ def _vitd_overdue(today_counts: dict[str, int], local_hour: int) -> bool:
     cold loads after 18:00 don't flash through the muted state.
     """
     return today_counts.get("vitd", 0) == 0 and local_hour >= 18
+
+
+def _tummy_overdue(today_counts: dict[str, int], local_hour: int) -> bool:
+    """
+    Triggers the late-day visual nudge on the tummy time banner.
+
+    True when:
+      - today's tummy_time session count is 0 (none logged), AND
+      - the local hour is >= 16 (4pm or later)
+
+    The 16:00 threshold is earlier than the vit D one because tummy
+    time wants to be spread across the day — 4pm is when "haven't done
+    any yet" becomes worth nudging about.
+    """
+    return today_counts.get("tummy_time", 0) == 0 and local_hour >= 16
 
 
 def _age_from_dob(dob_iso: str | None, today_local: date) -> str | None:
@@ -211,7 +242,33 @@ def _mark_tooltip(e: dict[str, Any], hhmm: str) -> str:
         parts.append(f"type {e['poo_quality']}")
     elif e["type"] == "vitd":
         parts.append("Vit D")
+    elif e["type"] == "tummy_time":
+        dur = _tummy_duration_str(e)
+        parts.append(f"Tummy {dur}" if dur else "Tummy")
     return " · ".join(parts)
+
+
+def _tummy_duration_str(e: dict[str, Any]) -> str:
+    """
+    Format a tummy_time event's duration for human display.
+
+    Prefers `feed_duration_sec` (post-006 precision) and falls back to
+    `feed_duration_min * 60`. Renders as:
+      - "Xm Ys"  for ≥ 60 seconds with a non-zero seconds remainder,
+      - "Xm"     for whole-minute durations (no remainder),
+      - "Ys"     for < 60 seconds,
+      - ""       when both columns are NULL.
+    """
+    sec = e.get("feed_duration_sec")
+    if sec is None and e.get("feed_duration_min") is not None:
+        sec = int(e["feed_duration_min"]) * 60
+    if sec is None:
+        return ""
+    sec = int(sec)
+    if sec < 60:
+        return f"{sec}s"
+    m, s = divmod(sec, 60)
+    return f"{m}m" if s == 0 else f"{m}m {s}s"
 
 
 def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str, Any]]:
@@ -233,6 +290,7 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
         "wee": "wee",
         "poo": "poo",
         "vitd": "vitd",
+        "tummy_time": "tummy",
     }
     marks: list[dict[str, Any]] = []
     for e in events:
@@ -260,6 +318,88 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
             }
         )
     return marks
+
+
+def _weight_history_context(conn: sqlite3.Connection) -> dict[str, Any]:
+    """
+    Build the reports-page weight-history context.
+
+    Returns a dict with:
+      - has_data: bool
+      - rows: list of {label, weight_g, weight_str, delta_g, delta_str,
+        delta_class, interval_str, measured_at} ASC by date
+      - latest: dict | None — top callout
+      - chart_points: list of {x, y, weight_g, date} normalized to a
+        1000×200 SVG viewBox
+      - polyline: str — `x,y x,y …` for the chart line
+
+    Y-axis is clamped to [min-100, max+100] grams so even small
+    week-on-week deltas read as a visible curve (newborns gain ~30g/day;
+    a chart anchored at 0 would look flat).
+    """
+    rows_raw = repo.growth_list(conn)
+    if not rows_raw:
+        return {"has_data": False}
+
+    weights = [int(r["weight_g"]) for r in rows_raw]
+    y_min = max(0, min(weights) - 100)
+    y_max = max(weights) + 100
+    y_span = max(1, y_max - y_min)
+
+    from datetime import datetime as _dt
+
+    measured = [_dt.strptime(r["measured_at"], "%Y-%m-%d").date() for r in rows_raw]
+    first = measured[0]
+    last = measured[-1]
+    span_days = max(1, (last - first).days)
+
+    chart_points: list[dict[str, Any]] = []
+    polyline_parts: list[str] = []
+    for r, d, w in zip(rows_raw, measured, weights, strict=True):
+        x = ((d - first).days / span_days) * 1000.0 if span_days > 0 else 500.0
+        y = 200.0 - ((w - y_min) / y_span) * 200.0
+        chart_points.append(
+            {"x": round(x, 2), "y": round(y, 2), "weight_g": w, "date": r["measured_at"]}
+        )
+        polyline_parts.append(f"{round(x, 2)},{round(y, 2)}")
+
+    rows: list[dict[str, Any]] = []
+    today = _dt.now().astimezone().date()
+    prev = None
+    for r, d, w in zip(rows_raw, measured, weights, strict=True):
+        delta_g = w - prev if prev is not None else None
+        delta_str = "—"
+        delta_class = ""
+        if delta_g is not None:
+            sign = "+" if delta_g > 0 else ("" if delta_g == 0 else "")
+            delta_str = f"{sign}{delta_g} g"
+            delta_class = (
+                "delta-up" if delta_g > 0 else "delta-down" if delta_g < 0 else "delta-flat"
+            )
+        days_ago = (today - d).days
+        interval_str = "today" if days_ago == 0 else f"{days_ago}d ago"
+        rows.append(
+            {
+                "label": r["measured_at"],
+                "measured_at": r["measured_at"],
+                "weight_g": w,
+                "weight_str": f"{w:,} g",
+                "delta_g": delta_g,
+                "delta_str": delta_str,
+                "delta_class": delta_class,
+                "interval_str": interval_str,
+            }
+        )
+        prev = w
+
+    latest_row = rows[-1]
+    return {
+        "has_data": True,
+        "rows": list(reversed(rows)),  # latest first in the table
+        "latest": latest_row,
+        "chart_points": chart_points,
+        "polyline": " ".join(polyline_parts),
+    }
 
 
 def _day_formula_cc(events: list[dict[str, Any]], day_iso: str) -> int:
@@ -320,10 +460,15 @@ def reports(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     max_h = max((max(row) for row in heatmap), default=1) or 1
     heatmap_day_labels = [_day_label(today - timedelta(days=i), today) for i in range(7)]
 
+    baby = repo.baby(conn)
+    latest_weight = repo.growth_latest(conn)
     return templates.TemplateResponse(
         request,
         "reports.html",
         {
+            "baby": baby,
+            "baby_age": _age_from_dob(baby.get("dob") if baby else None, today),
+            "baby_latest_weight_g": latest_weight["weight_g"] if latest_weight else None,
             "today": _today_card(conn),
             "totals": totals,
             "days_list": days_list,
@@ -331,5 +476,6 @@ def reports(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
             "heatmap_max": max_h,
             "heatmap_day_labels": heatmap_day_labels,
             "now_x": (now_local.hour * 3600 + now_local.minute * 60) / 86400.0,
+            "weight_history": _weight_history_context(conn),
         },
     )

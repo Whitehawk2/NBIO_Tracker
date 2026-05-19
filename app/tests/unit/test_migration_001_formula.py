@@ -232,8 +232,8 @@ def test_001_migration_idempotent_on_new_shape(tmp_path):
     """
     c = sqlite3.connect(":memory:")
     c.row_factory = sqlite3.Row
-    # Simulate a fresh install at user_version=3 (post-001 + post-002 + post-003)
-    c.execute("PRAGMA user_version = 3")
+    # Simulate a fresh install at the latest user_version (post-006).
+    c.execute("PRAGMA user_version = 6")
     applied = apply_pending(c, MIGRATIONS_DIR)
     assert applied == []
     c.close()

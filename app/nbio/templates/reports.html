@@ -27,6 +27,7 @@
     <span><span class="lg-dot lg-wee"></span>wee</span>
     <span><span class="lg-dot lg-poo"></span>poo</span>
     <span><span class="lg-dot lg-vitd"></span>vit D</span>
+    <span><span class="lg-dot lg-tummy"></span>tummy</span>
   </div>
   {% for day in days_list %}
     <div class="day-strip">
@@ -48,6 +49,51 @@
       </svg>
     </div>
   {% endfor %}
+</section>
+
+<section class="weight-history" data-weight-history>
+  <h2 class="section-title">Weight history</h2>
+{% if not weight_history.has_data %}
+  <p class="weight-empty muted" data-weight-empty>
+    No weights recorded yet.
+    <a href="/settings#baby" class="btn-link" data-weight-cta>Record one in Settings →</a>
+  </p>
+{% else %}
+  <p class="weight-latest">
+    Latest: <b>{{ weight_history.latest.weight_str }}</b>
+    {% if weight_history.latest.delta_g is not none %}
+      <span class="delta {{ weight_history.latest.delta_class }}">{{ weight_history.latest.delta_str }}</span>
+    {% endif %}
+    <span class="muted">· {{ weight_history.latest.measured_at }} ({{ weight_history.latest.interval_str }})</span>
+  </p>
+  {% if weight_history.chart_points | length > 1 %}
+    <svg viewBox="0 0 1000 200" class="weight-chart" preserveAspectRatio="none"
+         aria-label="Weight history chart">
+      <polyline class="weight-line" points="{{ weight_history.polyline }}"
+                fill="none" />
+      {% for p in weight_history.chart_points %}
+        <circle class="weight-dot" cx="{{ p.x }}" cy="{{ p.y }}" r="5">
+          <title>{{ p.date }} · {{ '{:,}'.format(p.weight_g) }} g</title>
+        </circle>
+      {% endfor %}
+    </svg>
+  {% else %}
+    <p class="muted small">Record another weight in a few days to see the trend.</p>
+  {% endif %}
+  <table class="weight-table">
+    <thead><tr><th>Date</th><th>Weight</th><th>Delta</th><th>Interval</th></tr></thead>
+    <tbody>
+      {% for row in weight_history.rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td>{{ row.weight_str }}</td>
+          <td class="delta {{ row.delta_class }}">{{ row.delta_str }}</td>
+          <td class="muted">{{ row.interval_str }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
 </section>
 
 <section class="heatmap-section">
@@ -83,6 +129,7 @@
         <th>Wees</th>
         <th>Poos</th>
         <th data-col-totals="vitd" title="Vitamin D given that day">💊</th>
+        <th data-col-totals="tummy_time_sec" title="Tummy time (total per day)">🤸</th>
         <th>Avg breast</th>
       </tr>
     </thead>
@@ -96,6 +143,7 @@
           <td>{{ row.wee }}</td>
           <td>{{ row.poo }}</td>
           <td>{{ '✓' if row.get('vitd', 0) else '—' }}</td>
+          <td>{{ {'feed_duration_sec': row.get('tummy_time_sec', 0)} | tummy_dur if row.get('tummy_time_sec', 0) else '—' }}</td>
           <td>{{ '%.0f min' | format(row.avg_feed_min) if row.avg_feed_min else '—' }}</td>
         </tr>
       {% endfor %}

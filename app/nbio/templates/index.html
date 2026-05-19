@@ -24,6 +24,27 @@
   {% endif %}
 </section>
 
+<section class="tummy-banner{% if today.counts.tummy_time %} is-given{% endif %}{% if tummy_overdue %} is-late{% endif %}"
+         data-tummy-banner
+         data-tummy-today-sec="{{ tummy_today_sec or 0 }}"
+         data-tummy-today-count="{{ today.counts.tummy_time or 0 }}"
+         aria-label="Tummy time">
+  <span class="emoji" aria-hidden="true">🤸</span>
+  {% if today.counts.tummy_time %}
+    <span class="lbl">Tummy today
+      <b data-tummy-dur>{{ tummy_today_dur }}</b> ·
+      <b data-tummy-count>{{ today.counts.tummy_time }}</b>
+      <span data-tummy-sessions-word>{% if today.counts.tummy_time == 1 %}session{% else %}sessions{% endif %}</span>
+    </span>
+    <button type="button" class="btn-tummy" data-tummy-log>Add another</button>
+    <button type="button" class="btn-tummy btn-tummy-timer" data-tummy-start aria-label="Start tummy timer">▶</button>
+  {% else %}
+    <span class="lbl">Tummy time — not yet today</span>
+    <button type="button" class="btn-tummy" data-tummy-log>Log</button>
+    <button type="button" class="btn-tummy btn-tummy-timer" data-tummy-start>Start timer</button>
+  {% endif %}
+</section>
+
 <section class="tiles" aria-label="Quick log">
   {% include "partials/tile_breast.html" %}
   {% include "partials/tile_formula.html" %}

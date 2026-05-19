@@ -84,6 +84,64 @@ def test_index_shows_vitd_banner_given_state_after_post(client):
     assert "data-vitd-give" not in r.text
 
 
+def test_index_shows_tummy_banner_empty_state(client):
+    """Fresh DB → tummy banner reads 'Tummy time — not yet today' + buttons."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-tummy-banner" in r.text
+    assert "not yet" in r.text.lower()
+    assert "data-tummy-log" in r.text  # quick-log button
+    assert "data-tummy-start" in r.text  # start-timer button
+
+
+def test_index_shows_tummy_banner_done_state_after_post(client):
+    """After a tummy_time event today, banner flips to the given state."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "tummy_time",
+            "occurred_at": f"{today}T08:00:00.000Z",
+            "feed_duration_min": 5,
+            "idempotency_key": "idem-tummy-banner",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-tummy-banner" in r.text
+    assert "is-given" in r.text
+    # Session count + duration total surface in the banner text.
+    assert "Tummy today" in r.text
+    # Both Add another (quick-log) AND ▶ (timer) must remain accessible in
+    # the done state — locking the timer behind the first session was a
+    # v1.1.1 follow-up bug.
+    assert "data-tummy-log" in r.text
+    assert "data-tummy-start" in r.text
+
+
+def test_event_row_renders_tummy_emoji(client):
+    """An event of type='tummy_time' shows the 🤸 emoji in its row."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "tummy_time",
+            "occurred_at": f"{today}T08:00:00.000Z",
+            "feed_duration_min": 5,
+            "idempotency_key": "idem-tummy-emoji",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "🤸" in r.text
+
+
 def test_event_row_renders_vitd_emoji(client):
     """An event of type='vitd' shows the 💊 emoji in its row."""
     from datetime import UTC, datetime
@@ -137,6 +195,32 @@ def test_settings_page_renders(client):
     r = client.get("/settings")
     assert r.status_code == 200
     assert 'id="settings-page"' in r.text
+
+
+def test_settings_baby_section_includes_weight_subsection_empty(client):
+    """Fresh DB → Baby section has 'No weights recorded yet.'"""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "data-weight-empty" in r.text
+    assert "Record first weight" in r.text
+
+
+def test_settings_baby_section_includes_weight_subsection_populated(client):
+    """After one growth row, settings shows the latest line + 'Update weight'."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-settings-weight",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "data-weight-latest" in r.text
+    assert "3,420 g" in r.text
+    assert "Update weight" in r.text
 
 
 def test_settings_page_has_five_sections(client):
@@ -380,6 +464,142 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
         "wraps badly on phones (v1.1.0 regression)"
     )
     assert 'class="counts"' in r.text
+
+
+def test_header_weight_chip_absent_when_no_weight(client):
+    """No growth rows → header shows name + (maybe age) but no weight chip."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-baby-weight" not in r.text
+
+
+def test_header_weight_chip_present_after_growth_post(client):
+    """After a /api/growth POST, the latest weight appears in the header."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-hdr-weight",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-baby-weight" in r.text
+    assert "3,420 g" in r.text
+
+
+def test_reports_header_shows_weight_chip(client):
+    """The header banner is rendered the same on /reports."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-hdr-rpts",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "data-baby-weight" in r.text
+    assert "3,420 g" in r.text
+
+
+def test_settings_header_shows_weight_chip(client):
+    """And on /settings — base.html is shared across all three pages."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-hdr-stgs",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "data-baby-weight" in r.text
+    assert "3,420 g" in r.text
+
+
+def test_reports_weight_history_shows_empty_state(client):
+    """Fresh DB → the weight section is visible with a 'no data yet' CTA."""
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # Section header still renders so the parent can see "Weight history exists".
+    assert "data-weight-history" in r.text
+    assert "Weight history" in r.text
+    # Empty-state marker + CTA linking back to /settings.
+    assert "data-weight-empty" in r.text
+    assert "data-weight-cta" in r.text
+    assert "/settings" in r.text
+
+
+def test_reports_weight_history_renders_with_data(client):
+    """One weight row → weight history section appears with the latest."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-reports-w1",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "data-weight-history" in r.text
+    assert "Weight history" in r.text
+    assert "3,420 g" in r.text
+    # Single-measurement helper text appears (chart needs ≥2 points).
+    assert "few days" in r.text.lower()
+
+
+def test_reports_weight_history_renders_chart_with_two_points(client):
+    """Two weight rows → SVG chart + 2 dots appear."""
+    for d, w, idem in [
+        ("2026-05-08", 3300, "idem-reports-w2a"),
+        ("2026-05-15", 3420, "idem-reports-w2b"),
+    ]:
+        client.post(
+            "/api/growth",
+            json={
+                "measured_at": d,
+                "weight_g": w,
+                "idempotency_key": idem,
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert 'class="weight-chart"' in r.text
+    # Polyline string + 2 circle dots present.
+    assert "<polyline" in r.text
+    assert r.text.count('class="weight-dot"') == 2
+
+
+def test_reports_weight_history_table_has_delta_for_subsequent_rows(client):
+    """The latest table row shows the +/− delta from the previous one."""
+    for d, w, idem in [
+        ("2026-05-08", 3300, "idem-reports-d1"),
+        ("2026-05-15", 3420, "idem-reports-d2"),  # +120
+    ]:
+        client.post(
+            "/api/growth",
+            json={
+                "measured_at": d,
+                "weight_g": w,
+                "idempotency_key": idem,
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # +120 g delta + delta-up class on the latest row.
+    assert "+120 g" in r.text
+    assert "delta-up" in r.text
 
 
 def test_reports_heatmap_carries_explainer_text(client):
