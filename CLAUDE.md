@@ -120,6 +120,17 @@ TODO.md                     live roadmap, linked to GitHub issues
   required tools before running them. `shellcheck --severity=warning`
   clean.
 - **SQL**: parameterised always; never f-strings.
+- **Test dates**: use dynamic values (`datetime.now(UTC)`,
+  `freezer.move_to(...)`) **whenever a test assertion depends on
+  date proximity** — "last 3 days" filters, freezer comparisons,
+  `created_at`/`updated_at` ordering, relative-time strings. Hardcoded
+  date literals are fine for arbitrary fixture data (the row just
+  needs to exist), but a baked-in `"2026-05-16"` that flows into a
+  time-windowed assertion is a guaranteed time-delayed flake — see
+  [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78) for the
+  post-v1.1.0 incident that broke 3 tests at once 3 days after they
+  were written. **If you hardcode a date in a test, prove it can't
+  drift** (or annotate it `# date-fixture-safe`).
 - **No new docs files** unless asked. **No emoji** unless asked.
 - **No comments that re-state the code**. Comments explain non-obvious
   WHY only.

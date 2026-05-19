@@ -224,7 +224,15 @@ def test_header_omits_age_when_dob_unset(client):
 
 def test_index_shows_event_in_grouped_list(client):
     """An event posted via the API appears in the grouped event list."""
-    client.post("/api/events", json=_payload(idempotency_key="idem-index-1"))
+    # Use today's date so the event isn't filtered out by the home page's
+    # last-3-days window. _payload's hardcoded default is fine for tests
+    # that don't depend on the home-page filter, but here we explicitly
+    # need the row to render in the grouped list.
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json=_payload(idempotency_key="idem-index-1", occurred_at=f"{today}T03:00:00.000Z"),
+    )
     r = client.get("/")
     assert r.status_code == 200
     _assert_is_index(r.text)
@@ -1184,11 +1192,14 @@ def test_breast_tile_shows_recent_when_formula_is_more_recent(client):
 
 def test_index_renders_formula_event_row_with_brand_and_volume(client):
     """A logged formula entry shows up with brand + volume in the row."""
+    # Today's date so the event lands inside the home page's last-3-days
+    # filter window.
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     client.post(
         "/api/events",
         json={
             "type": "formula",
-            "occurred_at": "2026-05-16T03:00:00.000Z",
+            "occurred_at": f"{today}T03:00:00.000Z",
             "formula_brand": "Materna",
             "formula_volume_ml": 120,
             "idempotency_key": "idem-pg-formula-1",

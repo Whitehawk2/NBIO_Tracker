@@ -5,6 +5,23 @@ Roadmap for NBIO Tracker, in descending order of priority.
 Each item is also tracked as a GitHub issue (linked below) — close the issue
 when done, and tick the item here. The two views are kept in sync manually.
 
+---
+
+> 🎯 **v1.1.0 shipped (2026-05-18).** v1.2.0 scope is **TBD** — pick from the
+> 23 parked candidates below. Tracked in
+> [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/76).
+>
+> Recommended shortlist: **#54** Sleep tracking + **#63** Vitest JS tests
+> + **#65** GHCR pre-built images, optionally adding **#56** Pediatrician PDF.
+>
+> ⚠️ **P1 hygiene work**: [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78)
+> Test audit — replace hardcoded dates that drift with wall clock. Surfaced
+> by 3 simultaneous CI flakes on 2026-05-19, exactly 3 days after the home
+> page's last-3-days filter window kicked in. Should land before / alongside
+> v1.2.0 work.
+
+---
+
 ## 1. ✅ Verify and merge PR #2 (UX phase 1) — [#3](https://github.com/Whitehawk2/NBIO_Tracker/issues/3)
 
 **Status:** Done — merged and verified on the Pi server (2026-05-16).
@@ -356,3 +373,88 @@ at a glance.
   per-theme `--vitd` token).
 - 110 new tests across the suite (api, repo, models, migration,
   helpers, JS source pins, CSS rule pins). Suite at **578 / 100%**.
+
+---
+
+## Backlog — v1.2.0 candidates (post-v1.1.0 brainstorm + audit)
+
+22 candidates parked as GitHub issues after v1.1.0 shipped. Decision for
+v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/76).
+
+### Parent-facing features
+
+- 🆕 [#54](https://github.com/Whitehawk2/NBIO_Tracker/issues/54) **P1** ·
+  Sleep tracking — 6th event type with start/stop sessions *(M)*.
+- 🆕 [#55](https://github.com/Whitehawk2/NBIO_Tracker/issues/55) **P2** ·
+  Growth log: weight / length / head-circ with WHO percentile overlay *(M)*.
+- 🆕 [#56](https://github.com/Whitehawk2/NBIO_Tracker/issues/56) **P2** ·
+  Pediatrician handoff: printable PDF / print-stylesheet report *(S)*.
+- 🆕 [#57](https://github.com/Whitehawk2/NBIO_Tracker/issues/57) **P3** ·
+  Web Push notifications for late-day vit D nudge *(M)*.
+- 🆕 [#58](https://github.com/Whitehawk2/NBIO_Tracker/issues/58) **P3** ·
+  Vit D streak counter on the banner *(XS)*.
+- 🆕 [#59](https://github.com/Whitehawk2/NBIO_Tracker/issues/59) **P3** ·
+  Per-actor history rollup ("who logged what") *(S)*.
+- 🆕 [#60](https://github.com/Whitehawk2/NBIO_Tracker/issues/60) **P4** ·
+  Twin / multi-baby support — schema spike + feature flag *(L)*.
+- 🆕 [#61](https://github.com/Whitehawk2/NBIO_Tracker/issues/61) **P3** ·
+  Onboarding wizard — first-launch 3-step flow *(S)*.
+
+### Engineering quality
+
+- ⚠️ [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78) **P1** ·
+  Test audit — replace hardcoded dates that depend on wall-clock proximity
+  *(S)*. Time-delayed flake risk; CLAUDE.md convention added.
+- 🆕 [#62](https://github.com/Whitehawk2/NBIO_Tracker/issues/62) **P2** ·
+  Playwright E2E: happy-path + offline-flush + SSE *(M)*.
+- 🆕 [#63](https://github.com/Whitehawk2/NBIO_Tracker/issues/63) **P2** ·
+  Vitest JS unit tests: idb.js, helpers, optimistic dict *(S)*.
+- 🆕 [#64](https://github.com/Whitehawk2/NBIO_Tracker/issues/64) **P3** ·
+  Move `sse.broker` singleton onto `app.state` *(S)*.
+- 🆕 [#68](https://github.com/Whitehawk2/NBIO_Tracker/issues/68) **P3** ·
+  Accessibility audit — axe-core in CI + screen-reader sweep *(S)*.
+
+### Ops / deployment
+
+- 🆕 [#65](https://github.com/Whitehawk2/NBIO_Tracker/issues/65) **P2** ·
+  GHCR pre-built multi-arch images on tag push *(S)*.
+- 🆕 [#66](https://github.com/Whitehawk2/NBIO_Tracker/issues/66) **P2** ·
+  Backup restore-drill in CI + integrity_check on every write *(S)*.
+- 🆕 [#67](https://github.com/Whitehawk2/NBIO_Tracker/issues/67) **P4** ·
+  Real auth — passkey-only design spike for opt-in LAN exposure *(L)*.
+- 🆕 [#72](https://github.com/Whitehawk2/NBIO_Tracker/issues/72) **P4** ·
+  Observability — /metrics Prometheus endpoint + structured logging *(S)*.
+
+### UX polish
+
+- 🆕 [#70](https://github.com/Whitehawk2/NBIO_Tracker/issues/70) **P2** ·
+  Feed-side balance + interval-since-last on today card *(S)*.
+- 🆕 [#71](https://github.com/Whitehawk2/NBIO_Tracker/issues/71) **P4** ·
+  Tunable settings — late-vit-D hour, dup-window, undo-toast *(XS)*.
+- 🆕 [#73](https://github.com/Whitehawk2/NBIO_Tracker/issues/73) **P3** ·
+  Mobile keyboard polish — inputmode + iOS safe-area *(XS)*.
+
+### Data / reports
+
+- 🆕 [#69](https://github.com/Whitehawk2/NBIO_Tracker/issues/69) **P3** ·
+  Long-range trends report (>14 days, up to all-time) *(S)*.
+
+### Audit-derived (post-v1.1.0 cleanup)
+
+- 🆕 [#74](https://github.com/Whitehawk2/NBIO_Tracker/issues/74) **P4** ·
+  Migration: partial index for vit D last-event queries *(XS)*.
+- 🆕 [#75](https://github.com/Whitehawk2/NBIO_Tracker/issues/75) **P5** ·
+  WHY comments on race-condition mitigations in app.js *(XS)*.
+
+### Recommended v1.2.0 shortlist
+
+One big-ticket feature + one quality investment + one ops win:
+
+- 🎯 **#54** — Sleep tracking
+- 🛡️ **#63** — Vitest unit tests *(defer #62 Playwright until JS stabilises)*
+- 🚀 **#65** — GHCR pre-built images
+
+Optional widen: **#56** — Pediatrician PDF *(slots cheaply alongside sleep
+tracking since both touch reports)*.
+
+Decision criteria captured in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/76).
