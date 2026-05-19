@@ -453,6 +453,32 @@ def test_open_edit_for_dispatches_vitd_to_its_own_modal():
     )
 
 
+def test_breast_modal_default_side_is_both_when_no_history():
+    """
+    First-ever feed (no `last_side` returned from the server) must default
+    to `both`, not `L`. User feedback (v1.1.0 follow-up) flagged the prior
+    `L` fallback as wrong: the right starting assumption when nothing is
+    known is "both" — parents commonly start with both breasts. Inversion
+    semantics (L→R, R→L) for subsequent feeds are preserved.
+    """
+    src = _src()
+    idx = src.find("async function openFeedModal(")
+    assert idx >= 0, "openFeedModal() function not found in app.js"
+    block = src[idx : idx + 2000]
+    # Both fallback branches (success + catch) must default to "both".
+    assert '=== "R" ? "L" : "both"' in block, (
+        'openFeedModal must default to "both" when last_side is null '
+        '(found "L" fallback — see v1.1.1 breast-default fix)'
+    )
+    assert 'defaultSide = "both"' in block, (
+        "the fetch catch-branch must also default to `both`, not `L`"
+    )
+    # Inversion semantics MUST still be present.
+    assert '=== "L" ? "R"' in block, (
+        "feed-modal inversion semantics (L→R) must be preserved"
+    )
+
+
 def test_open_vitd_modal_uses_time_and_notes_only():
     """
     Vit D events only carry `occurred_at` + optional `notes` (no side,
