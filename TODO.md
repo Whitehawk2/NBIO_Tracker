@@ -7,6 +7,12 @@ when done, and tick the item here. The two views are kept in sync manually.
 
 ---
 
+> 🎯 **v1.1.1 shipped (2026-05-19).** Three small follow-ups: tummy time
+> tracking (banner + quick-log + timer), weight tracking (settings UI +
+> reports chart), breastfeeding default = "both". Partially addresses
+> [#55](https://github.com/Whitehawk2/NBIO_Tracker/issues/55) (growth log
+> — weight only; length / head_circ + WHO percentiles still open).
+>
 > 🎯 **v1.1.0 shipped (2026-05-18).** v1.2.0 scope is **TBD** — pick from the
 > 23 parked candidates below. Tracked in
 > [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/76).
