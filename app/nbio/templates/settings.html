@@ -26,6 +26,24 @@
       </div>
       <button type="submit" class="btn-primary">Save</button>
     </form>
+
+    <div class="field" id="weight-summary" data-today="{{ today_iso }}">
+      <p class="modal-label">Weight</p>
+      {% if growth_latest %}
+        <p class="weight-latest-line" data-weight-latest>
+          Latest: <b>{{ '{:,}'.format(growth_latest.weight_g) }} g</b>
+          <span class="muted">· {{ growth_latest.measured_at }}</span>
+        </p>
+      {% else %}
+        <p class="weight-latest-line muted" data-weight-empty>
+          No weights recorded yet.
+        </p>
+      {% endif %}
+      <button type="button" class="btn-secondary" id="weight-update-btn"
+              data-weight-update>
+        {% if growth_latest %}Update weight{% else %}Record first weight{% endif %}
+      </button>
+    </div>
   </details>
 
   <details name="settings-tab" class="settings-section" data-section="device">

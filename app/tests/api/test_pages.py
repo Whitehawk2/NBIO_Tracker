@@ -194,6 +194,32 @@ def test_settings_page_renders(client):
     assert 'id="settings-page"' in r.text
 
 
+def test_settings_baby_section_includes_weight_subsection_empty(client):
+    """Fresh DB → Baby section has 'No weights recorded yet.'"""
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "data-weight-empty" in r.text
+    assert "Record first weight" in r.text
+
+
+def test_settings_baby_section_includes_weight_subsection_populated(client):
+    """After one growth row, settings shows the latest line + 'Update weight'."""
+    client.post(
+        "/api/growth",
+        json={
+            "measured_at": "2026-05-16",
+            "weight_g": 3420,
+            "idempotency_key": "idem-settings-weight",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/settings")
+    assert r.status_code == 200
+    assert "data-weight-latest" in r.text
+    assert "3,420 g" in r.text
+    assert "Update weight" in r.text
+
+
 def test_settings_page_has_five_sections(client):
     """Five `<details>` tabs: Baby / This device / Display / Data / System."""
     r = client.get("/settings")

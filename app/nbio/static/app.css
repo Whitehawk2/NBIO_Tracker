@@ -204,6 +204,14 @@ html.dark[data-theme="warm"] {
   color: var(--tummy);
 }
 
+/* Settings → Baby → Weight readout. */
+.weight-latest-line {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.weight-latest-line b { font-weight: 700; }
+
 /* Tummy timer modal — big mono counter in the body. */
 .tummy-timer-counter {
   font-size: 56px;

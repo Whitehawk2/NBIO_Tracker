@@ -204,6 +204,103 @@
     }
   }
 
+  // ---------- Weight form (v1.1.1) ----------
+
+  function uuid() {
+    return crypto.randomUUID
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function fmtCommas(n) {
+    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function openWeightModal(todayIso) {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop";
+    backdrop.innerHTML = `
+      <div class="modal-sheet" role="dialog" aria-modal="true">
+        <div class="modal-grab"></div>
+        <div class="modal-title">Update weight</div>
+        <div class="modal-body">
+          <label class="modal-label" for="weight-input">Weight (grams)</label>
+          <input id="weight-input" type="number" inputmode="numeric"
+                 pattern="[0-9]*" min="1" max="30000" placeholder="e.g. 3420"
+                 autocomplete="off">
+          <label class="modal-label" for="weight-date" style="margin-top:14px;">Date</label>
+          <input id="weight-date" type="date" max="${todayIso}" value="${todayIso}">
+          <label class="modal-label" for="weight-notes" style="margin-top:14px;">Notes (optional)</label>
+          <input id="weight-notes" type="text" maxlength="500"
+                 placeholder="check-up at clinic, etc.">
+          <button type="button" class="btn-primary" id="weight-save"
+                  style="margin-top:14px;">Save</button>
+        </div>
+      </div>
+    `;
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) backdrop.remove();
+    });
+
+    const close = () => backdrop.remove();
+    const save = backdrop.querySelector("#weight-save");
+    const input = backdrop.querySelector("#weight-input");
+    const date = backdrop.querySelector("#weight-date");
+    const notes = backdrop.querySelector("#weight-notes");
+
+    save.addEventListener("click", async () => {
+      const weight = parseInt(input.value, 10);
+      if (!weight || weight < 1 || weight > 30000) {
+        showToast("Enter a weight between 1 and 30,000 g");
+        return;
+      }
+      save.disabled = true;
+      const payload = {
+        measured_at: date.value || todayIso,
+        weight_g: weight,
+        idempotency_key: "growth-" + uuid(),
+        created_by_device: getDeviceId() || "device-anon",
+      };
+      const n = (notes.value || "").trim();
+      if (n) payload.notes = n;
+      const out = await submitJson("/api/growth", "POST", payload);
+      if (out) {
+        showToast("Weight saved");
+        close();
+        refreshWeightSummary(out.growth);
+      } else {
+        save.disabled = false;
+      }
+    });
+
+    document.body.appendChild(backdrop);
+    setTimeout(() => input.focus(), 0);
+  }
+
+  function refreshWeightSummary(growth) {
+    const summary = $("#weight-summary");
+    if (!summary || !growth) return;
+    const existing = summary.querySelector("[data-weight-latest], [data-weight-empty]");
+    const line = document.createElement("p");
+    line.className = "weight-latest-line";
+    line.dataset.weightLatest = "";
+    line.innerHTML =
+      `Latest: <b>${fmtCommas(growth.weight_g)} g</b> ` +
+      `<span class="muted">· ${growth.measured_at}</span>`;
+    if (existing) existing.replaceWith(line);
+    else summary.insertBefore(line, summary.querySelector("button"));
+    const btn = $("#weight-update-btn");
+    if (btn) btn.textContent = "Update weight";
+  }
+
+  function wireWeightForm() {
+    const btn = $("#weight-update-btn");
+    if (!btn) return;
+    const summary = $("#weight-summary");
+    const today = (summary && summary.dataset.today) || new Date().toISOString().slice(0, 10);
+    btn.addEventListener("click", () => openWeightModal(today));
+  }
+
   // ---------- init ----------
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -212,5 +309,6 @@
     wireDeviceForm();
     wireThemePicker();
     wireServerInfo();
+    wireWeightForm();
   });
 })();
