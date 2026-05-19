@@ -21,6 +21,7 @@
   --poo: #d2a36a;       /* warm amber */
   --poo-bg: #f3e3cb;
   --vitd: #e8b339;      /* sunshine gold (one drop per day) */
+  --tummy: #0a9396;     /* teal (tummy time — 3-5 min sessions) */
 
   --radius: 14px;
   --radius-lg: 22px;
@@ -45,6 +46,7 @@ html.dark[data-theme="warm"] {
   --poo: #b88a4f;
   --poo-bg: #3a2c19;
   --vitd: #f5c265;      /* brighter for dark-mode visibility */
+  --tummy: #5eead4;     /* brighter teal for dark-mode visibility */
   --shadow: 0 2px 16px rgba(0,0,0,.5);
 }
 
@@ -68,6 +70,7 @@ html.dark[data-theme="warm"] {
   --poo: #fe640b;       /* peach */
   --poo-bg: #fcd7b3;
   --vitd: #df8e1d;      /* Catppuccin yellow */
+  --tummy: #179299;     /* Catppuccin Latte teal */
 
   --radius: 14px;
   --radius-lg: 22px;
@@ -94,6 +97,7 @@ html.dark[data-theme="warm"] {
   --poo: #fab387;       /* peach */
   --poo-bg: #2e2520;
   --vitd: #f9e2af;      /* Catppuccin yellow */
+  --tummy: #94e2d5;     /* Catppuccin Mocha teal */
 
   --radius: 14px;
   --radius-lg: 22px;
@@ -152,6 +156,63 @@ html.dark[data-theme="warm"] {
 }
 .vitd-banner.is-late .lbl   { color: var(--vitd); font-weight: 600; }
 .vitd-banner.is-late .emoji { filter: brightness(1.1); }
+
+/* ============ Tummy time banner ============ */
+/* Mirrors .vitd-banner. Sits directly below it on the home page.
+   States: default (none today), .is-late (none AND local hour ≥ 16),
+   .is-given (≥1 session today), .is-running (timer is active —
+   driven by app.js via localStorage). */
+.tummy-banner {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 14px; padding: 10px 14px;
+  background: var(--bg-sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  transition: background .25s ease;
+}
+.tummy-banner .emoji { font-size: 20px; }
+.tummy-banner .lbl   { color: var(--text-muted); }
+.tummy-banner .lbl b { font-variant-numeric: tabular-nums; }
+.tummy-banner .btn-tummy {
+  appearance: none; -webkit-appearance: none;
+  border: 1px solid var(--tummy); background: transparent;
+  color: var(--tummy); font: inherit;
+  padding: 6px 12px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.tummy-banner .btn-tummy + .btn-tummy { margin-left: 6px; }
+.tummy-banner .btn-tummy-timer {
+  background: var(--tummy); color: var(--bg-elev);
+}
+/* The first button after the not-yet label pushes both buttons to the
+   right; subsequent buttons just space themselves. */
+.tummy-banner .lbl + .btn-tummy { margin-left: auto; }
+.tummy-banner.is-given { background: var(--feed-bg); }
+.tummy-banner.is-given .lbl { color: var(--text); }
+.tummy-banner.is-late {
+  background: color-mix(in srgb, var(--tummy) 18%, var(--bg-sunk));
+}
+.tummy-banner.is-late .lbl   { color: var(--tummy); font-weight: 600; }
+.tummy-banner.is-late .emoji { filter: brightness(1.1); }
+.tummy-banner.is-running { background: color-mix(in srgb, var(--tummy) 14%, var(--bg-sunk)); }
+.tummy-banner.is-running .lbl { color: var(--tummy); font-weight: 600; }
+.tummy-banner.is-running .timer {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--tummy);
+}
+
+/* Tummy timer modal — big mono counter in the body. */
+.tummy-timer-counter {
+  font-size: 56px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--tummy);
+  margin: 18px 0 14px;
+}
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
@@ -599,6 +660,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline .mark-wee  { fill: var(--wee); }
 .timeline .mark-poo  { fill: var(--poo); }
 .timeline .mark-vitd { fill: var(--vitd); }
+.timeline .mark-tummy { fill: var(--tummy); }
 /* Tap target — wireTimelineMarks binds click on .mark to show details. */
 .timeline .mark { cursor: pointer; }
 .timeline .mark:hover, .timeline .mark:active { opacity: 0.8; }
@@ -612,6 +674,7 @@ textarea, input[type="text"], input[type="datetime-local"] {
 .timeline-legend .lg-wee  { background: var(--wee); }
 .timeline-legend .lg-poo  { background: var(--poo); }
 .timeline-legend .lg-vitd { background: var(--vitd); }
+.timeline-legend .lg-tummy { background: var(--tummy); }
 
 .heatmap-section { margin-top: 22px; }
 .heatmap-caption { margin: 0 4px 8px; line-height: 1.4; }
