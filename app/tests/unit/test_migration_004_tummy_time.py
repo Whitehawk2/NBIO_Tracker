@@ -176,16 +176,17 @@ def test_migration_004_recreates_indexes(post_003_db):
     assert "ix_events_dup_window" in names
 
 
-def test_migration_004_advances_user_version_to_4(post_003_db):
+def test_migration_004_advances_user_version_past_4(post_003_db):
     assert current_version(post_003_db) == 3
     apply_pending(post_003_db, MIGRATIONS_DIR)
-    assert current_version(post_003_db) == 4
+    assert current_version(post_003_db) >= 4
 
 
 def test_migration_004_idempotent_on_rerun(post_003_db):
     apply_pending(post_003_db, MIGRATIONS_DIR)
+    v = current_version(post_003_db)
     apply_pending(post_003_db, MIGRATIONS_DIR)
-    assert current_version(post_003_db) == 4
+    assert current_version(post_003_db) == v
     # And we can still insert tummy_time events.
     post_003_db.execute(
         """INSERT INTO events (type, baby_id, occurred_at, feed_duration_min,
