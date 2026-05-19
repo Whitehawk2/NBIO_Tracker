@@ -285,6 +285,88 @@ def _timeline_marks(events: list[dict[str, Any]], day_iso: str) -> list[dict[str
     return marks
 
 
+def _weight_history_context(conn: sqlite3.Connection) -> dict[str, Any]:
+    """
+    Build the reports-page weight-history context.
+
+    Returns a dict with:
+      - has_data: bool
+      - rows: list of {label, weight_g, weight_str, delta_g, delta_str,
+        delta_class, interval_str, measured_at} ASC by date
+      - latest: dict | None — top callout
+      - chart_points: list of {x, y, weight_g, date} normalized to a
+        1000×200 SVG viewBox
+      - polyline: str — `x,y x,y …` for the chart line
+
+    Y-axis is clamped to [min-100, max+100] grams so even small
+    week-on-week deltas read as a visible curve (newborns gain ~30g/day;
+    a chart anchored at 0 would look flat).
+    """
+    rows_raw = repo.growth_list(conn)
+    if not rows_raw:
+        return {"has_data": False}
+
+    weights = [int(r["weight_g"]) for r in rows_raw]
+    y_min = max(0, min(weights) - 100)
+    y_max = max(weights) + 100
+    y_span = max(1, y_max - y_min)
+
+    from datetime import datetime as _dt
+
+    measured = [_dt.strptime(r["measured_at"], "%Y-%m-%d").date() for r in rows_raw]
+    first = measured[0]
+    last = measured[-1]
+    span_days = max(1, (last - first).days)
+
+    chart_points: list[dict[str, Any]] = []
+    polyline_parts: list[str] = []
+    for r, d, w in zip(rows_raw, measured, weights, strict=True):
+        x = ((d - first).days / span_days) * 1000.0 if span_days > 0 else 500.0
+        y = 200.0 - ((w - y_min) / y_span) * 200.0
+        chart_points.append(
+            {"x": round(x, 2), "y": round(y, 2), "weight_g": w, "date": r["measured_at"]}
+        )
+        polyline_parts.append(f"{round(x, 2)},{round(y, 2)}")
+
+    rows: list[dict[str, Any]] = []
+    today = _dt.now().astimezone().date()
+    prev = None
+    for r, d, w in zip(rows_raw, measured, weights, strict=True):
+        delta_g = w - prev if prev is not None else None
+        delta_str = "—"
+        delta_class = ""
+        if delta_g is not None:
+            sign = "+" if delta_g > 0 else ("" if delta_g == 0 else "")
+            delta_str = f"{sign}{delta_g} g"
+            delta_class = (
+                "delta-up" if delta_g > 0 else "delta-down" if delta_g < 0 else "delta-flat"
+            )
+        days_ago = (today - d).days
+        interval_str = "today" if days_ago == 0 else f"{days_ago}d ago"
+        rows.append(
+            {
+                "label": r["measured_at"],
+                "measured_at": r["measured_at"],
+                "weight_g": w,
+                "weight_str": f"{w:,} g",
+                "delta_g": delta_g,
+                "delta_str": delta_str,
+                "delta_class": delta_class,
+                "interval_str": interval_str,
+            }
+        )
+        prev = w
+
+    latest_row = rows[-1]
+    return {
+        "has_data": True,
+        "rows": list(reversed(rows)),  # latest first in the table
+        "latest": latest_row,
+        "chart_points": chart_points,
+        "polyline": " ".join(polyline_parts),
+    }
+
+
 def _day_formula_cc(events: list[dict[str, Any]], day_iso: str) -> int:
     """Sum formula_volume_ml for a given LOCAL day. 0 if no formula logged."""
     total = 0
@@ -354,5 +436,6 @@ def reports(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
             "heatmap_max": max_h,
             "heatmap_day_labels": heatmap_day_labels,
             "now_x": (now_local.hour * 3600 + now_local.minute * 60) / 86400.0,
+            "weight_history": _weight_history_context(conn),
         },
     )

@@ -51,7 +51,9 @@ def test_growth_create_idempotent_same_key(conn):
 
 def test_growth_create_different_keys_creates_two_rows(conn):
     growth_create(conn, _payload(idempotency_key="idem-growth-1"))
-    growth_create(conn, _payload(measured_at="2026-05-23", weight_g=3540, idempotency_key="idem-growth-2"))
+    growth_create(
+        conn, _payload(measured_at="2026-05-23", weight_g=3540, idempotency_key="idem-growth-2")
+    )
     rows = growth_list(conn)
     assert len(rows) == 2
     assert {r["weight_g"] for r in rows} == {3420, 3540}
@@ -77,8 +79,12 @@ def test_growth_list_returns_asc_by_measured_at(conn):
 
 
 def test_growth_latest_returns_most_recent_non_deleted(conn):
-    growth_create(conn, _payload(measured_at="2026-05-15", weight_g=3300, idempotency_key="idem-aaa1"))
-    growth_create(conn, _payload(measured_at="2026-05-22", weight_g=3500, idempotency_key="idem-bbb2"))
+    growth_create(
+        conn, _payload(measured_at="2026-05-15", weight_g=3300, idempotency_key="idem-aaa1")
+    )
+    growth_create(
+        conn, _payload(measured_at="2026-05-22", weight_g=3500, idempotency_key="idem-bbb2")
+    )
     latest = growth_latest(conn)
     assert latest is not None
     assert latest["weight_g"] == 3500
@@ -91,7 +97,9 @@ def test_growth_latest_none_when_empty(conn):
 
 def test_growth_latest_skips_deleted(conn):
     """A soft-deleted latest row falls through to the previous one."""
-    growth_create(conn, _payload(measured_at="2026-05-15", weight_g=3300, idempotency_key="idem-aaa1"))
+    growth_create(
+        conn, _payload(measured_at="2026-05-15", weight_g=3300, idempotency_key="idem-aaa1")
+    )
     _, b = growth_create(
         conn, _payload(measured_at="2026-05-22", weight_g=3500, idempotency_key="idem-bbb2")
     )

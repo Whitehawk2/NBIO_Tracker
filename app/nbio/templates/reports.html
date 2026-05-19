@@ -51,6 +51,46 @@
   {% endfor %}
 </section>
 
+{% if weight_history.has_data %}
+<section class="weight-history" data-weight-history>
+  <h2 class="section-title">Weight history</h2>
+  <p class="weight-latest">
+    Latest: <b>{{ weight_history.latest.weight_str }}</b>
+    {% if weight_history.latest.delta_g is not none %}
+      <span class="delta {{ weight_history.latest.delta_class }}">{{ weight_history.latest.delta_str }}</span>
+    {% endif %}
+    <span class="muted">· {{ weight_history.latest.measured_at }} ({{ weight_history.latest.interval_str }})</span>
+  </p>
+  {% if weight_history.chart_points | length > 1 %}
+    <svg viewBox="0 0 1000 200" class="weight-chart" preserveAspectRatio="none"
+         aria-label="Weight history chart">
+      <polyline class="weight-line" points="{{ weight_history.polyline }}"
+                fill="none" />
+      {% for p in weight_history.chart_points %}
+        <circle class="weight-dot" cx="{{ p.x }}" cy="{{ p.y }}" r="5">
+          <title>{{ p.date }} · {{ '{:,}'.format(p.weight_g) }} g</title>
+        </circle>
+      {% endfor %}
+    </svg>
+  {% else %}
+    <p class="muted small">Record another weight in a few days to see the trend.</p>
+  {% endif %}
+  <table class="weight-table">
+    <thead><tr><th>Date</th><th>Weight</th><th>Delta</th><th>Interval</th></tr></thead>
+    <tbody>
+      {% for row in weight_history.rows %}
+        <tr>
+          <td>{{ row.label }}</td>
+          <td>{{ row.weight_str }}</td>
+          <td class="delta {{ row.delta_class }}">{{ row.delta_str }}</td>
+          <td class="muted">{{ row.interval_str }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <section class="heatmap-section">
   <h2 class="section-title">7-day heatmap</h2>
   <p class="muted small heatmap-caption">Darker cells = more events at that hour over the last 7 days. Useful for spotting feed / wake patterns. Tap a cell to see its count.</p>

@@ -497,9 +497,7 @@ def update_baby(conn: sqlite3.Connection, patch: BabyUpdate) -> dict[str, Any]:
 
 
 def fetch_growth(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] | None:
-    row = conn.execute(
-        f"SELECT {GROWTH_COLS} FROM growth WHERE id = ?", (growth_id,)
-    ).fetchone()
+    row = conn.execute(f"SELECT {GROWTH_COLS} FROM growth WHERE id = ?", (growth_id,)).fetchone()
     return _row_to_dict(row)
 
 
@@ -614,8 +612,7 @@ def growth_soft_delete(conn: sqlite3.Connection, growth_id: int) -> dict[str, An
     conn.execute("BEGIN IMMEDIATE")
     try:
         conn.execute(
-            "UPDATE growth SET deleted_at = ?, updated_at = ? "
-            "WHERE id = ? AND deleted_at IS NULL",
+            "UPDATE growth SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
             (_now_iso(), _now_iso(), growth_id),
         )
         conn.execute("COMMIT")
