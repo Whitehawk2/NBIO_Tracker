@@ -51,9 +51,14 @@
   {% endfor %}
 </section>
 
-{% if weight_history.has_data %}
 <section class="weight-history" data-weight-history>
   <h2 class="section-title">Weight history</h2>
+{% if not weight_history.has_data %}
+  <p class="weight-empty muted" data-weight-empty>
+    No weights recorded yet.
+    <a href="/settings#baby" class="btn-link" data-weight-cta>Record one in Settings →</a>
+  </p>
+{% else %}
   <p class="weight-latest">
     Latest: <b>{{ weight_history.latest.weight_str }}</b>
     {% if weight_history.latest.delta_g is not none %}
@@ -88,8 +93,8 @@
       {% endfor %}
     </tbody>
   </table>
-</section>
 {% endif %}
+</section>
 
 <section class="heatmap-section">
   <h2 class="section-title">7-day heatmap</h2>

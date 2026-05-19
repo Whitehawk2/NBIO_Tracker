@@ -463,11 +463,17 @@ def test_today_card_uses_3_column_counts_not_counts_4(client):
     assert 'class="counts"' in r.text
 
 
-def test_reports_weight_history_hidden_when_empty(client):
-    """Fresh DB → weight history section is not rendered."""
+def test_reports_weight_history_shows_empty_state(client):
+    """Fresh DB → the weight section is visible with a 'no data yet' CTA."""
     r = client.get("/reports")
     assert r.status_code == 200
-    assert "data-weight-history" not in r.text
+    # Section header still renders so the parent can see "Weight history exists".
+    assert "data-weight-history" in r.text
+    assert "Weight history" in r.text
+    # Empty-state marker + CTA linking back to /settings.
+    assert "data-weight-empty" in r.text
+    assert "data-weight-cta" in r.text
+    assert "/settings" in r.text
 
 
 def test_reports_weight_history_renders_with_data(client):

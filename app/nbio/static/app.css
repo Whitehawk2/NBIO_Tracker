@@ -214,6 +214,14 @@ html.dark[data-theme="warm"] {
 
 /* Reports → Weight history section. */
 .weight-history { margin: 22px 0; }
+.weight-history .weight-empty { margin: 0; font-size: 14px; }
+.weight-history .btn-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  margin-left: 6px;
+}
+.weight-history .btn-link:hover { text-decoration: underline; }
 .weight-history .weight-latest {
   margin: 0 0 12px;
   font-size: 15px;
