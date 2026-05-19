@@ -157,6 +157,27 @@ class TestVitdOverdue:
         assert pages._vitd_overdue({}, local_hour=10) is False
 
 
+class TestTummyOverdue:
+    """`_tummy_overdue` decides whether the tummy banner gets `.is-late`."""
+
+    def test_not_late_before_16_when_none_logged(self):
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=15) is False
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=9) is False
+
+    def test_late_at_or_after_16_when_none_logged(self):
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=16) is True
+        assert pages._tummy_overdue({"tummy_time": 0}, local_hour=23) is True
+
+    def test_never_late_once_one_session(self):
+        """Even one session today → calm regardless of hour."""
+        assert pages._tummy_overdue({"tummy_time": 1}, local_hour=22) is False
+        assert pages._tummy_overdue({"tummy_time": 3}, local_hour=20) is False
+
+    def test_missing_tummy_key_treated_as_zero(self):
+        assert pages._tummy_overdue({}, local_hour=20) is True
+        assert pages._tummy_overdue({}, local_hour=8) is False
+
+
 class TestAgeFromDob:
     """`_age_from_dob` renders compact baby ages for the header display."""
 
@@ -281,6 +302,29 @@ class TestTimelineMarks:
         assert marks[0]["type"] == "vitd"
         assert "Vit D" in marks[0]["tooltip"]
         assert "09:00" in marks[0]["tooltip"]
+
+    def test_tummy_time_event_maps_to_tummy_mark_with_tooltip(self):
+        """Tummy time events get their own mark class + duration tooltip."""
+        events = [
+            {
+                "occurred_at": "2026-05-16T08:00:00Z",
+                "type": "tummy_time",
+                "feed_duration_min": 5,
+            }
+        ]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert marks[0]["type"] == "tummy"
+        assert "Tummy 5min" in marks[0]["tooltip"]
+        assert "08:00" in marks[0]["tooltip"]
+
+    def test_tummy_time_tooltip_without_duration(self):
+        """Tummy event with no duration falls back to bare 'Tummy' label."""
+        events = [{"occurred_at": "2026-05-16T08:00:00Z", "type": "tummy_time"}]
+        marks = pages._timeline_marks(events, "2026-05-16")
+        assert len(marks) == 1
+        assert "Tummy" in marks[0]["tooltip"]
+        assert "min" not in marks[0]["tooltip"]
 
     def test_breast_and_formula_map_to_feed(self):
         events = [

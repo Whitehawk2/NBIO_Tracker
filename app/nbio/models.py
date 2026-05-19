@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-EventType = Literal["breast", "formula", "wee", "poo", "vitd"]
+EventType = Literal["breast", "formula", "wee", "poo", "vitd", "tummy_time"]
 FeedSide = Literal["L", "R", "both"]
 # Future-auth seam: today `device` is the only kind. When session/JWT
 # auth lands, add `"user"` to this Literal; the rest of the app keeps
