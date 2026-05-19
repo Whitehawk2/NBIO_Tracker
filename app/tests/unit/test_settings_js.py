@@ -117,3 +117,16 @@ def test_app_js_refreshes_baby_age():
     """
     src = _app_src()
     assert "data-baby-age" in src, "app.js must reference data-baby-age to refresh the header"
+
+
+def test_settings_js_has_wire_weight_form():
+    """Weight subsection (v1.1.1) — modal-launching wiring."""
+    src = _settings_src()
+    assert "function wireWeightForm" in src, "missing wireWeightForm() in settings.js"
+    assert "openWeightModal" in src, (
+        "wireWeightForm must dispatch the Update button to openWeightModal"
+    )
+    # POSTs to /api/growth.
+    assert "/api/growth" in src, "weight modal must POST to /api/growth"
+    # Wired in DOMContentLoaded.
+    assert "wireWeightForm();" in src, "wireWeightForm must be called from init"

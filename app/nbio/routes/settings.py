@@ -61,6 +61,8 @@ def settings_page(
             "baby_age": _age_from_dob(baby.get("dob") if baby else None, today_local),
             "app_settings": repo.app_settings_read(conn),
             "devices": repo.list_devices(conn),
+            "growth_latest": repo.growth_latest(conn),
+            "today_iso": today_local.isoformat(),
         },
     )
 
