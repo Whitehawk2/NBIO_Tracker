@@ -13,7 +13,14 @@ from .models import (
     DeviceUpsert,
     EventCreate,
     EventPatch,
+    GrowthCreate,
+    GrowthPatch,
 )
+
+GROWTH_COLS = """
+    id, baby_id, measured_at, weight_g, length_mm, head_circ_mm, notes,
+    idempotency_key, created_by_device, created_at, updated_at, deleted_at
+"""
 
 EVENT_COLS = """
     e.id, e.baby_id, e.type, e.occurred_at,
@@ -487,6 +494,149 @@ def update_baby(conn: sqlite3.Connection, patch: BabyUpdate) -> dict[str, Any]:
     out = baby(conn)
     assert out is not None
     return out
+
+
+def fetch_growth(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] | None:
+    row = conn.execute(
+        f"SELECT {GROWTH_COLS} FROM growth WHERE id = ?", (growth_id,)
+    ).fetchone()
+    return _row_to_dict(row)
+
+
+def fetch_growth_by_idem(conn: sqlite3.Connection, idem: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        f"SELECT {GROWTH_COLS} FROM growth WHERE idempotency_key = ?", (idem,)
+    ).fetchone()
+    return _row_to_dict(row)
+
+
+def growth_create(
+    conn: sqlite3.Connection, payload: GrowthCreate, baby_id: int = 1
+) -> tuple[str, dict[str, Any]]:
+    """
+    Returns (status, growth_dict).
+    status ∈ {"created", "already_exists"}.
+    """
+    existing = fetch_growth_by_idem(conn, payload.idempotency_key)
+    if existing is not None:
+        return "already_exists", existing
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        now = _now_iso()
+        cur = conn.execute(
+            """
+            INSERT INTO growth (
+                baby_id, measured_at, weight_g, length_mm, head_circ_mm,
+                notes, idempotency_key, created_by_device,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                baby_id,
+                payload.measured_at,
+                payload.weight_g,
+                payload.length_mm,
+                payload.head_circ_mm,
+                payload.notes,
+                payload.idempotency_key,
+                payload.created_by_device,
+                now,
+                now,
+            ),
+        )
+        new_id = cur.lastrowid
+        assert new_id is not None
+        conn.execute("COMMIT")
+    except sqlite3.IntegrityError:
+        conn.execute("ROLLBACK")
+        existing = fetch_growth_by_idem(conn, payload.idempotency_key)
+        if existing is not None:
+            return "already_exists", existing
+        raise
+
+    row = fetch_growth(conn, new_id)
+    assert row is not None
+    return "created", row
+
+
+def growth_list(
+    conn: sqlite3.Connection,
+    baby_id: int = 1,
+    include_deleted: bool = False,
+) -> list[dict[str, Any]]:
+    """All growth rows for baby, ASC by measured_at (chart-friendly order)."""
+    where = ["baby_id = ?"]
+    args: list[Any] = [baby_id]
+    if not include_deleted:
+        where.append("deleted_at IS NULL")
+    cur = conn.execute(
+        f"SELECT {GROWTH_COLS} FROM growth "
+        f"WHERE {' AND '.join(where)} ORDER BY measured_at ASC, id ASC",
+        args,
+    )
+    return [d for d in (_row_to_dict(r) for r in cur.fetchall()) if d is not None]
+
+
+def growth_latest(conn: sqlite3.Connection, baby_id: int = 1) -> dict[str, Any] | None:
+    """Most recent (by measured_at) non-deleted weight. None if no rows."""
+    row = conn.execute(
+        f"SELECT {GROWTH_COLS} FROM growth "
+        "WHERE baby_id = ? AND deleted_at IS NULL "
+        "ORDER BY measured_at DESC, id DESC LIMIT 1",
+        (baby_id,),
+    ).fetchone()
+    return _row_to_dict(row)
+
+
+def growth_patch(
+    conn: sqlite3.Connection, growth_id: int, patch: GrowthPatch
+) -> dict[str, Any] | None:
+    fields = patch.model_dump(exclude_unset=True)
+    if not fields:
+        return fetch_growth(conn, growth_id)
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    args = list(fields.values()) + [_now_iso(), growth_id]
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            f"UPDATE growth SET {sets}, updated_at = ? WHERE id = ?",
+            args,
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return fetch_growth(conn, growth_id)
+
+
+def growth_soft_delete(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] | None:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            "UPDATE growth SET deleted_at = ?, updated_at = ? "
+            "WHERE id = ? AND deleted_at IS NULL",
+            (_now_iso(), _now_iso(), growth_id),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return fetch_growth(conn, growth_id)
+
+
+def growth_undelete(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] | None:
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(
+            "UPDATE growth SET deleted_at = NULL, updated_at = ? WHERE id = ?",
+            (_now_iso(), growth_id),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return fetch_growth(conn, growth_id)
 
 
 def app_settings_read(conn: sqlite3.Connection) -> dict[str, Any]:
