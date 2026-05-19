@@ -44,7 +44,14 @@ def _evt(t, idem, occurred_at, dur=None, brand=None, volume_ml=None):
 
 
 def test_today_counts_zero_when_empty(conn):
-    assert today_counts(conn) == {"feed": 0, "wee": 0, "poo": 0, "vitd": 0, "formula_ml": 0}
+    assert today_counts(conn) == {
+        "feed": 0,
+        "wee": 0,
+        "poo": 0,
+        "vitd": 0,
+        "tummy_time": 0,
+        "formula_ml": 0,
+    }
 
 
 def test_today_counts_aggregates_formula_volume_ml(conn):
@@ -84,7 +91,14 @@ def test_today_counts_aggregates_today_only(conn):
     create_event(conn, _evt("poo", "i3", f"{TODAY}T05:00:00.000Z"))
     create_event(conn, _evt("wee", "i4", "2020-01-01T00:00:00.000Z"))
     counts = today_counts(conn)
-    assert counts == {"feed": 2, "wee": 0, "poo": 1, "vitd": 0, "formula_ml": 0}
+    assert counts == {
+        "feed": 2,
+        "wee": 0,
+        "poo": 1,
+        "vitd": 0,
+        "tummy_time": 0,
+        "formula_ml": 0,
+    }
 
 
 def test_today_counts_includes_vitd_key(conn):
@@ -105,6 +119,74 @@ def test_today_counts_vitd_excludes_other_days(conn):
     create_event(conn, _evt("vitd", "v1", "2026-05-15T09:00:00.000Z"))
     counts = today_counts(conn)
     assert counts["vitd"] == 0
+
+
+def test_today_counts_includes_tummy_time_key(conn):
+    """`tummy_time` key is always present in today_counts (0 when none today)."""
+    counts = today_counts(conn)
+    assert "tummy_time" in counts
+    assert counts["tummy_time"] == 0
+
+
+def test_today_counts_counts_todays_tummy_sessions(conn):
+    """Multiple tummy sessions today aggregate as a session count."""
+    create_event(conn, _evt("tummy_time", "tt1", f"{TODAY}T08:00:00.000Z", dur=5))
+    create_event(conn, _evt("tummy_time", "tt2", f"{TODAY}T11:00:00.000Z", dur=3))
+    counts = today_counts(conn)
+    assert counts["tummy_time"] == 2
+    # Tummy sessions don't bump the feed count.
+    assert counts["feed"] == 0
+
+
+def test_today_counts_tummy_excludes_other_days(conn):
+    """A tummy_time event yesterday doesn't count for today."""
+    create_event(conn, _evt("tummy_time", "tt1", "2026-05-15T08:00:00.000Z", dur=5))
+    assert today_counts(conn)["tummy_time"] == 0
+
+
+def test_today_totals_zero_when_empty(conn):
+    """today_totals returns zero minutes when no tummy_time events exist."""
+    from nbio.repo import today_totals
+
+    assert today_totals(conn) == {"tummy_time_min": 0}
+
+
+def test_today_totals_sums_tummy_minutes_today(conn):
+    """today_totals sums feed_duration_min across today's tummy_time events."""
+    from nbio.repo import today_totals
+
+    create_event(conn, _evt("tummy_time", "tt1", f"{TODAY}T08:00:00.000Z", dur=5))
+    create_event(conn, _evt("tummy_time", "tt2", f"{TODAY}T11:00:00.000Z", dur=3))
+    # A tummy event yesterday must NOT bleed into today's total.
+    create_event(conn, _evt("tummy_time", "tt3", "2026-05-15T08:00:00.000Z", dur=10))
+    assert today_totals(conn) == {"tummy_time_min": 8}
+
+
+def test_today_totals_excludes_deleted(conn):
+    """Soft-deleted tummy events don't contribute to today_totals."""
+    from nbio.repo import today_totals
+
+    _, ev, _ = create_event(conn, _evt("tummy_time", "tt1", f"{TODAY}T08:00:00.000Z", dur=5))
+    soft_delete_event(conn, ev["id"])
+    assert today_totals(conn) == {"tummy_time_min": 0}
+
+
+def test_last_event_of_each_type_includes_tummy_time(conn):
+    """`tummy_time` key surfaces when a tummy session exists."""
+    create_event(conn, _evt("tummy_time", "tt1", f"{TODAY}T08:00:00.000Z", dur=5))
+    out = last_event_of_each_type(conn)
+    assert "tummy_time" in out
+    assert out["tummy_time"]["occurred_at"] == f"{TODAY}T08:00:00.000Z"
+
+
+def test_daily_totals_sums_tummy_minutes_per_day(conn):
+    """daily_totals exposes `tummy_time_min` (sum of session durations)."""
+    create_event(conn, _evt("tummy_time", "tt1", f"{TODAY}T08:00:00.000Z", dur=5))
+    create_event(conn, _evt("tummy_time", "tt2", f"{TODAY}T11:00:00.000Z", dur=3))
+    rows = daily_totals(conn, days=14)
+    today_row = next(r for r in rows if r["day"] == TODAY)
+    assert today_row["tummy_time"] == 2
+    assert today_row["tummy_time_min"] == 8
 
 
 def test_last_event_of_each_type_includes_vitd(conn):

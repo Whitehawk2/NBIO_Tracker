@@ -199,16 +199,19 @@ def test_migration_003_recreates_indexes(post_002_db):
     assert "ix_events_dup_window" in names
 
 
-def test_migration_003_advances_user_version_to_3(post_002_db):
+def test_migration_003_advances_user_version_past_3(post_002_db):
+    """apply_pending runs every pending migration; verify 003 lands by
+    checking version moves past it (latest migration may be > 3)."""
     assert current_version(post_002_db) == 2
     apply_pending(post_002_db, MIGRATIONS_DIR)
-    assert current_version(post_002_db) == 3
+    assert current_version(post_002_db) >= 3
 
 
 def test_migration_003_idempotent_on_rerun(post_002_db):
     apply_pending(post_002_db, MIGRATIONS_DIR)
+    v = current_version(post_002_db)
     apply_pending(post_002_db, MIGRATIONS_DIR)
-    assert current_version(post_002_db) == 3
+    assert current_version(post_002_db) == v
     # And we can still insert vitd events.
     post_002_db.execute(
         """INSERT INTO events (type, baby_id, occurred_at, idempotency_key, created_by_device)
