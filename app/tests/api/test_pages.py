@@ -84,6 +84,61 @@ def test_index_shows_vitd_banner_given_state_after_post(client):
     assert "data-vitd-give" not in r.text
 
 
+def test_index_shows_tummy_banner_empty_state(client):
+    """Fresh DB → tummy banner reads 'Tummy time — not yet today' + buttons."""
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-tummy-banner" in r.text
+    assert "not yet" in r.text.lower()
+    assert "data-tummy-log" in r.text  # quick-log button
+    assert "data-tummy-start" in r.text  # start-timer button
+
+
+def test_index_shows_tummy_banner_done_state_after_post(client):
+    """After a tummy_time event today, banner flips to the given state."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "tummy_time",
+            "occurred_at": f"{today}T08:00:00.000Z",
+            "feed_duration_min": 5,
+            "idempotency_key": "idem-tummy-banner",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "data-tummy-banner" in r.text
+    assert "is-given" in r.text
+    # Session count + minutes total surface in the banner text.
+    assert "Tummy today" in r.text
+    # The Start-timer button is hidden in the done state (replaced with Add another).
+    assert "data-tummy-start" not in r.text
+
+
+def test_event_row_renders_tummy_emoji(client):
+    """An event of type='tummy_time' shows the 🤸 emoji in its row."""
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    client.post(
+        "/api/events",
+        json={
+            "type": "tummy_time",
+            "occurred_at": f"{today}T08:00:00.000Z",
+            "feed_duration_min": 5,
+            "idempotency_key": "idem-tummy-emoji",
+            "created_by_device": "device-test",
+        },
+    )
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "🤸" in r.text
+
+
 def test_event_row_renders_vitd_emoji(client):
     """An event of type='vitd' shows the 💊 emoji in its row."""
     from datetime import UTC, datetime

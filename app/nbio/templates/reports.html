@@ -27,6 +27,7 @@
     <span><span class="lg-dot lg-wee"></span>wee</span>
     <span><span class="lg-dot lg-poo"></span>poo</span>
     <span><span class="lg-dot lg-vitd"></span>vit D</span>
+    <span><span class="lg-dot lg-tummy"></span>tummy</span>
   </div>
   {% for day in days_list %}
     <div class="day-strip">
@@ -83,6 +84,7 @@
         <th>Wees</th>
         <th>Poos</th>
         <th data-col-totals="vitd" title="Vitamin D given that day">💊</th>
+        <th data-col-totals="tummy_time_min" title="Tummy time (minutes)">🤸 min</th>
         <th>Avg breast</th>
       </tr>
     </thead>
@@ -96,6 +98,7 @@
           <td>{{ row.wee }}</td>
           <td>{{ row.poo }}</td>
           <td>{{ '✓' if row.get('vitd', 0) else '—' }}</td>
+          <td>{{ row.get('tummy_time_min', 0) if row.get('tummy_time_min', 0) else '—' }}</td>
           <td>{{ '%.0f min' | format(row.avg_feed_min) if row.avg_feed_min else '—' }}</td>
         </tr>
       {% endfor %}

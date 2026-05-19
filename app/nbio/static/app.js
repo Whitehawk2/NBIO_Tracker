@@ -665,6 +665,8 @@
       detail = [(ev.formula_brand || ""), ev.formula_volume_ml ? `${ev.formula_volume_ml} cc` : null].filter(Boolean).join(" · ");
     } else if (ev.type === "poo" && ev.poo_quality) {
       detail = `type ${ev.poo_quality}`;
+    } else if (ev.type === "tummy_time" && ev.feed_duration_min) {
+      detail = `${ev.feed_duration_min}m`;
     }
     // 📝 icon signals notes exist; the full text is revealed in the
     // edit modal. Inline notes text was dropped (long notes overlapped
@@ -674,6 +676,7 @@
       : ev.type === "formula" ? "🍼"
       : ev.type === "wee" ? "💦"
       : ev.type === "vitd" ? "💊"
+      : ev.type === "tummy_time" ? "🤸"
       : "💩";
     const color = ev.actor_color || "#888";
     const notesIcon = ev.notes
@@ -894,6 +897,177 @@
     }
   }
 
+  // ----- Tummy time banner reactive state (v1.1.1)
+  //
+  // Mirrors the vit D banner pattern: server renders the right class on
+  // first paint; these helpers swap state inline when a tummy session
+  // lands without a reload. Banner shows session count + minute total,
+  // both stashed in dataset attrs so we can recompute without re-fetching.
+  function renderTummyBanner(ev, delta) {
+    const banner = document.querySelector("[data-tummy-banner]");
+    if (!banner) return;
+    const minDelta = (ev && ev.feed_duration_min ? +ev.feed_duration_min : 0) * delta;
+    const curMin = parseInt(banner.dataset.tummyTodayMin || "0", 10) || 0;
+    const curCount = parseInt(banner.dataset.tummyTodayCount || "0", 10) || 0;
+    const nextMin = Math.max(0, curMin + minDelta);
+    const nextCount = Math.max(0, curCount + delta);
+    banner.dataset.tummyTodayMin = String(nextMin);
+    banner.dataset.tummyTodayCount = String(nextCount);
+    if (nextCount > 0) {
+      banner.classList.add("is-given");
+      banner.classList.remove("is-late");
+      const word = nextCount === 1 ? "session" : "sessions";
+      banner.innerHTML =
+        `<span class="emoji" aria-hidden="true">🤸</span>` +
+        `<span class="lbl">Tummy today ` +
+          `<b data-tummy-min>${nextMin}</b> min · ` +
+          `<b data-tummy-count>${nextCount}</b> ` +
+          `<span data-tummy-sessions-word>${word}</span>` +
+        `</span>` +
+        `<button type="button" class="btn-tummy" data-tummy-log>Add another</button>`;
+    } else {
+      banner.classList.remove("is-given");
+      banner.innerHTML =
+        `<span class="emoji" aria-hidden="true">🤸</span>` +
+        `<span class="lbl">Tummy time — not yet today</span>` +
+        `<button type="button" class="btn-tummy" data-tummy-log>Log</button>` +
+        `<button type="button" class="btn-tummy btn-tummy-timer" data-tummy-start>Start timer</button>`;
+      refreshTummyLateClass();
+    }
+    wireTummyBanner();
+  }
+
+  function refreshTummyLateClass() {
+    const banner = document.querySelector("[data-tummy-banner]");
+    if (!banner) return;
+    if (banner.classList.contains("is-given")) {
+      banner.classList.remove("is-late");
+      return;
+    }
+    const hour = new Date().getHours();
+    banner.classList.toggle("is-late", hour >= 16);
+  }
+
+  // ----- Tummy timer (localStorage-backed)
+  // Counter computes from Date.now() - started_at on each tick, so it's
+  // resilient to tab-background throttling. The banner shows "in
+  // progress · MM:SS" when a timer is active.
+  const TUMMY_TIMER_KEY = "nbio.tummy_timer_started_at";
+  const TUMMY_TIMER_STALE_MS = 60 * 60 * 1000;  // 60 min — prompt to recover
+
+  function tummyTimerStartedAt() {
+    const raw = localStorage.getItem(TUMMY_TIMER_KEY);
+    if (!raw) return null;
+    const n = parseInt(raw, 10);
+    return isNaN(n) ? null : n;
+  }
+  function clearTummyTimer() { localStorage.removeItem(TUMMY_TIMER_KEY); }
+
+  function fmtTimerElapsed(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(s / 60);
+    return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  }
+
+  function openTummyTimerModal() {
+    let startedAt = tummyTimerStartedAt();
+    if (!startedAt) {
+      startedAt = Date.now();
+      localStorage.setItem(TUMMY_TIMER_KEY, String(startedAt));
+    }
+    const backdrop = makeModalShell("🤸 Tummy time — timer");
+    const body = backdrop.querySelector(".modal-body");
+    const counter = document.createElement("div");
+    counter.className = "tummy-timer-counter";
+    body.appendChild(counter);
+    let timerId = null;
+    function tick() {
+      counter.textContent = fmtTimerElapsed(Date.now() - startedAt);
+    }
+    tick();
+    timerId = setInterval(tick, 1000);
+
+    const stop = document.createElement("button");
+    stop.className = "btn-primary";
+    stop.textContent = "Stop & save";
+    stop.addEventListener("click", async () => {
+      stop.disabled = true;
+      clearInterval(timerId);
+      const elapsedMs = Date.now() - startedAt;
+      const minutes = Math.max(1, Math.floor(elapsedMs / 60000));
+      const occurredAt = new Date(startedAt).toISOString();
+      clearTummyTimer();
+      await submitForm(backdrop, null, {
+        type: "tummy_time",
+        occurred_at: occurredAt,
+        feed_duration_min: minutes,
+        skip_dup_check: true,
+      });
+    });
+    body.appendChild(stop);
+
+    const cancel = document.createElement("button");
+    cancel.className = "btn-secondary";
+    cancel.style.marginTop = "10px";
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => {
+      clearInterval(timerId);
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs < 5000 || confirm(`Discard ${fmtTimerElapsed(elapsedMs)} session?`)) {
+        clearTummyTimer();
+        closeModal(backdrop);
+        renderTummyBanner({ type: "tummy_time" }, 0);
+      }
+    });
+    body.appendChild(cancel);
+
+    backdrop.__onClose = () => clearInterval(timerId);
+    document.body.appendChild(backdrop);
+  }
+
+  function wireTummyBanner() {
+    const banner = document.querySelector("[data-tummy-banner]");
+    if (!banner) return;
+    const logBtn = banner.querySelector("[data-tummy-log]");
+    if (logBtn && !logBtn.__tummyWired) {
+      logBtn.__tummyWired = true;
+      logBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        haptic(12);
+        openTummyLogModal();
+      });
+    }
+    const startBtn = banner.querySelector("[data-tummy-start]");
+    if (startBtn && !startBtn.__tummyWired) {
+      startBtn.__tummyWired = true;
+      startBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        haptic(12);
+        openTummyTimerModal();
+      });
+    }
+    // Stale-timer recovery: if a timer is set and > 60min old, surface
+    // a one-shot prompt on first render. The user picks: stop & log
+    // (using elapsed) or discard.
+    if (!banner.__staleChecked) {
+      banner.__staleChecked = true;
+      const started = tummyTimerStartedAt();
+      if (started && Date.now() - started > TUMMY_TIMER_STALE_MS) {
+        const mins = Math.floor((Date.now() - started) / 60000);
+        if (confirm(`Tummy timer started ${mins} min ago. Stop now and log it?`)) {
+          openTummyTimerModal();
+        } else {
+          clearTummyTimer();
+        }
+      } else if (started) {
+        // Active timer: reopen the modal so the user sees the running counter.
+        openTummyTimerModal();
+      }
+    }
+  }
+
   function renderFormulaStrip(totalCC) {
     const strip = document.querySelector("[data-formula-strip]");
     if (!strip) return;
@@ -918,6 +1092,13 @@
       const eventDay = localDay(ev.occurred_at);
       const todayDay = localDay(new Date().toISOString());
       if (eventDay === todayDay) renderVitdBanner(ev, delta);
+      return;
+    }
+    // Same shape for tummy_time — its own banner, no today-card count cell.
+    if (ev?.type === "tummy_time") {
+      const eventDay = localDay(ev.occurred_at);
+      const todayDay = localDay(new Date().toISOString());
+      if (eventDay === todayDay) renderTummyBanner(ev, delta);
       return;
     }
     const key = countKey(ev?.type);
@@ -1086,6 +1267,7 @@
     else if (full.type === "formula") openFormulaModal(prefill);
     else if (full.type === "wee") openWeeModal(prefill);
     else if (full.type === "vitd") openVitdModal(prefill);
+    else if (full.type === "tummy_time") openTummyLogModal(prefill);
     else openPooModal(prefill);
   }
 
@@ -1115,6 +1297,61 @@
       await submitForm(backdrop, prefill, {
         type: "vitd",
         occurred_at: time.getDate().toISOString(),
+        notes: notes.value.trim() || null,
+        skip_dup_check: holdFired,
+      });
+    });
+    body.appendChild(submit);
+    document.body.appendChild(backdrop);
+  }
+
+  // Tummy time modal — duration chips (segmented-wrap, same pattern as
+  // formula volume) + retro time chips + notes. Default duration = 5.
+  function openTummyLogModal(prefill) {
+    const backdrop = makeModalShell("🤸 Log tummy time");
+    const body = backdrop.querySelector(".modal-body");
+    const time = buildTimeChips(prefill?.offsetMin || 0);
+    body.appendChild(time.el);
+
+    const durLabel = label("Duration (min)");
+    const durSeg = document.createElement("div");
+    durSeg.className = "segmented-wrap";
+    const choices = [3, 5, 7, 10, 15];
+    let duration = prefill?.feed_duration_min ?? 5;
+    if (!choices.includes(duration)) duration = 5;
+    for (const v of choices) {
+      const btn = document.createElement("button");
+      btn.className = "seg" + (v === duration ? " selected" : "");
+      btn.textContent = String(v);
+      btn.dataset.dur = String(v);
+      btn.addEventListener("click", () => {
+        haptic(8);
+        duration = v;
+        durSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === btn));
+      });
+      durSeg.appendChild(btn);
+    }
+    body.append(durLabel, wrapSection(durSeg));
+
+    const notesLabel = label("Notes (optional)");
+    const notes = document.createElement("input");
+    notes.type = "text";
+    notes.placeholder = "after morning feed, etc.";
+    notes.value = prefill?.notes || "";
+    body.append(notesLabel, wrapSection(notes));
+
+    const submit = document.createElement("button");
+    submit.className = "btn-primary";
+    submit.textContent = prefill ? "Save changes" : "Save tummy time";
+    let holdFired = false, holdTimer = null;
+    submit.addEventListener("touchstart", () => { holdTimer = setTimeout(() => { holdFired = true; haptic(40); }, 700); });
+    submit.addEventListener("touchend",   () => clearTimeout(holdTimer));
+    submit.addEventListener("click", async () => {
+      submit.disabled = true;
+      await submitForm(backdrop, prefill, {
+        type: "tummy_time",
+        occurred_at: time.getDate().toISOString(),
+        feed_duration_min: duration,
         notes: notes.value.trim() || null,
         skip_dup_check: holdFired,
       });
@@ -1535,15 +1772,19 @@
     wireSyncDot();
     wireHints();
     wireVitDBanner();
+    wireTummyBanner();
     refreshRelTimes();
     refreshBabyAge();
     refreshVitdLateClass();
+    refreshTummyLateClass();
     setInterval(refreshRelTimes, 60 * 1000);
     // Baby age changes far slower than relative times — once an hour
     // is plenty (handles day-boundary rollovers on long-running PWAs).
     setInterval(refreshBabyAge, 60 * 60 * 1000);
     // The 18:00 vit D nudge also wakes hourly.
     setInterval(refreshVitdLateClass, 60 * 60 * 1000);
+    // The 16:00 tummy nudge wakes hourly too.
+    setInterval(refreshTummyLateClass, 60 * 60 * 1000);
 
     connectSSE();
     bumpPending();

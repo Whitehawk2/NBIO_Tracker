@@ -311,6 +311,7 @@ REQUIRED_THEME_TOKENS = (
     "--poo",
     "--poo-bg",
     "--vitd",  # new in #8 — needed by every theme
+    "--tummy",  # new in v1.1.1 — tummy time banner + timeline mark
 )
 
 
@@ -331,6 +332,34 @@ def test_warm_palettes_include_vitd_token():
     warm_dark = _block(src, r'html\.dark\[data-theme="warm"\]')
     assert warm_dark is not None
     assert "--vitd" in warm_dark, "warm dark palette must define --vitd"
+
+
+def test_warm_palettes_include_tummy_token():
+    """`--tummy` (teal) must be defined in warm light AND dark (v1.1.1)."""
+    src = _src()
+    warm_light = _block(src, r":root,\s*\[data-theme=\"warm\"\]") or _block(
+        src, r'\[data-theme="warm"\]'
+    )
+    assert warm_light is not None
+    assert "--tummy" in warm_light, "warm light palette must define --tummy"
+    warm_dark = _block(src, r'html\.dark\[data-theme="warm"\]')
+    assert warm_dark is not None
+    assert "--tummy" in warm_dark, "warm dark palette must define --tummy"
+
+
+def test_tummy_banner_rules_exist():
+    """`.tummy-banner` block exists and routes via the `--tummy` token."""
+    src = _src()
+    assert re.search(r"\.tummy-banner\s*\{", src), (
+        "expected `.tummy-banner { ... }` rule for the v1.1.1 tummy banner"
+    )
+    # Late state uses the --tummy token (color-mix).
+    assert re.search(r"\.tummy-banner\.is-late\s*\{", src), (
+        "expected `.tummy-banner.is-late { ... }` rule"
+    )
+    # Timeline mark + legend dot wired into --tummy.
+    assert "mark-tummy" in src, "expected `.timeline .mark-tummy` rule"
+    assert "lg-tummy" in src, "expected `.timeline-legend .lg-tummy` rule"
 
 
 def test_latte_theme_block_exists_with_required_tokens():
