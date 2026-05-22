@@ -122,6 +122,29 @@ def _last_days_rows(totals: list[dict[str, Any]], n: int = 3) -> list[dict[str, 
     return rows
 
 
+@router.get("/recover", response_class=HTMLResponse)
+def recover(request: Request) -> HTMLResponse:
+    """
+    Stuck-PWA escape hatch.
+
+    Unregisters every service worker and clears Cache Storage on the
+    visiting client. IndexedDB is intentionally untouched, so the
+    outbox of unsynced events survives. Use when an installed PWA is
+    stuck on older code that the normal SW lifecycle isn't refreshing
+    through — rare but field-observed (see CLAUDE.md, "Web Claude
+    debugging" section).
+
+    The route lives outside `/static/*` and `/`, so neither the old
+    cache-first SW nor the new network-first SW intercepts it; the
+    template is fully self-contained (no /static/* references) for
+    the same reason. `Cache-Control: no-store` because a stale copy
+    of the recovery page would defeat its own purpose.
+    """
+    resp = templates.TemplateResponse(request, "recover.html", {})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @router.get("/", response_class=HTMLResponse)
 def index(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     # Pull a window large enough to cover the last 3 local days, then filter.

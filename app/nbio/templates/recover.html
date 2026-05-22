@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>NBIO PWA recovery</title>
+  <style>
+    /* Inline only — never reference /static/* from this page. A misbehaving
+       SW could intercept /static/* and serve stale bytes, defeating the
+       point of the recovery flow. */
+    :root { color-scheme: light dark; }
+    body { font-family: system-ui, -apple-system, sans-serif; max-width: 30rem;
+           margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    h1 { font-size: 1.4rem; }
+    .keep { font-weight: 600; }
+    button { padding: 0.8rem 1.4rem; font-size: 1rem; border-radius: 0.5rem;
+             border: 1px solid #888; background: #f6f6f6; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    ul#log { padding-left: 1.2rem; }
+    li.ok { color: #1a7e2d; }
+    li.err { color: #b00020; }
+    code { background: rgba(127,127,127,0.15); padding: 0.05rem 0.3rem; border-radius: 0.2rem; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #111; color: #eee; }
+      button { background: #2a2a2a; color: #eee; border-color: #555; }
+    }
+  </style>
+</head>
+<body>
+  <h1>NBIO PWA recovery</h1>
+  <p>If the PWA is stuck on an older version after a deploy, this
+     unregisters the service worker and clears its caches so the next
+     load picks up fresh code.</p>
+  <p class="keep">Your queued events (IndexedDB outbox) and settings are
+     <span style="text-decoration: underline">not</span> touched.</p>
+  <p><button id="go" type="button">Recover</button></p>
+  <ul id="log"></ul>
+  <script>
+  (function () {
+    var log = document.getElementById("log");
+    function add(cls, msg) {
+      var li = document.createElement("li");
+      li.className = cls;
+      li.textContent = msg;
+      log.appendChild(li);
+    }
+    document.getElementById("go").addEventListener("click", async function (e) {
+      var btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        if ("serviceWorker" in navigator) {
+          var regs = await navigator.serviceWorker.getRegistrations();
+          if (regs.length === 0) {
+            add("ok", "no service worker was registered");
+          }
+          for (var r of regs) {
+            await r.unregister();
+            add("ok", "unregistered service worker (" + (r.scope || "scope?") + ")");
+          }
+        } else {
+          add("ok", "service workers not supported in this browser");
+        }
+        if ("caches" in self) {
+          var keys = await caches.keys();
+          if (keys.length === 0) {
+            add("ok", "no caches to clear");
+          }
+          for (var k of keys) {
+            await caches.delete(k);
+            add("ok", "cleared cache: " + k);
+          }
+        }
+        // IndexedDB is intentionally untouched — the outbox lives there.
+        add("ok", "done — reloading…");
+        setTimeout(function () {
+          window.location.replace("/?recovered=" + Date.now());
+        }, 700);
+      } catch (err) {
+        add("err", "error: " + (err && err.message ? err.message : err));
+        btn.disabled = false;
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

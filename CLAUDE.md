@@ -284,6 +284,14 @@ was never re-verified between fixes.
   costs trust. Verify the symptom resolves between fixes — and
   if the user reports "still broken", treat their next message
   as the start of the debug, not "ship another guess".
+- **`/recover` is the stuck-PWA escape hatch.** Self-contained
+  route (no `/static/*` deps, `Cache-Control: no-store`) that
+  unregisters every SW + clears Cache Storage, deliberately
+  leaving IndexedDB intact so the outbox of unsynced events
+  survives. Point users there when the normal SW lifecycle
+  isn't dislodging a wedged client and the alternative would be
+  "clear app data" (destroys the outbox). README has the user-
+  facing doc under "PWA stuck on an older version after a deploy".
 
 ## Issue / roadmap
 
