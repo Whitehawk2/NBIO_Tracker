@@ -122,6 +122,14 @@ TODO.md                     live roadmap, linked to GitHub issues
 - **Branches**: `claude/<slug>`; base on `master`.
 - **Commits**: new commits, never `--amend`. Never `--no-verify`. Never
   skip signing.
+- **Pull requests**: when work on a feature branch is pushed and
+  green, **open the PR immediately** — don't wait to be asked.
+  Use `mcp__github__create_pull_request` (no `gh` CLI in this
+  environment). Title `<type>: <one-line summary>`; body with
+  Summary + Test plan sections matching the format under "Creating
+  pull requests" at the top of this prompt. Skip only if the user
+  explicitly says "don't open a PR" or the change is a tiny
+  docs-only touch they've said they'll merge directly.
 - **Shell**: `#!/usr/bin/env bash` + `set -euo pipefail`. Probe for
   required tools before running them. `shellcheck --severity=warning`
   clean.
@@ -307,3 +315,8 @@ audit), #6 (runtime settings), #7 (Nix), #8 (themes).
   offline queue, backup/restore, troubleshooting).
 - `TODO.md` — roadmap.
 - `CONTRIBUTING.md` — TDD policy + dev setup.
+- `/reports/print?days={7|14|30}` — pediatrician-handoff report
+  (issue #56). Self-contained A4-portrait HTML, reuses
+  `_weight_history_context` / `_timeline_marks` / `_day_formula_cc`
+  from `routes/pages.py`. Same self-contained discipline as
+  `/recover`: no `/static/*` refs so a stuck SW can't poison it.

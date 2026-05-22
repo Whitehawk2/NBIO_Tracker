@@ -659,6 +659,13 @@ a { color: var(--accent); text-decoration: none; }
 }
 .chip:active { transform: scale(.96); }
 .chip.selected { background: var(--accent); color: white; border-color: var(--accent); }
+a.chip { text-decoration: none; color: var(--ink); display: inline-flex; align-items: center; }
+
+.report-print {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  margin: 8px 0 12px;
+}
+.report-print-label { font-size: 14px; color: var(--ink-muted); margin-right: 4px; }
 
 /* segmented */
 .segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }

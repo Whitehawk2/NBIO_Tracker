@@ -739,8 +739,35 @@ will boot against the restored DB.
 
 All charts are server-rendered inline SVG: no chart library, no JS bundle.
 
-CSV / paediatrician export is not in v1. If you want it, open an issue — it's
-~30 lines.
+### Pediatrician handoff PDF
+
+The three chips at the top of `/reports` ("7 d / 14 d / 30 d") open
+`/reports/print?days=N` in a new tab — a paper-styled, A4-portrait
+HTML summary intended for the well-baby check. On Android Chrome,
+tap **⋮ → Share → Save as PDF** (or Print) to capture it.
+
+Contents, in print order:
+
+1. **Cover** — baby name, age, DOB, latest weight, the selected
+   window, and the generation timestamp.
+2. **Notes** — Markdown-flavoured `notes_md` from Settings if non-empty
+   (hidden otherwise).
+3. **Daily totals table** — one row per day in the window: feeds
+   (breast / formula split), formula cc, wees, poos, vit D, tummy time.
+4. **Per-day timeline** — one strip per day with colour-coded marks
+   across the 24h clock. `page-break-inside: avoid` so strips never
+   split across pages.
+5. **Weight history** — chart + table with per-day delta (g/day),
+   the pediatric-grade signal. Empty-state notice if no weights
+   have been recorded.
+
+The page is self-contained (inline CSS, no `/static/*` references)
+so a misbehaving SW can't interpose stale bytes on it. Response is
+`Cache-Control: no-cache` so re-prints reflect fresh data.
+
+Raw event data (for archives or import elsewhere) is still available
+as `GET /api/export/events.json` and `GET /api/export/events.csv`
+from the Settings → Server info panel.
 
 ---
 

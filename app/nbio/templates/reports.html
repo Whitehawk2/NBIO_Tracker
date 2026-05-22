@@ -3,6 +3,13 @@
 {% block nav_reports %}active{% endblock %}
 {% block content %}
 
+<section class="report-print" aria-label="Print or save as PDF">
+  <span class="report-print-label">Print / save as PDF:</span>
+  <a class="chip" href="/reports/print?days=7"  target="_blank" rel="noopener">7 d</a>
+  <a class="chip" href="/reports/print?days=14" target="_blank" rel="noopener">14 d</a>
+  <a class="chip" href="/reports/print?days=30" target="_blank" rel="noopener">30 d</a>
+</section>
+
 <section class="today-summary">
   <h2 class="section-title">Today</h2>
   <div class="big-numbers">
