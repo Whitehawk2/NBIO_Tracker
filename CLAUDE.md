@@ -14,6 +14,12 @@ defaults, auto dark mode at night, haptic feedback, offline-capable PWA.
 Two-parent live sync is the headline feature; nightly Google Drive
 backup is the disaster-recovery story.
 
+**Primary client: Android Chrome PWA.** iOS is supported but
+secondary — both parents are on Android in production. When
+debugging client-side behaviour, verify on Android first; an
+iOS-only theory that doesn't reproduce on Android is the wrong
+theory.
+
 ## Stack
 
 - **Backend**: FastAPI + plain `sqlite3` (no ORM) + Jinja2/HTMX,
@@ -252,12 +258,28 @@ was never re-verified between fixes.
   available · Reload" toast (v1.1.0 → v1.1.1) shipped using
   `updatefound` and never fired once in production for exactly
   this reason.
-- **iOS PWAs cache aggressively.** Even with a correct SW update
-  path, plan for a self-heal: HTML-baked
+- **Android Chrome is the primary debug surface.** Both parents
+  use Android in production; iOS is supported but secondary. If a
+  client-side theory only explains iOS, it's the wrong theory for
+  the bug you're chasing — go back and find the Android-reproducible
+  cause first.
+- **Inside a service worker, `fetch(req)` uses the browser HTTP
+  cache by default.** "Network-first" SW logic without
+  `fetch(req, { cache: "reload" })` is a lie on Android Chrome —
+  `/static/*` has no `Cache-Control` from FastAPI's StaticFiles
+  mount, Chrome heuristically caches for hours, and the SW returns
+  yesterday's bytes thinking it went to the network. Always pass
+  `cache: "reload"` for network-first asset fetches.
+- **iOS PWAs cache more aggressively still.** Beyond the SW HTTP
+  cache, the SW source itself can be cached for 24h despite
+  `Cache-Control: no-cache`; pass `updateViaCache: "none"` to
+  `register()`. And HTML-baked
   `window.NBIO_CONFIG.version` compared to `/api/version` at boot,
-  with a one-shot `sessionStorage`-gated reload on mismatch, is
-  the safety net. Belt-and-braces with the SW path, not a
-  replacement.
+  with a `sessionStorage`-gated reload on mismatch, is the
+  safety net. Key the sessionStorage flag on the target server
+  hash (`nbio.sw_reloaded.<hash>`) — iOS standalone PWA sessions
+  survive for weeks, and an unkeyed flag permanently disarms the
+  self-heal after any single prior reload.
 - **Don't ship multiple speculative fixes in series.** Each one
   costs trust. Verify the symptom resolves between fixes — and
   if the user reports "still broken", treat their next message
