@@ -327,15 +327,25 @@ def _weight_history_context(conn: sqlite3.Connection) -> dict[str, Any]:
     Returns a dict with:
       - has_data: bool
       - rows: list of {label, weight_g, weight_str, delta_g, delta_str,
-        delta_class, interval_str, measured_at} ASC by date
+        delta_class, delta_per_day_g, delta_per_day_str, interval_str,
+        measured_at} ASC by date
       - latest: dict | None — top callout
       - chart_points: list of {x, y, weight_g, date} normalized to a
         1000×200 SVG viewBox
       - polyline: str — `x,y x,y …` for the chart line
+      - y_min_str / y_max_str — Y-axis tick labels (template renders
+        them as HTML alongside the SVG so they aren't distorted by
+        `preserveAspectRatio: none`)
+      - first_date / last_date — X-axis tick labels at the same
+        positions as the leftmost / rightmost data points
 
     Y-axis is clamped to [min-100, max+100] grams so even small
     week-on-week deltas read as a visible curve (newborns gain ~30g/day;
     a chart anchored at 0 would look flat).
+
+    Per-day delta is the pediatric-grade signal: total delta / interval
+    days. With "1d ago, +15g total" you don't know if that's a week of
+    +2g/day or 3 days of +5g/day. Expose it explicitly.
     """
     rows_raw = repo.growth_list(conn)
     if not rows_raw:
@@ -365,17 +375,33 @@ def _weight_history_context(conn: sqlite3.Connection) -> dict[str, Any]:
 
     rows: list[dict[str, Any]] = []
     today = _dt.now().astimezone().date()
-    prev = None
+    prev_w: int | None = None
+    prev_d = None
     for r, d, w in zip(rows_raw, measured, weights, strict=True):
-        delta_g = w - prev if prev is not None else None
+        delta_g = w - prev_w if prev_w is not None else None
         delta_str = "—"
         delta_class = ""
+        delta_per_day_g: float | None = None
+        delta_per_day_str = "—"
         if delta_g is not None:
             sign = "+" if delta_g > 0 else ("" if delta_g == 0 else "")
             delta_str = f"{sign}{delta_g} g"
             delta_class = (
                 "delta-up" if delta_g > 0 else "delta-down" if delta_g < 0 else "delta-flat"
             )
+            if prev_d is not None:
+                interval_days = (d - prev_d).days
+                if interval_days > 0:
+                    per_day = delta_g / interval_days
+                    delta_per_day_g = round(per_day, 1)
+                    pd_sign = "+" if delta_per_day_g > 0 else ""
+                    # Drop the trailing ".0" so whole numbers read cleanly.
+                    pd_text = (
+                        f"{int(delta_per_day_g)}"
+                        if delta_per_day_g == int(delta_per_day_g)
+                        else f"{delta_per_day_g}"
+                    )
+                    delta_per_day_str = f"{pd_sign}{pd_text} g/day"
         days_ago = (today - d).days
         interval_str = "today" if days_ago == 0 else f"{days_ago}d ago"
         rows.append(
@@ -387,10 +413,13 @@ def _weight_history_context(conn: sqlite3.Connection) -> dict[str, Any]:
                 "delta_g": delta_g,
                 "delta_str": delta_str,
                 "delta_class": delta_class,
+                "delta_per_day_g": delta_per_day_g,
+                "delta_per_day_str": delta_per_day_str,
                 "interval_str": interval_str,
             }
         )
-        prev = w
+        prev_w = w
+        prev_d = d
 
     latest_row = rows[-1]
     return {
@@ -399,6 +428,12 @@ def _weight_history_context(conn: sqlite3.Connection) -> dict[str, Any]:
         "latest": latest_row,
         "chart_points": chart_points,
         "polyline": " ".join(polyline_parts),
+        "y_min_g": y_min,
+        "y_max_g": y_max,
+        "y_min_str": f"{y_min:,} g",
+        "y_max_str": f"{y_max:,} g",
+        "first_date": rows_raw[0]["measured_at"],
+        "last_date": rows_raw[-1]["measured_at"],
     }
 
 

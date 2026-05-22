@@ -240,12 +240,48 @@ html.dark[data-theme="warm"] {
 .weight-history .delta-down { color: var(--poo); }
 .weight-history .delta-flat { color: var(--text-muted); }
 .weight-history .small { font-size: 13px; }
+/* Chart layout: 2x2 CSS grid so axis labels render at native size
+   (the SVG itself uses `preserveAspectRatio: none` and would distort
+   any <text> placed inside it).
+     col 1 row 1: Y-axis ticks (top = max, bottom = min)
+     col 2 row 1: SVG (the actual line + dots)
+     col 1 row 2: empty corner
+     col 2 row 2: X-axis ticks (left = first date, right = last date) */
+.weight-chart-wrap {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 4px 8px;
+  margin: 4px 0 14px;
+}
+.weight-chart-yaxis {
+  grid-column: 1; grid-row: 1;
+  display: flex; flex-direction: column; justify-content: space-between;
+  align-items: flex-end;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  padding: 2px 0;
+}
+.weight-chart-xaxis {
+  grid-column: 2; grid-row: 2;
+  display: flex; justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
 .weight-chart {
+  grid-column: 2; grid-row: 1;
   width: 100%; height: 200px;
   background: var(--bg-sunk);
   border-radius: 10px;
   display: block;
-  margin: 4px 0 14px;
+}
+.weight-chart .weight-gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.6;
 }
 .weight-chart .weight-line {
   stroke: var(--accent);
@@ -259,6 +295,11 @@ html.dark[data-theme="warm"] {
 }
 .weight-chart .weight-dot:active,
 .weight-chart .weight-dot:hover { r: 8; }
+.weight-history .delta-per-day {
+  margin-left: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
 .weight-table {
   width: 100%;
   border-collapse: collapse;

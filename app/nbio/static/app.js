@@ -377,7 +377,11 @@
     const volLabel = label("Amount (cc)");
     const volSeg = document.createElement("div"); volSeg.className = "segmented-wrap";
     let volume = defaultVolume;
-    const volChoices = [30, 60, 90, 120, 150, 180, 210, 240];
+    // Volume chips. Increment is fine at 30cc once you're past ~60cc, but
+    // newborns drink in much smaller pours (20-50cc) — finer-grained
+    // chips below 60 keep them off the CUSTOM input for the most common
+    // cases. Two rows of chips wrap on phones via .segmented-wrap.
+    const volChoices = [20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240];
     const customVolInput = document.createElement("input");
     customVolInput.type = "number";
     customVolInput.min = "1"; customVolInput.max = "500"; customVolInput.placeholder = "cc";

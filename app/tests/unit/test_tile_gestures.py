@@ -356,6 +356,25 @@ def test_formula_volume_picker_uses_only_segmented_wrap():
     )
 
 
+def test_formula_volume_chips_cover_newborn_small_pours():
+    """
+    Newborns drink 20-50cc — the original 30/60/… stepped past those.
+    Pin the smaller chips so they don't silently get dropped.
+    """
+    src = _src()
+    m = re.search(r"volChoices\s*=\s*\[([^\]]+)\]", src)
+    assert m, "volChoices array literal not found in app.js"
+    values = [int(v.strip()) for v in m.group(1).split(",") if v.strip()]
+    # All three newborn-pour values must be in the chip set.
+    for n in (20, 40, 50):
+        assert n in values, f"formula chip {n}cc missing — newborn quick-log lacks granularity"
+    # Existing useful values must remain.
+    for n in (30, 60, 90, 120, 150, 180, 210, 240):
+        assert n in values, f"existing chip {n}cc must remain"
+    # Chips must be sorted ascending so they render in a natural order.
+    assert values == sorted(values), f"volChoices must be sorted ascending: got {values}"
+
+
 def test_app_js_has_wire_vitd_banner():
     """
     `wireVitDBanner` must exist and bind the `[data-vitd-give]` button to
