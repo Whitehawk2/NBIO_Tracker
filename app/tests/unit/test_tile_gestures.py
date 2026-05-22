@@ -634,6 +634,89 @@ def test_open_tummy_timer_writes_seconds_not_minutes():
     assert "Math.max(1, Math.floor" not in block, "timer must not clamp <1min sessions to 1 min"
 
 
+def test_register_service_worker_uses_controllerchange_not_updatefound():
+    """
+    The "Update available · Reload" toast never fired in production
+    because `updatefound` is racy against `register()` — the browser
+    can finish installing the new SW BEFORE the JS-side listener
+    attaches. Switched to `controllerchange` on `navigator.serviceWorker`,
+    which fires when the new SW claims the page and is not scoped to
+    the registration object.
+    """
+    src = _src()
+    idx = src.find("function registerServiceWorker(")
+    assert idx >= 0, "registerServiceWorker() not found in app.js"
+    block = src[idx : idx + 600]
+    assert 'addEventListener("controllerchange"' in block, (
+        "registerServiceWorker must listen for `controllerchange` on "
+        "navigator.serviceWorker — `updatefound` is racy and never "
+        "fired in production"
+    )
+    # The dead toast path must be gone (it never worked since inception).
+    assert "showUpdateAvailableToast" not in src, (
+        "showUpdateAvailableToast was dead code — never fired since "
+        "inception because updatefound was attached too late. Remove it."
+    )
+    # And the `updatefound` listener should NOT come back.
+    assert "updatefound" not in block, (
+        "registerServiceWorker must not re-attach the racy `updatefound` "
+        "listener — use `controllerchange` instead"
+    )
+
+
+def test_reload_once_uses_session_storage_flag():
+    """
+    The shared `reloadOnce` helper sets `sessionStorage["nbio.sw_reloaded"]`
+    before calling `location.reload()` so a misbehaving deploy can't
+    trap the page in an endless reload loop. Flag clears when the
+    tab/PWA fully closes.
+    """
+    src = _src()
+    idx = src.find("function reloadOnce(")
+    assert idx >= 0, "reloadOnce() helper not found in app.js"
+    block = src[idx : idx + 400]
+    assert 'sessionStorage.getItem("nbio.sw_reloaded")' in block, (
+        "reloadOnce must short-circuit on `sessionStorage['nbio.sw_reloaded']`"
+    )
+    assert 'sessionStorage.setItem("nbio.sw_reloaded", "1")' in block, (
+        "reloadOnce must set `sessionStorage['nbio.sw_reloaded'] = '1'` before reloading"
+    )
+    assert "window.location.reload()" in block, (
+        "reloadOnce must actually trigger `window.location.reload()`"
+    )
+
+
+def test_version_check_compares_api_version_with_baked_hash():
+    """
+    Self-heal safety net: on boot, fetch `/api/version` (bypassing
+    SW + HTTP cache via `cache: 'no-store'`) and compare against
+    `window.NBIO_CONFIG.version`. On mismatch, force one reload via
+    `reloadOnce`. This catches the case where the SW lifecycle is
+    perfectly healthy but the cached HTML loaded by the PWA is older
+    than the server (common iOS PWA quirk).
+    """
+    src = _src()
+    idx = src.find("function checkVersionAndMaybeReload(")
+    assert idx >= 0, "checkVersionAndMaybeReload() not found in app.js"
+    block = src[idx : idx + 800]
+    assert '"/api/version"' in block, (
+        "self-heal must hit `/api/version` to read the current server hash"
+    )
+    assert 'cache: "no-store"' in block, (
+        "the version fetch must use `cache: 'no-store'` so the comparison "
+        "doesn't read a stale cached response"
+    )
+    assert "NBIO_CONFIG" in block and "version" in block, (
+        "self-heal must compare the API response against "
+        "window.NBIO_CONFIG.version (the HTML-baked hash)"
+    )
+    assert "reloadOnce" in block, "self-heal must call the shared `reloadOnce` helper on mismatch"
+    # And the init path must actually invoke the self-heal.
+    assert "checkVersionAndMaybeReload();" in src, (
+        "checkVersionAndMaybeReload() must be called from the init path"
+    )
+
+
 def test_open_vitd_modal_uses_time_and_notes_only():
     """
     Vit D events only carry `occurred_at` + optional `notes` (no side,

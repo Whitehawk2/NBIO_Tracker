@@ -1864,53 +1864,52 @@
     setInterval(flushOutbox, 30 * 1000);
 
     registerServiceWorker();
+    checkVersionAndMaybeReload();
   });
 
-  /* ----- Service worker registration + "Update available" toast
+  /* ----- Service worker registration + stale-PWA self-heal
    *
-   * The server-side /static/sw.js route (routes/sw.py) returns the SW
-   * with the cache name templated to a hash of the current static
-   * tree. When the shell changes, the browser fetches the new SW,
-   * installs it, activates it — and because the cache name differs
-   * from the previously-installed SW's, the activate handler purges
-   * the old cache. The next page load fetches the fresh shell.
+   * Two independent paths trigger a one-shot reload when the page is
+   * running older code than the server:
    *
-   * The user-visible toast: when an UPDATE (not a first install)
-   * completes, the new SW becomes the controller via skipWaiting +
-   * clients.claim. The toast tells the user "tap to reload" so the
-   * page picks up the new JS that the new SW has now cached.
-   * navigator.serviceWorker.controller is truthy only on subsequent
-   * registrations — that's how we differentiate first install from
-   * update.  (See issue #23.)
+   * 1. `controllerchange` on navigator.serviceWorker — fires when a
+   *    new SW claims this client (sw.js does clients.claim() in its
+   *    activate handler). Catches the "deploy lands while the PWA is
+   *    open" case. We avoid `updatefound` because the browser auto-
+   *    checks the SW source on navigation and the install can
+   *    complete BEFORE register() resolves, leaving any registration-
+   *    scoped listener attached too late to ever fire.
+   *
+   * 2. `/api/version` compared against window.NBIO_CONFIG.version
+   *    (the static-assets hash baked into the HTML at render time).
+   *    Catches the "PWA cold-launched with stale cached HTML" case
+   *    that iOS in particular hits — even with a healthy SW lifecycle,
+   *    the loaded JS can be older than the server.
+   *
+   * Both paths set `sessionStorage["nbio.sw_reloaded"]` before
+   * reloading so a misbehaving deploy can't trap the page in a
+   * reload loop; the flag clears when the tab/PWA fully closes.
    */
-  function registerServiceWorker() {
-    if (!("serviceWorker" in navigator)) return;
-    const hadController = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.register("/static/sw.js").then((reg) => {
-      reg.addEventListener("updatefound", () => {
-        const newWorker = reg.installing;
-        if (!newWorker) return;
-        newWorker.addEventListener("statechange", () => {
-          if (newWorker.state === "activated" && hadController) {
-            showUpdateAvailableToast();
-          }
-        });
-      });
-    }).catch(console.warn);
+  function reloadOnce() {
+    if (sessionStorage.getItem("nbio.sw_reloaded")) return;
+    sessionStorage.setItem("nbio.sw_reloaded", "1");
+    window.location.reload();
   }
 
-  function showUpdateAvailableToast() {
-    const root = $("#toast-root");
-    if (!root) return;
-    // Don't stack multiple update toasts on the same page
-    if (root.querySelector(".toast-update")) return;
-    const t = document.createElement("div");
-    t.className = "toast toast-update";
-    t.innerHTML = `Update available · <button>Reload</button>`;
-    t.querySelector("button").addEventListener("click", () => {
-      window.location.reload();
-    });
-    root.appendChild(t);
-    // Sticky on purpose — let the user decide when to reload
+  function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.addEventListener("controllerchange", reloadOnce);
+    navigator.serviceWorker.register("/static/sw.js").catch(console.warn);
+  }
+
+  function checkVersionAndMaybeReload() {
+    const expected = window.NBIO_CONFIG && window.NBIO_CONFIG.version;
+    if (!expected) return;
+    fetch("/api/version", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && data.version && data.version !== expected) reloadOnce();
+      })
+      .catch(() => {});
   }
 })();

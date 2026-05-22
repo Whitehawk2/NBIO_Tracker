@@ -36,6 +36,9 @@ from ..version import static_assets_hash
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+# base.html renders {{ static_assets_hash() }} into window.NBIO_CONFIG;
+# every Jinja2Templates instance that renders base.html needs this global.
+templates.env.globals["static_assets_hash"] = static_assets_hash
 
 # Two prefix-less routers so the settings page lives at /settings and
 # the JSON API lives at /api/*. Both export from this module.

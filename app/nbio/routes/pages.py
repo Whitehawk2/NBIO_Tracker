@@ -9,9 +9,13 @@ from fastapi.templating import Jinja2Templates
 
 from .. import repo
 from ..db import get_conn
+from ..version import static_assets_hash
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent.parent / "templates"))
+# Exposed to every template so base.html can bake it into
+# window.NBIO_CONFIG for the client-side self-heal (see app.js).
+templates.env.globals["static_assets_hash"] = static_assets_hash
 
 
 def _relative(occurred_at: str) -> str:

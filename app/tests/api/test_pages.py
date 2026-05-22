@@ -1620,6 +1620,28 @@ def test_reports_timeline_renders_vitd_mark(client):
     )
 
 
+def test_base_html_bakes_static_assets_hash_into_nbio_config(client):
+    """
+    base.html must render `window.NBIO_CONFIG.version = "<hash>"` matching
+    `static_assets_hash()`. The client-side self-heal in app.js compares
+    this against `/api/version` and reloads on mismatch — without the
+    baked-in value the comparison can't run.
+    """
+    import re
+
+    from nbio.version import static_assets_hash
+
+    expected = static_assets_hash()
+    for path in ("/", "/reports", "/settings"):
+        r = client.get(path)
+        assert r.status_code == 200, f"{path} did not render"
+        m = re.search(r'version:\s*"([0-9a-f]{12})"', r.text)
+        assert m, f"{path} HTML missing baked-in version in window.NBIO_CONFIG"
+        assert m.group(1) == expected, (
+            f"{path} baked version {m.group(1)!r} != server hash {expected!r}"
+        )
+
+
 def test_reports_timeline_vitd_tooltip_says_vit_d(client):
     """The vit D mark's <title> tooltip carries the human label 'Vit D'."""
     today = datetime.now(UTC).strftime("%Y-%m-%d")

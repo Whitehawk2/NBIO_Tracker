@@ -222,6 +222,47 @@ to the same ref don't pile up.
 - **Plan mode** restricts edits to the plan file only — no source
   changes, no commits, no non-readonly tools.
 
+### Web Claude debugging: verify, don't guess
+
+Lessons from the v1.1.1 "formula chips not appearing" debug — three
+PRs landed before the actual cause was found, because the symptom
+was never re-verified between fixes.
+
+- **"PR merged" ≠ "server running new code" ≠ "PWA showing new code".**
+  Three independent caches: server build, SW cache, browser HTTP.
+  Before proposing a client-side fix to a deployed-PWA bug,
+  ALWAYS verify the server is current first. Cheapest check:
+
+      curl http://<dev-host>/api/version
+
+  vs. on a master worktree:
+
+      python -c "from nbio.version import static_assets_hash; print(static_assets_hash())"
+
+  Match → debug client. Mismatch → debug the deploy path first.
+- **Dev server uses manual `docker compose build && up -d`, NOT
+  `make upgrade` / `upgrade.sh`.** Don't assume the documented
+  upgrade flow is the one in use — ask.
+- **The SW `updatefound` event is racy against `register()`.**
+  When the browser auto-checks the SW source on navigation, the
+  install can complete BEFORE a JS-level `updatefound` listener
+  attached after `register()` resolves. Hook `controllerchange`
+  on `navigator.serviceWorker` instead — it fires when the new
+  SW claims the page, with no pre-register race. The "Update
+  available · Reload" toast (v1.1.0 → v1.1.1) shipped using
+  `updatefound` and never fired once in production for exactly
+  this reason.
+- **iOS PWAs cache aggressively.** Even with a correct SW update
+  path, plan for a self-heal: HTML-baked
+  `window.NBIO_CONFIG.version` compared to `/api/version` at boot,
+  with a one-shot `sessionStorage`-gated reload on mismatch, is
+  the safety net. Belt-and-braces with the SW path, not a
+  replacement.
+- **Don't ship multiple speculative fixes in series.** Each one
+  costs trust. Verify the symptom resolves between fixes — and
+  if the user reports "still broken", treat their next message
+  as the start of the debug, not "ship another guess".
+
 ## Issue / roadmap
 
 `TODO.md` is the source of truth. Every item links to a GitHub issue;
