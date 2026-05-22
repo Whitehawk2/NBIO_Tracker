@@ -68,7 +68,7 @@ self.addEventListener("fetch", (event) => {
   // Network-first for /api/events GET, fall back to cache
   if (req.method === "GET" && url.pathname.startsWith("/api/events")) {
     event.respondWith(
-      fetch(req).then((r) => {
+      fetch(req, { cache: "reload" }).then((r) => {
         const copy = r.clone();
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         return r;
@@ -77,15 +77,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Network-first for the shell + static assets. Cache only acts as the
-  // offline fallback — when the user is online, every page load picks
-  // up the freshly-deployed app.js / app.css / template HTML. Without
-  // this, PWAs (especially iOS-installed ones) keep serving stale
-  // assets after a deploy because cache-first would short-circuit the
-  // network roundtrip.
+  // Network-first for the shell + static assets. `cache: "reload"` is
+  // the critical bit: a bare `fetch(req)` uses the browser HTTP cache
+  // by default, and FastAPI's StaticFiles mount sends no explicit
+  // Cache-Control header — so Chrome falls back to heuristic caching
+  // (often hours) and the SW happily returns yesterday's app.js. With
+  // `cache: "reload"` the fetch bypasses the HTTP cache entirely on
+  // read but still updates it on response, which is exactly what
+  // "network-first when online, cached when offline" should mean.
   if (req.method === "GET" && (url.pathname === "/" || url.pathname.startsWith("/static/"))) {
     event.respondWith(
-      fetch(req).then((r) => {
+      fetch(req, { cache: "reload" }).then((r) => {
         if (r.ok) {
           const copy = r.clone();
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});

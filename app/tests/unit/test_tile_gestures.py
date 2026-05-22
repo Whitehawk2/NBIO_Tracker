@@ -634,6 +634,127 @@ def test_open_tummy_timer_writes_seconds_not_minutes():
     assert "Math.max(1, Math.floor" not in block, "timer must not clamp <1min sessions to 1 min"
 
 
+def test_register_service_worker_uses_controllerchange_not_updatefound():
+    """
+    The "Update available · Reload" toast never fired in production
+    because `updatefound` is racy against `register()` — the browser
+    can finish installing the new SW BEFORE the JS-side listener
+    attaches. Switched to `controllerchange` on `navigator.serviceWorker`,
+    which fires when the new SW claims the page and is not scoped to
+    the registration object.
+    """
+    src = _src()
+    idx = src.find("function registerServiceWorker(")
+    assert idx >= 0, "registerServiceWorker() not found in app.js"
+    block = src[idx : idx + 600]
+    assert 'addEventListener("controllerchange"' in block, (
+        "registerServiceWorker must listen for `controllerchange` on "
+        "navigator.serviceWorker — `updatefound` is racy and never "
+        "fired in production"
+    )
+    # The dead toast path must be gone (it never worked since inception).
+    assert "showUpdateAvailableToast" not in src, (
+        "showUpdateAvailableToast was dead code — never fired since "
+        "inception because updatefound was attached too late. Remove it."
+    )
+    # And the `updatefound` listener should NOT come back.
+    assert "updatefound" not in block, (
+        "registerServiceWorker must not re-attach the racy `updatefound` "
+        "listener — use `controllerchange` instead"
+    )
+
+
+def test_reload_helper_keys_session_flag_on_server_version():
+    """
+    Critical iOS-PWA fix: sessionStorage on a standalone PWA survives
+    for WEEKS. If the reload-once flag is a single unkeyed name, any
+    prior reload (or v1.1.0 hangover) permanently disarms the self-heal.
+    The flag MUST be keyed on the target server-version hash so a NEW
+    deploy (different hash) re-arms the reload.
+    """
+    src = _src()
+    idx = src.find("function reloadOnceForVersion(")
+    assert idx >= 0, "reloadOnceForVersion(serverVersion) helper not found in app.js"
+    block = src[idx : idx + 500]
+    # Key MUST be suffixed by the server version, not a fixed string.
+    assert '"nbio.sw_reloaded." +' in block or '"nbio.sw_reloaded."+' in block, (
+        "reload flag key must be concatenated with the target serverVersion "
+        "(e.g. `'nbio.sw_reloaded.' + serverVersion`) so a new deploy re-arms"
+    )
+    assert "sessionStorage.getItem(key)" in block, (
+        "reloadOnceForVersion must short-circuit when the keyed flag is already set"
+    )
+    assert "sessionStorage.setItem(key" in block, (
+        "reloadOnceForVersion must set the keyed flag before reloading"
+    )
+    assert "window.location.reload()" in block, (
+        "reloadOnceForVersion must actually trigger window.location.reload()"
+    )
+    # The single-unkeyed-flag form must NOT come back.
+    assert 'sessionStorage.getItem("nbio.sw_reloaded")' not in src, (
+        "the unkeyed `sessionStorage.getItem('nbio.sw_reloaded')` form "
+        "permanently disarms the self-heal on iOS PWAs whose session "
+        "survives for weeks — key on the server-version hash instead"
+    )
+
+
+def test_version_check_compares_api_version_with_baked_hash():
+    """
+    Self-heal safety net: on boot, fetch `/api/version` (bypassing
+    SW + HTTP cache via `cache: 'no-store'`) and compare against
+    `window.NBIO_CONFIG.version`. On mismatch, force one reload via
+    the shared `reloadOnceForVersion` helper. Catches the case where
+    the SW lifecycle is perfectly healthy but the cached HTML loaded
+    by the PWA is older than the server (common iOS PWA quirk).
+    """
+    src = _src()
+    idx = src.find("function checkVersionAndMaybeReload(")
+    assert idx >= 0, "checkVersionAndMaybeReload() not found in app.js"
+    block = src[idx : idx + 800]
+    assert "NBIO_CONFIG" in block and "version" in block, (
+        "self-heal must compare the API response against "
+        "window.NBIO_CONFIG.version (the HTML-baked hash)"
+    )
+    assert "reloadOnceForVersion" in block, (
+        "self-heal must call the shared `reloadOnceForVersion` helper on mismatch"
+    )
+    # The fetch helper (used by both self-heal paths) must bypass caches.
+    fetch_idx = src.find("function fetchServerVersion(")
+    assert fetch_idx >= 0, "fetchServerVersion() helper not found in app.js"
+    fetch_block = src[fetch_idx : fetch_idx + 400]
+    assert '"/api/version"' in fetch_block, (
+        "fetchServerVersion must hit `/api/version` to read the current server hash"
+    )
+    assert 'cache: "no-store"' in fetch_block, (
+        "fetchServerVersion must use `cache: 'no-store'` so the comparison "
+        "doesn't read a stale cached response"
+    )
+    # And the init path must actually invoke the self-heal.
+    assert "checkVersionAndMaybeReload();" in src, (
+        "checkVersionAndMaybeReload() must be called from the init path"
+    )
+
+
+def test_service_worker_register_opts_out_of_http_cache():
+    """
+    `navigator.serviceWorker.register()` must pass `updateViaCache: "none"`.
+    Without it, browsers (notably iOS WebKit) can HTTP-cache the SW
+    source for up to 24h despite our `Cache-Control: no-cache` header
+    — so an installed PWA sits on the OLD sw.js for a day, never even
+    seeing the new bytes that would trigger an install. This is the
+    iOS-PWA-not-updating root cause that the v1.1.2 follow-up addresses.
+    """
+    src = _src()
+    idx = src.find("function registerServiceWorker(")
+    assert idx >= 0, "registerServiceWorker() not found in app.js"
+    block = src[idx : idx + 800]
+    assert 'updateViaCache: "none"' in block, (
+        "navigator.serviceWorker.register must be called with "
+        '`{ updateViaCache: "none" }` to bypass the browser HTTP cache '
+        "on the SW source — without it iOS PWAs cache the SW for 24h"
+    )
+
+
 def test_open_vitd_modal_uses_time_and_notes_only():
     """
     Vit D events only carry `occurred_at` + optional `notes` (no side,

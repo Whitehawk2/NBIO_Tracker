@@ -130,7 +130,7 @@ def test_sw_static_assets_use_network_first(client):
         "static-asset handler must keep a cache.match fallback in its "
         ".catch() so offline still works"
     )
-    fetch_pos = block.find("fetch(req)")
+    fetch_pos = block.find("fetch(req")
     cache_pos = block.find("caches.match(req)")
     assert fetch_pos >= 0, (
         "static-asset handler must call fetch(req) (network-first), not caches.match() first"
@@ -139,4 +139,34 @@ def test_sw_static_assets_use_network_first(client):
         "static-asset handler is cache-first — must be network-first so "
         "deployed updates reach installed PWAs on next reload. "
         f"Found fetch() at offset {fetch_pos}, caches.match() at offset {cache_pos}"
+    )
+
+
+def test_sw_static_fetch_bypasses_http_cache(client):
+    """
+    The SW's `fetch()` for static assets MUST pass `cache: "reload"`.
+    A bare `fetch(req)` uses the default cache mode, which respects
+    the browser HTTP cache. FastAPI's StaticFiles mount sends no
+    Cache-Control header, so Chrome heuristically caches /static/*
+    for hours — and the SW happily returns those stale bytes.
+
+    Symptom: even with the network-first SW shipped, an Android PWA
+    keeps serving yesterday's app.js because the SW's fetch reads
+    from Chrome's HTTP cache instead of going to the server.
+
+    Pin the contract: the static-asset branch must call
+    `fetch(req, { cache: "reload" })` (or equivalent), not bare
+    `fetch(req)`.
+    """
+    r = client.get("/static/sw.js")
+    body = r.text
+    idx = body.find('url.pathname.startsWith("/static/")')
+    assert idx >= 0, "expected a fetch handler branch targeting /static/* in sw.js"
+    block = body[idx : idx + 800]
+    assert 'cache: "reload"' in block, (
+        "static-asset SW fetch must pass `{ cache: 'reload' }` so it "
+        "bypasses the browser HTTP cache. Default cache mode respects "
+        "Chrome's heuristic caching of unsigned /static/* and returns "
+        "stale bytes — defeating network-first. Found block:\n"
+        f"{block[:400]}"
     )

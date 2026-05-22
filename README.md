@@ -807,6 +807,33 @@ Then reload. New writes will queue cleanly.
 - `curl -N http://localhost:8000/api/stream` on the host should show a
   keepalive `: ping` every 20 s and event messages as they happen.
 
+### PWA stuck on an older version after a deploy
+
+The SW lifecycle normally self-heals on the next page load (network-first
+fetch + `controllerchange` auto-reload + `/api/version` HTML self-heal —
+see `app.js`). If a device gets wedged anyway — symptom: visiting the URL
+in another browser (e.g. incognito Chrome) shows the latest UI, the
+installed PWA does not — there's a one-shot escape hatch that does NOT
+lose the IndexedDB outbox of unsynced events:
+
+1. Open the PWA (or any browser pointed at the same tailnet host).
+2. Navigate to `https://<tailnet-host>/recover`.
+3. Tap **Recover**. The page unregisters every service worker and clears
+   Cache Storage, then bounces back to `/` with a cache-bypass reload.
+
+What it touches:
+
+| Storage | Action |
+|---|---|
+| Service worker registrations | unregistered |
+| Cache Storage (`caches`) | cleared |
+| IndexedDB (outbox + settings) | preserved |
+| `localStorage` (theme) | preserved |
+
+The route is uncacheable (`Cache-Control: no-store`) and the page is
+self-contained (no `/static/*` references) so it works even when the SW
+is interposing stale bytes on the rest of the shell.
+
 ### Two phones showing different events
 
 - Confirm both phones are pointing at the same URL (a stale tab from an
