@@ -7,6 +7,16 @@ when done, and tick the item here. The two views are kept in sync manually.
 
 ---
 
+> 🎯 **v1.1.2 in flight (2026-05-22).** PWA self-heal fixes (PR #84:
+> controllerchange auto-reload, network-first SW with `cache: "reload"`,
+> hash-keyed reload flag, `updateViaCache: "none"`, `/recover` escape
+> hatch) — addressed the production-observed "PWA stuck on old chips
+> after deploy" failure mode. Plus
+> [#56](https://github.com/Whitehawk2/NBIO_Tracker/issues/56)
+> pediatrician handoff PDF (`/reports/print` route, print-stylesheet
+> path, A4 portrait, preset windows 7/14/30 days). Tag and ship after
+> #56 merges.
+>
 > 🎯 **v1.1.1 shipped (2026-05-19).** Three small follow-ups: tummy time
 > tracking (banner + quick-log + timer), weight tracking (settings UI +
 > reports chart), breastfeeding default = "both". Partially addresses
@@ -401,8 +411,11 @@ v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/
   Sleep tracking — 6th event type with start/stop sessions *(M)*.
 - 🆕 [#55](https://github.com/Whitehawk2/NBIO_Tracker/issues/55) **P2** ·
   Growth log: weight / length / head-circ with WHO percentile overlay *(M)*.
-- 🆕 [#56](https://github.com/Whitehawk2/NBIO_Tracker/issues/56) **P2** ·
-  Pediatrician handoff: printable PDF / print-stylesheet report *(S)*.
+- ✅ [#56](https://github.com/Whitehawk2/NBIO_Tracker/issues/56) **P2** ·
+  Pediatrician handoff: printable PDF / print-stylesheet report *(S)* —
+  shipping in v1.1.2 via `/reports/print?days={7|14|30}` (Android
+  Chrome → Share → "Save as PDF"). Follow-up: WeasyPrint variant for a
+  real downloadable `.pdf` if a clinician asks for an attachment.
 - 🆕 [#57](https://github.com/Whitehawk2/NBIO_Tracker/issues/57) **P3** ·
   Web Push notifications for late-day vit D nudge *(M)*.
 - 🆕 [#58](https://github.com/Whitehawk2/NBIO_Tracker/issues/58) **P3** ·

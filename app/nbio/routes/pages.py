@@ -3,7 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -541,3 +541,117 @@ def reports(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
             "weight_history": _weight_history_context(conn),
         },
     )
+
+
+PRINT_DAYS_WHITELIST: frozenset[int] = frozenset({7, 14, 30})
+
+
+def _print_daily_rows(
+    totals: list[dict[str, Any]], n: int, today_local: date
+) -> list[dict[str, Any]]:
+    """
+    Pad `daily_totals()` output to exactly N consecutive local days,
+    most-recent first. Days with no events get all-zero rows so the
+    printed report always has N rows regardless of the data.
+
+    Returns each row with: day, label, feed, breast, formula,
+    formula_ml, wee, poo, vitd, tummy_time, tummy_time_min.
+    """
+    by_day = {row["day"]: row for row in totals}
+    rows: list[dict[str, Any]] = []
+    for i in range(n):
+        d = today_local - timedelta(days=i)
+        key = d.isoformat()
+        row = by_day.get(key, {})
+        rows.append(
+            {
+                "day": key,
+                "label": _day_label(d, today_local),
+                "feed": row.get("feed", 0),
+                "breast": row.get("breast", 0),
+                "formula": row.get("formula", 0),
+                "formula_ml": row.get("formula_ml", 0),
+                "wee": row.get("wee", 0),
+                "poo": row.get("poo", 0),
+                "vitd": row.get("vitd", 0),
+                "tummy_time": row.get("tummy_time", 0),
+                "tummy_time_min": row.get("tummy_time_min", 0),
+            }
+        )
+    return rows
+
+
+@router.get("/reports/print", response_class=HTMLResponse)
+def print_report(
+    request: Request,
+    days: int = 14,
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> HTMLResponse:
+    """
+    Pediatrician handoff report (issue #56).
+
+    Renders a self-contained, A4-portrait HTML page intended for
+    Android Chrome's Share -> "Save as PDF" / "Print". Reuses the
+    same aggregation helpers as the live `/reports` view; no new SQL.
+
+    `days` is whitelisted to {7, 14, 30} to match the chip UX on
+    /reports. Anything else returns 400 — narrower than a free
+    range, but the chips are the only entry point and the tests
+    cover that contract.
+
+    `Cache-Control: no-cache` so re-prints reflect fresh data.
+    """
+    if days not in PRINT_DAYS_WHITELIST:
+        raise HTTPException(
+            status_code=400,
+            detail=f"days must be one of {sorted(PRINT_DAYS_WHITELIST)}",
+        )
+
+    now_local = datetime.now().astimezone()
+    today_local = now_local.date()
+    start_local = today_local - timedelta(days=days - 1)
+
+    daily_rows = _print_daily_rows(
+        repo.daily_totals(conn, days=days), n=days, today_local=today_local
+    )
+
+    all_events = repo.list_events(conn, limit=5000)
+    days_list: list[dict[str, Any]] = []
+    for i in range(days):
+        d = today_local - timedelta(days=i)
+        days_list.append(
+            {
+                "day": d.isoformat(),
+                "label": _day_label(d, today_local),
+                "formula_ml": _day_formula_cc(all_events, d.isoformat()),
+                "marks": _timeline_marks(all_events, d.isoformat()),
+                "is_today": i == 0,
+            }
+        )
+
+    baby = repo.baby(conn)
+    latest_weight = repo.growth_latest(conn)
+    app_settings = repo.app_settings_read(conn) or {}
+    notes_raw = app_settings.get("notes_md")
+    notes = notes_raw.strip() if isinstance(notes_raw, str) and notes_raw.strip() else None
+
+    response = templates.TemplateResponse(
+        request,
+        "print_report.html",
+        {
+            "baby": baby,
+            "baby_age": _age_from_dob(baby.get("dob") if baby else None, today_local),
+            "baby_latest_weight_g": latest_weight["weight_g"] if latest_weight else None,
+            "days": days,
+            "start_iso": start_local.isoformat(),
+            "end_iso": today_local.isoformat(),
+            "now_x": (now_local.hour * 3600 + now_local.minute * 60) / 86400.0,
+            "daily_rows": daily_rows,
+            "days_list": days_list,
+            "weight_history": _weight_history_context(conn),
+            "notes": notes,
+            "generated_at": now_local.strftime("%Y-%m-%d %H:%M"),
+        },
+    )
+    response.headers["Cache-Control"] = "no-cache"
+    return response

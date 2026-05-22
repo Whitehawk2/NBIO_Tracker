@@ -307,3 +307,8 @@ audit), #6 (runtime settings), #7 (Nix), #8 (themes).
   offline queue, backup/restore, troubleshooting).
 - `TODO.md` — roadmap.
 - `CONTRIBUTING.md` — TDD policy + dev setup.
+- `/reports/print?days={7|14|30}` — pediatrician-handoff report
+  (issue #56). Self-contained A4-portrait HTML, reuses
+  `_weight_history_context` / `_timeline_marks` / `_day_formula_cc`
+  from `routes/pages.py`. Same self-contained discipline as
+  `/recover`: no `/static/*` refs so a stuck SW can't poison it.
