@@ -95,3 +95,48 @@ def test_sw_activate_claims_clients(client):
         "sw.js activate handler must call self.clients.claim() so the "
         "new SW takes over the open tab"
     )
+
+
+def test_sw_static_assets_use_network_first(client):
+    """
+    Static assets (`/static/*` and `/`) MUST use a network-first fetch
+    strategy with cache as the offline fallback — NOT cache-first.
+
+    Why: cache-first lets a stale `app.js` persist in an installed PWA
+    even after a deploy. Symptom observed in the field: the formula
+    chip set in app.js was updated + deployed, but the PWA kept
+    showing the old chips because cache-first short-circuited the
+    network roundtrip. Network-first guarantees the user picks up the
+    fresh shell on the next page load when online; cache still acts
+    as the offline fallback (its actual job for this PWA).
+
+    Pin the contract: the fetch handler for /static/* must call
+    `fetch(req)` BEFORE `caches.match(req)` — i.e. cache is the
+    `.catch()` branch, not the first branch.
+    """
+    r = client.get("/static/sw.js")
+    body = r.text
+    # Find the fetch-handler block that targets /static/. Pull a slice
+    # large enough to contain its body.
+    idx = body.find('url.pathname.startsWith("/static/")')
+    assert idx >= 0, "expected a fetch handler branch targeting /static/* in sw.js"
+    # The handler body extends until the next closing `return;` at the same
+    # indent — grab a generous window.
+    block = body[idx : idx + 800]
+    # In network-first form, `fetch(req)` is the first call inside
+    # event.respondWith, and `caches.match(req)` only appears inside a
+    # `.catch(...)` continuation. Pin both halves:
+    assert ".catch(" in block and "caches.match(req)" in block, (
+        "static-asset handler must keep a cache.match fallback in its "
+        ".catch() so offline still works"
+    )
+    fetch_pos = block.find("fetch(req)")
+    cache_pos = block.find("caches.match(req)")
+    assert fetch_pos >= 0, (
+        "static-asset handler must call fetch(req) (network-first), not caches.match() first"
+    )
+    assert fetch_pos < cache_pos, (
+        "static-asset handler is cache-first — must be network-first so "
+        "deployed updates reach installed PWAs on next reload. "
+        f"Found fetch() at offset {fetch_pos}, caches.match() at offset {cache_pos}"
+    )
