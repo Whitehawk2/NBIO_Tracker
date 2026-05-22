@@ -122,6 +122,14 @@ TODO.md                     live roadmap, linked to GitHub issues
 - **Branches**: `claude/<slug>`; base on `master`.
 - **Commits**: new commits, never `--amend`. Never `--no-verify`. Never
   skip signing.
+- **Pull requests**: when work on a feature branch is pushed and
+  green, **open the PR immediately** — don't wait to be asked.
+  Use `mcp__github__create_pull_request` (no `gh` CLI in this
+  environment). Title `<type>: <one-line summary>`; body with
+  Summary + Test plan sections matching the format under "Creating
+  pull requests" at the top of this prompt. Skip only if the user
+  explicitly says "don't open a PR" or the change is a tiny
+  docs-only touch they've said they'll merge directly.
 - **Shell**: `#!/usr/bin/env bash` + `set -euo pipefail`. Probe for
   required tools before running them. `shellcheck --severity=warning`
   clean.
