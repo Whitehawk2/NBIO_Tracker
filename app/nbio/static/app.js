@@ -1886,30 +1886,48 @@
    *    that iOS in particular hits — even with a healthy SW lifecycle,
    *    the loaded JS can be older than the server.
    *
-   * Both paths set `sessionStorage["nbio.sw_reloaded"]` before
-   * reloading so a misbehaving deploy can't trap the page in a
-   * reload loop; the flag clears when the tab/PWA fully closes.
+   * Both paths gate on `sessionStorage["nbio.sw_reloaded." + targetHash]`
+   * so a misbehaving deploy can't trap the page in a reload loop, but
+   * a NEW server version (different hash) re-arms the reload. Without
+   * the hash suffix the flag would permanently disarm the self-heal
+   * on iOS standalone PWAs, whose sessionStorage survives for weeks.
    */
-  function reloadOnce() {
-    if (sessionStorage.getItem("nbio.sw_reloaded")) return;
-    sessionStorage.setItem("nbio.sw_reloaded", "1");
+  function reloadOnceForVersion(serverVersion) {
+    const key = "nbio.sw_reloaded." + (serverVersion || "unknown");
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
     window.location.reload();
+  }
+
+  function fetchServerVersion() {
+    return fetch("/api/version", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
   }
 
   function registerServiceWorker() {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.addEventListener("controllerchange", reloadOnce);
-    navigator.serviceWorker.register("/static/sw.js").catch(console.warn);
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      fetchServerVersion().then((data) => {
+        if (data && data.version) reloadOnceForVersion(data.version);
+      });
+    });
+    // `updateViaCache: "none"` opts the SW source out of the browser's
+    // HTTP cache so updates aren't gated on the 24h iOS WebKit cap.
+    // Without this, an installed PWA can sit on a stale SW for a day
+    // even though routes/sw.py sends Cache-Control: no-cache.
+    navigator.serviceWorker
+      .register("/static/sw.js", { updateViaCache: "none" })
+      .catch(console.warn);
   }
 
   function checkVersionAndMaybeReload() {
     const expected = window.NBIO_CONFIG && window.NBIO_CONFIG.version;
     if (!expected) return;
-    fetch("/api/version", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && data.version && data.version !== expected) reloadOnce();
-      })
-      .catch(() => {});
+    fetchServerVersion().then((data) => {
+      if (data && data.version && data.version !== expected) {
+        reloadOnceForVersion(data.version);
+      }
+    });
   }
 })();

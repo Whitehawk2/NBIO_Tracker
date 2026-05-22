@@ -664,25 +664,37 @@ def test_register_service_worker_uses_controllerchange_not_updatefound():
     )
 
 
-def test_reload_once_uses_session_storage_flag():
+def test_reload_helper_keys_session_flag_on_server_version():
     """
-    The shared `reloadOnce` helper sets `sessionStorage["nbio.sw_reloaded"]`
-    before calling `location.reload()` so a misbehaving deploy can't
-    trap the page in an endless reload loop. Flag clears when the
-    tab/PWA fully closes.
+    Critical iOS-PWA fix: sessionStorage on a standalone PWA survives
+    for WEEKS. If the reload-once flag is a single unkeyed name, any
+    prior reload (or v1.1.0 hangover) permanently disarms the self-heal.
+    The flag MUST be keyed on the target server-version hash so a NEW
+    deploy (different hash) re-arms the reload.
     """
     src = _src()
-    idx = src.find("function reloadOnce(")
-    assert idx >= 0, "reloadOnce() helper not found in app.js"
-    block = src[idx : idx + 400]
-    assert 'sessionStorage.getItem("nbio.sw_reloaded")' in block, (
-        "reloadOnce must short-circuit on `sessionStorage['nbio.sw_reloaded']`"
+    idx = src.find("function reloadOnceForVersion(")
+    assert idx >= 0, "reloadOnceForVersion(serverVersion) helper not found in app.js"
+    block = src[idx : idx + 500]
+    # Key MUST be suffixed by the server version, not a fixed string.
+    assert '"nbio.sw_reloaded." +' in block or '"nbio.sw_reloaded."+' in block, (
+        "reload flag key must be concatenated with the target serverVersion "
+        "(e.g. `'nbio.sw_reloaded.' + serverVersion`) so a new deploy re-arms"
     )
-    assert 'sessionStorage.setItem("nbio.sw_reloaded", "1")' in block, (
-        "reloadOnce must set `sessionStorage['nbio.sw_reloaded'] = '1'` before reloading"
+    assert "sessionStorage.getItem(key)" in block, (
+        "reloadOnceForVersion must short-circuit when the keyed flag is already set"
+    )
+    assert "sessionStorage.setItem(key" in block, (
+        "reloadOnceForVersion must set the keyed flag before reloading"
     )
     assert "window.location.reload()" in block, (
-        "reloadOnce must actually trigger `window.location.reload()`"
+        "reloadOnceForVersion must actually trigger window.location.reload()"
+    )
+    # The single-unkeyed-flag form must NOT come back.
+    assert 'sessionStorage.getItem("nbio.sw_reloaded")' not in src, (
+        "the unkeyed `sessionStorage.getItem('nbio.sw_reloaded')` form "
+        "permanently disarms the self-heal on iOS PWAs whose session "
+        "survives for weeks — key on the server-version hash instead"
     )
 
 
@@ -691,29 +703,55 @@ def test_version_check_compares_api_version_with_baked_hash():
     Self-heal safety net: on boot, fetch `/api/version` (bypassing
     SW + HTTP cache via `cache: 'no-store'`) and compare against
     `window.NBIO_CONFIG.version`. On mismatch, force one reload via
-    `reloadOnce`. This catches the case where the SW lifecycle is
-    perfectly healthy but the cached HTML loaded by the PWA is older
-    than the server (common iOS PWA quirk).
+    the shared `reloadOnceForVersion` helper. Catches the case where
+    the SW lifecycle is perfectly healthy but the cached HTML loaded
+    by the PWA is older than the server (common iOS PWA quirk).
     """
     src = _src()
     idx = src.find("function checkVersionAndMaybeReload(")
     assert idx >= 0, "checkVersionAndMaybeReload() not found in app.js"
     block = src[idx : idx + 800]
-    assert '"/api/version"' in block, (
-        "self-heal must hit `/api/version` to read the current server hash"
-    )
-    assert 'cache: "no-store"' in block, (
-        "the version fetch must use `cache: 'no-store'` so the comparison "
-        "doesn't read a stale cached response"
-    )
     assert "NBIO_CONFIG" in block and "version" in block, (
         "self-heal must compare the API response against "
         "window.NBIO_CONFIG.version (the HTML-baked hash)"
     )
-    assert "reloadOnce" in block, "self-heal must call the shared `reloadOnce` helper on mismatch"
+    assert "reloadOnceForVersion" in block, (
+        "self-heal must call the shared `reloadOnceForVersion` helper on mismatch"
+    )
+    # The fetch helper (used by both self-heal paths) must bypass caches.
+    fetch_idx = src.find("function fetchServerVersion(")
+    assert fetch_idx >= 0, "fetchServerVersion() helper not found in app.js"
+    fetch_block = src[fetch_idx : fetch_idx + 400]
+    assert '"/api/version"' in fetch_block, (
+        "fetchServerVersion must hit `/api/version` to read the current server hash"
+    )
+    assert 'cache: "no-store"' in fetch_block, (
+        "fetchServerVersion must use `cache: 'no-store'` so the comparison "
+        "doesn't read a stale cached response"
+    )
     # And the init path must actually invoke the self-heal.
     assert "checkVersionAndMaybeReload();" in src, (
         "checkVersionAndMaybeReload() must be called from the init path"
+    )
+
+
+def test_service_worker_register_opts_out_of_http_cache():
+    """
+    `navigator.serviceWorker.register()` must pass `updateViaCache: "none"`.
+    Without it, browsers (notably iOS WebKit) can HTTP-cache the SW
+    source for up to 24h despite our `Cache-Control: no-cache` header
+    — so an installed PWA sits on the OLD sw.js for a day, never even
+    seeing the new bytes that would trigger an install. This is the
+    iOS-PWA-not-updating root cause that the v1.1.2 follow-up addresses.
+    """
+    src = _src()
+    idx = src.find("function registerServiceWorker(")
+    assert idx >= 0, "registerServiceWorker() not found in app.js"
+    block = src[idx : idx + 800]
+    assert 'updateViaCache: "none"' in block, (
+        "navigator.serviceWorker.register must be called with "
+        '`{ updateViaCache: "none" }` to bypass the browser HTTP cache '
+        "on the SW source — without it iOS PWAs cache the SW for 24h"
     )
 
 
