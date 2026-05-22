@@ -270,6 +270,124 @@ class TestWeightHistoryContext:
         lighter = next(p for p in pts if p["weight_g"] == 3300)
         assert heavier["y"] < lighter["y"]
 
+    def test_axis_labels_present(self, conn):
+        """Reports chart context exposes Y-min/max + X first/last for axis labels."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-01", 3300, "idem-ax-a"),
+            ("2026-05-22", 3500, "idem-ax-b"),
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        # Y axis: padded ±100g range so the line doesn't graze the edges.
+        assert ctx["y_min_g"] == 3300 - 100
+        assert ctx["y_max_g"] == 3500 + 100
+        # Formatted with thousands separator for the rendered label.
+        assert ctx["y_min_str"] == "3,200 g"
+        assert ctx["y_max_str"] == "3,600 g"
+        # X axis: the actual first / last measured_at values, not interpolated.
+        assert ctx["first_date"] == "2026-05-01"
+        assert ctx["last_date"] == "2026-05-22"
+
+    def test_per_day_delta_simple_case(self, conn):
+        """+15 g over 3 days = +5 g/day (whole-number formatting)."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-18", 2880, "idem-pd-a"),
+            ("2026-05-21", 2895, "idem-pd-b"),  # +15g over 3d = +5 g/day
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        latest = ctx["latest"]
+        assert latest["delta_g"] == 15
+        assert latest["delta_per_day_g"] == 5.0
+        assert latest["delta_per_day_str"] == "+5 g/day"
+
+    def test_per_day_delta_fractional(self, conn):
+        """+30 g over 7 days = +4.3 g/day (rounded to 1dp)."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-08", 3300, "idem-pdf-a"),
+            ("2026-05-15", 3330, "idem-pdf-b"),
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        latest = ctx["latest"]
+        assert latest["delta_per_day_g"] == 4.3
+        assert latest["delta_per_day_str"] == "+4.3 g/day"
+
+    def test_per_day_delta_negative(self, conn):
+        """Weight loss surfaces with a negative per-day rate."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        for d, w, idem in [
+            ("2026-05-08", 3500, "idem-pdn-a"),
+            ("2026-05-13", 3450, "idem-pdn-b"),  # -50g over 5d = -10 g/day
+        ]:
+            growth_create(
+                conn,
+                GrowthCreate(
+                    measured_at=d,
+                    weight_g=w,
+                    idempotency_key=idem,
+                    created_by_device="dev",
+                ),
+            )
+        ctx = pages._weight_history_context(conn)
+        latest = ctx["latest"]
+        assert latest["delta_per_day_g"] == -10.0
+        assert latest["delta_per_day_str"] == "-10 g/day"
+
+    def test_per_day_delta_none_for_first_row(self, conn):
+        """First measurement has no prior to compute against."""
+        from nbio.models import GrowthCreate
+        from nbio.repo import growth_create
+
+        growth_create(
+            conn,
+            GrowthCreate(
+                measured_at="2026-05-16",
+                weight_g=3420,
+                idempotency_key="idem-pdf-only",
+                created_by_device="dev",
+            ),
+        )
+        ctx = pages._weight_history_context(conn)
+        latest = ctx["latest"]
+        assert latest["delta_per_day_g"] is None
+        assert latest["delta_per_day_str"] == "—"
+
 
 class TestTummyDurationStr:
     """`_tummy_duration_str` formats tummy event durations for display."""

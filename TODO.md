@@ -20,6 +20,14 @@ when done, and tick the item here. The two views are kept in sync manually.
 > Recommended shortlist: **#54** Sleep tracking + **#63** Vitest JS tests
 > + **#65** GHCR pre-built images, optionally adding **#56** Pediatrician PDF.
 >
+> ⚠️ **P1 next-up**: [#81](https://github.com/Whitehawk2/NBIO_Tracker/issues/81)
+> Reactivity — centralized client router for write requests + SSE echoes.
+> Pi-test surfaced that some POSTs only update part of the screen because
+> every view has its own optimistic-update branch and any new surface has to
+> remember to plug in. Proposed direction: one router on the client where
+> every write + SSE event lands, dispatching to per-page-registered refresh
+> handlers. **Discuss the design before coding.**
+>
 > ⚠️ **P1 hygiene work**: [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78)
 > Test audit — replace hardcoded dates that drift with wall clock. Surfaced
 > by 3 simultaneous CI flakes on 2026-05-19, exactly 3 days after the home
@@ -408,6 +416,10 @@ v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/
 
 ### Engineering quality
 
+- ⚠️ [#81](https://github.com/Whitehawk2/NBIO_Tracker/issues/81) **P1** ·
+  Reactivity: centralized client router for write requests + SSE echoes
+  *(M)*. Pi-test gap: some POSTs only update part of the screen. Discuss
+  the design before coding.
 - ⚠️ [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78) **P1** ·
   Test audit — replace hardcoded dates that depend on wall-clock proximity
   *(S)*. Time-delayed flake risk; CLAUDE.md convention added.

@@ -62,32 +62,58 @@
   <p class="weight-latest">
     Latest: <b>{{ weight_history.latest.weight_str }}</b>
     {% if weight_history.latest.delta_g is not none %}
-      <span class="delta {{ weight_history.latest.delta_class }}">{{ weight_history.latest.delta_str }}</span>
+      <span class="delta {{ weight_history.latest.delta_class }}" data-latest-delta>{{ weight_history.latest.delta_str }}</span>
+      {% if weight_history.latest.delta_per_day_g is not none %}
+        <span class="delta-per-day {{ weight_history.latest.delta_class }}" data-latest-per-day>
+          ({{ weight_history.latest.delta_per_day_str }})
+        </span>
+      {% endif %}
     {% endif %}
     <span class="muted">· {{ weight_history.latest.measured_at }} ({{ weight_history.latest.interval_str }})</span>
   </p>
   {% if weight_history.chart_points | length > 1 %}
-    <svg viewBox="0 0 1000 200" class="weight-chart" preserveAspectRatio="none"
-         aria-label="Weight history chart">
-      <polyline class="weight-line" points="{{ weight_history.polyline }}"
-                fill="none" />
-      {% for p in weight_history.chart_points %}
-        <circle class="weight-dot" cx="{{ p.x }}" cy="{{ p.y }}" r="5">
-          <title>{{ p.date }} · {{ '{:,}'.format(p.weight_g) }} g</title>
-        </circle>
-      {% endfor %}
-    </svg>
+    <div class="weight-chart-wrap" data-weight-chart>
+      <div class="weight-chart-yaxis" aria-hidden="true">
+        <span class="y-tick y-max">{{ weight_history.y_max_str }}</span>
+        <span class="y-tick y-min">{{ weight_history.y_min_str }}</span>
+      </div>
+      <svg viewBox="0 0 1000 200" class="weight-chart" preserveAspectRatio="none"
+           aria-label="Weight history chart (vertical axis: weight in grams; horizontal axis: time)">
+        <line class="weight-gridline" x1="0" y1="0" x2="1000" y2="0" />
+        <line class="weight-gridline" x1="0" y1="200" x2="1000" y2="200" />
+        <polyline class="weight-line" points="{{ weight_history.polyline }}"
+                  fill="none" />
+        {% for p in weight_history.chart_points %}
+          <circle class="weight-dot" cx="{{ p.x }}" cy="{{ p.y }}" r="5">
+            <title>{{ p.date }} · {{ '{:,}'.format(p.weight_g) }} g</title>
+          </circle>
+        {% endfor %}
+      </svg>
+      <div class="weight-chart-xaxis" aria-hidden="true">
+        <span class="x-tick">{{ weight_history.first_date }}</span>
+        <span class="x-tick">{{ weight_history.last_date }}</span>
+      </div>
+    </div>
   {% else %}
     <p class="muted small">Record another weight in a few days to see the trend.</p>
   {% endif %}
   <table class="weight-table">
-    <thead><tr><th>Date</th><th>Weight</th><th>Delta</th><th>Interval</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Weight</th>
+        <th title="Difference from the previous measurement">Δ</th>
+        <th title="Average weight gain per day since the previous measurement (the pediatric metric)">Δ/day</th>
+        <th>Interval</th>
+      </tr>
+    </thead>
     <tbody>
       {% for row in weight_history.rows %}
         <tr>
           <td>{{ row.label }}</td>
           <td>{{ row.weight_str }}</td>
           <td class="delta {{ row.delta_class }}">{{ row.delta_str }}</td>
+          <td class="delta delta-per-day {{ row.delta_class }}">{{ row.delta_per_day_str }}</td>
           <td class="muted">{{ row.interval_str }}</td>
         </tr>
       {% endfor %}

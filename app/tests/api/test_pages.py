@@ -602,6 +602,58 @@ def test_reports_weight_history_table_has_delta_for_subsequent_rows(client):
     assert "delta-up" in r.text
 
 
+def test_reports_weight_chart_renders_axis_labels(client):
+    """Chart wrap exposes Y-min/max + X first/last date labels."""
+    for d, w, idem in [
+        ("2026-05-18", 2880, "idem-rpts-ax1"),
+        ("2026-05-21", 2895, "idem-rpts-ax2"),
+    ]:
+        client.post(
+            "/api/growth",
+            json={
+                "measured_at": d,
+                "weight_g": w,
+                "idempotency_key": idem,
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    assert "weight-chart-wrap" in r.text
+    assert "weight-chart-yaxis" in r.text
+    assert "weight-chart-xaxis" in r.text
+    # Y tick labels carry the padded min/max (±100g).
+    assert "2,780 g" in r.text
+    assert "2,995 g" in r.text
+    # X tick labels are the actual first / last measured_at dates.
+    assert "2026-05-18" in r.text
+    assert "2026-05-21" in r.text
+
+
+def test_reports_weight_table_shows_per_day_delta(client):
+    """The pediatric-relevant per-day rate appears in the table + top callout."""
+    for d, w, idem in [
+        ("2026-05-18", 2880, "idem-rpts-pd1"),
+        ("2026-05-21", 2895, "idem-rpts-pd2"),  # +15g over 3d = +5 g/day
+    ]:
+        client.post(
+            "/api/growth",
+            json={
+                "measured_at": d,
+                "weight_g": w,
+                "idempotency_key": idem,
+                "created_by_device": "device-test",
+            },
+        )
+    r = client.get("/reports")
+    assert r.status_code == 200
+    # New table column header.
+    assert "Δ/day" in r.text
+    # Per-day rate appears in the rendered HTML.
+    assert "+5 g/day" in r.text
+    assert "data-latest-per-day" in r.text
+
+
 def test_reports_heatmap_carries_explainer_text(client):
     """
     The 7-day heatmap had a title but no caption explaining what the
