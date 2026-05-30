@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Build app image
         run: docker buildx build --platform linux/amd64 --load -t nbio-app:ci ./app
       - name: Build backup image
@@ -136,6 +136,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - run: docker buildx build --platform linux/arm64 ./app
       - run: docker buildx build --platform linux/arm64 ./backup
