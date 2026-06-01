@@ -37,6 +37,12 @@ filterwarnings = [
     "ignore::DeprecationWarning:starlette.*",
     "ignore::DeprecationWarning:httpx.*",
     "ignore::DeprecationWarning:websockets.*",
+    # Starlette 1.x added a custom `StarletteDeprecationWarning` (subclass
+    # of Warning, NOT DeprecationWarning) telling users to migrate from
+    # httpx to httpx2 with the TestClient. Until we migrate the dep tree,
+    # suppress all Warning subclasses from starlette.testclient — the
+    # filter above only catches the standard DeprecationWarning path.
+    "ignore::Warning:starlette.testclient",
 ]
 
 [tool.coverage.run]
