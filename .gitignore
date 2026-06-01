@@ -21,3 +21,7 @@ htmlcov/
 # runtime data — never commit
 data/*
 !data/.gitkeep
+
+# JS test harness (issue #63) — Vitest + jsdom + fake-indexeddb
+node_modules/
+coverage/
