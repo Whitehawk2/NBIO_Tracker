@@ -9,6 +9,11 @@
 
   const cfg = window.NBIO_CONFIG;
   const IDB = window.NBIO_IDB;
+  // The DOM-free reactivity dispatch seam (apply-event.js, loaded first). Every
+  // event path routes through applyEvent; the concrete DOM updaters are
+  // registered below (see "applyEvent seam wiring").
+  const APPLY = window.NBIO_APPLY;
+  const applyEvent = APPLY.applyEvent;
 
   // ----- helpers
   const $  = (s, r = document) => r.querySelector(s);
@@ -808,8 +813,7 @@
       idempotency_key: idem,
       _pending: true,
     };
-    insertOrUpdateRow(optimistic);
-    bumpOverviews(optimistic, +1);
+    applyEvent(optimistic, { action: "created", source: "local" });
     rememberOwnIdem(idem);
     closeModal(backdrop);
     haptic(12);
@@ -833,9 +837,9 @@
     // success — reconcile
     if (resp.status === "already_exists") {
       // Server already had it (probably from a prior queued flush). Reconcile silently.
-      replaceOptimistic(idem, resp.event);
+      applyEvent(resp.event, { action: "reconciled", idem });
     } else {
-      replaceOptimistic(idem, resp.event);
+      applyEvent(resp.event, { action: "reconciled", idem });
       if (resp.status === "created_possible_duplicate" && resp.duplicate_of) {
         showDuplicatePrompt(resp.event, resp.duplicate_of);
       }
@@ -853,7 +857,7 @@
       });
       if (r.ok) {
         const data = await r.json();
-        insertOrUpdateRow(data.event);
+        applyEvent(data.event, { action: "updated", source: "local" });
       } else {
         showToast("Couldn't save. Try again.");
       }
@@ -1420,6 +1424,27 @@
     }
   }
 
+  // ----- applyEvent seam wiring (#81 reactivity router)
+  // Register the concrete DOM updaters into the DOM-free dispatch seam
+  // (apply-event.js). Every event path then routes through applyEvent instead
+  // of hand-picking insertOrUpdateRow + bumpOverviews, so a surface added here
+  // becomes reactive on every action. Own-echo suppression stays at the call
+  // sites — callers pass ctx.suppress (see #98 / #93). rowUpdater runs first so
+  // its order matches today's create path (insert then bump); the two updaters
+  // touch disjoint surfaces, so the order is not otherwise observable.
+  function rowUpdater(ev, ctx) {
+    switch (APPLY.rowAction(ctx.action)) {
+      case "remove": removeRow(ev.id); break;
+      case "reconcile": replaceOptimistic(ctx.idem, ev); break;
+      default: insertOrUpdateRow(ev);
+    }
+  }
+  function countUpdater(ev, ctx) {
+    if (APPLY.shouldCount(ctx)) bumpOverviews(ev, ctx.delta);
+  }
+  APPLY.registerUpdater(rowUpdater);
+  APPLY.registerUpdater(countUpdater);
+
   // ----- row gestures: tap = edit, swipe-left = delete, ⋯ = action sheet
   function attachRowGestures(row) {
     if (row.__gesturesAttached) return;
@@ -1670,11 +1695,12 @@
     if (!id || id.startsWith("local:")) return;
     haptic(20);
     const deleted = row.__event;  // capture before removal for the undo path
-    // Remember BEFORE we bump locally — the SSE echo may race us back.
+    // Remember BEFORE we apply locally — the SSE echo may race us back.
     rememberOwnDelete(id);
-    row.classList.add("removing");
-    setTimeout(() => row.remove(), 250);
-    if (deleted) bumpOverviews(deleted, -1);
+    // With the resolved event we drop the row AND decrement; a server-painted
+    // row carries no __event, so (as today) we only remove it, no count change.
+    if (deleted) applyEvent(deleted, { action: "deleted", source: "local" });
+    else removeRow(id);
     try {
       const r = await fetch(`${cfg.eventsUrl}/${id}`, { method: "DELETE" });
       if (!r.ok) throw 0;
@@ -1697,8 +1723,7 @@
         const r = await fetch(`${cfg.eventsUrl}/${id}/undelete`, { method: "POST" });
         if (r.ok) {
           const data = await r.json();
-          insertOrUpdateRow(data.event);
-          bumpOverviews(data.event || deleted, +1);
+          applyEvent(data.event || deleted, { action: "undeleted", source: "local" });
         }
       } catch (_) { /* SSE will reconcile */ }
       t.remove();
@@ -1743,20 +1768,24 @@
         const data = JSON.parse(msg.data);
         if (kind === "deleted") {
           // Suppress own-echo: if the current page initiated this delete,
-          // doSoftDelete already bumped + animated the row out. Bumping
-          // again here would double-decrement the cc total (v1.1.0
-          // regression).
+          // doSoftDelete already decremented + animated the row out. Bumping
+          // again would double-decrement the cc total (v1.1.0 regression).
+          // The wire payload is {id} only, so the count effect needs the
+          // RESOLVED event (row.__event); without it we can only drop the row.
           const ownEchoDel = data.id && ownDeletes.has(String(data.id));
           const row = document.querySelector(`.event-row[data-id="${data.id}"]`);
-          if (!ownEchoDel && row?.__event) bumpOverviews(row.__event, -1);
-          removeRow(data.id);
+          if (row?.__event) {
+            applyEvent(row.__event, { action: "deleted", source: "sse", suppress: ownEchoDel });
+          } else {
+            removeRow(data.id);
+          }
           return;
         }
-        // suppress own-echo bump for created events (we already bumped on POST)
-        const ownEcho = kind === "created" && data.idempotency_key && ownIdems.has(data.idempotency_key);
-        if (kind === "created" && !ownEcho) bumpOverviews(data, +1);
-        if (kind === "undeleted") bumpOverviews(data, +1);
-        insertOrUpdateRow(data);
+        // Own-echo: we already bumped optimistically on the POST, so suppress
+        // the count effect for our own created echo (delta-0 updated and the
+        // unguarded undeleted echo behave exactly as before — see #98).
+        const suppress = kind === "created" && data.idempotency_key && ownIdems.has(data.idempotency_key);
+        applyEvent(data, { action: kind, source: "sse", suppress });
       } catch (_) {}
     };
     sse.addEventListener("event.created",   handle("created"));
@@ -1879,7 +1908,7 @@
           if (!r.ok) continue;
           const data = await r.json();
           await IDB.dequeue(it.idem);
-          if (data.event) replaceOptimistic(it.idem, data.event);
+          if (data.event) applyEvent(data.event, { action: "reconciled", source: "flush", idem: it.idem });
           if (data.status === "created_possible_duplicate" && data.duplicate_of) {
             showDuplicatePrompt(data.event, data.duplicate_of);
           }
