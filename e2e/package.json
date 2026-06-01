@@ -1,0 +1,11 @@
+{
+  "name": "nbio-e2e",
+  "private": true,
+  "description": "Containerized Playwright E2E harness for NBIO Tracker. Runs ONLY inside the Playwright Docker image (CI + local `docker compose -f docker-compose.e2e.yml`); never installed on a developer host. Kept in its own package.json so the repo-root `npm install` (Vitest) never pulls Playwright onto the host.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0"
+  }
+}
