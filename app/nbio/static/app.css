@@ -661,6 +661,48 @@ a { color: var(--accent); text-decoration: none; }
 .chip.selected { background: var(--accent); color: white; border-color: var(--accent); }
 a.chip { text-decoration: none; color: var(--ink); display: inline-flex; align-items: center; }
 
+/* Addition picker (per-device Formula amount mode) */
+.addition-picker { display: flex; flex-direction: column; gap: 10px; }
+.addition-total {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.addition-total-label { font-size: 13px; color: var(--ink-muted); }
+.addition-total-num {
+  font-size: 28px; font-weight: 600; flex: 1; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.addition-reset {
+  appearance: none; background: transparent; border: 1px solid var(--border);
+  color: var(--ink); padding: 6px 10px; border-radius: 999px; font-size: 13px;
+  min-height: 36px; cursor: pointer;
+}
+.addition-reset:active { transform: scale(.96); }
+.addition-add-row .seg:disabled { opacity: .4; }
+/* SET TO… visually distinct from the +N adders — it REPLACES, not adds,
+   so it shouldn't read as just another increment in the grid. */
+.addition-setto-btn {
+  font-weight: 600;
+  grid-column: 1 / -1;
+  border-style: dashed;
+}
+
+/* Picker-mode radio group in Settings -> This device */
+.picker-mode-options { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.picker-mode-option {
+  display: grid; grid-template-columns: auto 1fr; column-gap: 10px;
+  align-items: center; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-elev); cursor: pointer;
+}
+.picker-mode-option input { margin: 0; }
+.picker-mode-name { font-weight: 600; }
+.picker-mode-blurb { grid-column: 2; }
+
 .report-print {
   display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
   margin: 8px 0 12px;

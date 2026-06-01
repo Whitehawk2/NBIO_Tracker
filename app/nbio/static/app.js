@@ -308,9 +308,221 @@
 
   // ----- formula modal (bottle)
   // Mirrors openFeedModal — same time chips + notes + 700ms-hold-to-skip-dup,
-  // but with brand chips (Materna / Nutrilon / Custom) and volume chips
-  // (30…240 cc + Custom) instead of side + duration. Smart-defaults pull
-  // the last formula brand+volume from /api/feeds/last.
+  // plus brand chips and a volume picker. Smart-defaults pull the last
+  // formula brand+volume from /api/feeds/last.
+  //
+  // The volume picker has two per-device modes (Classic chip set vs
+  // Addition running total). Mode lives in
+  // localStorage["nbio.formula_picker_mode"] (read by readFormulaPickerMode).
+  // Each builder appends its UI to `body` and returns an API:
+  //   { getVolume(): number|null, setOnChange(cb): void }
+  // The submit button subscribes to setOnChange to disable itself while
+  // getVolume() is null/0. Both pickers clamp client-side at FORMULA_MAX_ML
+  // because the server rejects formula_volume_ml > 500 — clamping avoids a
+  // 422-on-POST after an optimistic row already landed in the DOM.
+  const FORMULA_MAX_ML = 500;
+  const ADDITION_BTNS_ML = [5, 10, 20, 30, 60, 120];
+
+  function readFormulaPickerMode() {
+    try {
+      const v = localStorage.getItem("nbio.formula_picker_mode");
+      return v === "addition" ? "addition" : "classic";
+    } catch (_) {
+      return "classic";
+    }
+  }
+
+  function buildClassicPicker(body, defaultVolume) {
+    // Finer-grained chips below 60cc keep newborn small-pour feeds
+    // (20-80cc, the common first-month range) off the CUSTOM input.
+    // The operator-set cap hides chips above the ceiling; CUSTOM is
+    // always present so any value stays loggable. See settings.html
+    // "Feeding" section.
+    const ALL_VOL_CHOICES = [20, 30, 40, 50, 60, 70, 80, 90, 120, 150, 180, 210, 240];
+    const cap = (window.NBIO_APP_SETTINGS && window.NBIO_APP_SETTINGS.formula_chip_max_ml) || null;
+    const volChoices = cap ? ALL_VOL_CHOICES.filter((v) => v <= cap) : ALL_VOL_CHOICES;
+
+    let volume = defaultVolume;
+    let changeCb = null;
+    const fire = () => { if (changeCb) changeCb(volume); };
+
+    const volLabel = label("Amount (cc)");
+    const volSeg = document.createElement("div");
+    volSeg.className = "segmented-wrap";
+
+    const customVolInput = document.createElement("input");
+    customVolInput.type = "number";
+    customVolInput.min = "1";
+    customVolInput.max = String(FORMULA_MAX_ML);
+    customVolInput.placeholder = "cc";
+    customVolInput.style.display = "none";
+    if (volume != null && !volChoices.includes(volume)) {
+      customVolInput.value = String(volume);
+      customVolInput.style.display = "";
+    }
+    for (const v of volChoices) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "seg";
+      btn.textContent = `${v}`;
+      btn.dataset.vol = String(v);
+      if (v === volume) btn.classList.add("selected");
+      btn.addEventListener("click", () => {
+        haptic(8);
+        volSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === btn));
+        customVolInput.style.display = "none";
+        volume = v;
+        fire();
+      });
+      volSeg.appendChild(btn);
+    }
+    const customVolBtn = document.createElement("button");
+    customVolBtn.type = "button";
+    customVolBtn.className = "seg";
+    customVolBtn.textContent = "CUSTOM";
+    if (volume != null && !volChoices.includes(volume)) customVolBtn.classList.add("selected");
+    customVolBtn.addEventListener("click", () => {
+      haptic(8);
+      volSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === customVolBtn));
+      customVolInput.style.display = "";
+      volume = parseInt(customVolInput.value, 10) || null;
+      fire();
+      setTimeout(() => customVolInput.focus(), 0);
+    });
+    volSeg.appendChild(customVolBtn);
+    customVolInput.addEventListener("input", () => {
+      const n = parseInt(customVolInput.value, 10);
+      if (isNaN(n) || n < 1) {
+        volume = null;
+      } else if (n > FORMULA_MAX_ML) {
+        // Reflect the clamp so the user isn't silently submitting 500
+        // while the field still reads e.g. 600.
+        volume = FORMULA_MAX_ML;
+        customVolInput.value = String(FORMULA_MAX_ML);
+      } else {
+        volume = n;
+      }
+      fire();
+    });
+    body.append(volLabel, wrapSection(volSeg));
+    body.append(wrapSection(customVolInput));
+
+    return {
+      getVolume: () => volume,
+      setOnChange: (cb) => { changeCb = cb; },
+    };
+  }
+
+  function buildAdditionPicker(body, defaultVolume, isEdit) {
+    // Running-total UX: every add button ADDS, Reset clears to 0,
+    // SET TO… replaces the total outright. SET TO… (not "CUSTOM") is
+    // deliberate: in an additive context "CUSTOM" reads as ADD, but the
+    // input REPLACES — a user typing "5" after building to 90 would log
+    // a 5cc feed. The verb belongs in the label.
+    //
+    // Prefill ONLY on a real edit (existing event id). Smart-default
+    // (last-feed lookup) is intentionally NOT used here: a running
+    // total pre-seeded to 75 reads as "the user already tapped to 75",
+    // which is misleading. In Addition mode the equivalent convenience
+    // is long-press (repeat last feed), so smart-default is redundant.
+    // On edit, the widget label flips to "Editing:" so a loaded value
+    // is never mistaken for a partial build-up.
+    let total = (isEdit && defaultVolume != null && defaultVolume > 0) ? defaultVolume : 0;
+    let changeCb = null;
+
+    const wrap = document.createElement("div");
+    wrap.className = "addition-picker";
+
+    const totalRow = document.createElement("div");
+    totalRow.className = "addition-total";
+    const totalLabel = document.createElement("span");
+    totalLabel.className = "addition-total-label";
+    totalLabel.textContent = isEdit ? "Editing:" : "Total:";
+    const totalNum = document.createElement("span");
+    totalNum.className = "addition-total-num";
+    const resetBtn = document.createElement("button");
+    resetBtn.type = "button";
+    resetBtn.className = "addition-reset";
+    resetBtn.textContent = "↺ Reset";
+    resetBtn.setAttribute("aria-label", "Reset to 0");
+    totalRow.append(totalLabel, totalNum, resetBtn);
+    wrap.appendChild(totalRow);
+
+    const addBtns = [];
+    function render() {
+      totalNum.textContent = `${total} cc`;
+      for (const btn of addBtns) {
+        const v = parseInt(btn.dataset.add, 10);
+        btn.disabled = (total + v > FORMULA_MAX_ML);
+      }
+      if (changeCb) changeCb(total > 0 ? total : null);
+    }
+
+    resetBtn.addEventListener("click", () => {
+      haptic(8);
+      total = 0;
+      render();
+    });
+
+    const addSeg = document.createElement("div");
+    addSeg.className = "segmented-wrap addition-add-row";
+    for (const v of ADDITION_BTNS_ML) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "seg";
+      btn.textContent = `+${v}`;
+      btn.dataset.add = String(v);
+      btn.addEventListener("click", () => {
+        if (total + v > FORMULA_MAX_ML) return;
+        haptic(8);
+        total += v;
+        render();
+      });
+      addSeg.appendChild(btn);
+      addBtns.push(btn);
+    }
+
+    const setToBtn = document.createElement("button");
+    setToBtn.type = "button";
+    setToBtn.className = "seg addition-setto-btn";
+    setToBtn.textContent = "SET TO…";
+
+    const setToInput = document.createElement("input");
+    setToInput.type = "number";
+    setToInput.min = "0";
+    setToInput.max = String(FORMULA_MAX_ML);
+    setToInput.placeholder = "cc";
+    setToInput.inputMode = "numeric";
+    setToInput.style.display = "none";
+
+    setToBtn.addEventListener("click", () => {
+      haptic(8);
+      setToInput.style.display = "";
+      setToInput.value = String(total);
+      setTimeout(() => { setToInput.focus(); setToInput.select(); }, 0);
+    });
+    setToInput.addEventListener("input", () => {
+      const n = parseInt(setToInput.value, 10);
+      total = (!isNaN(n) && n >= 0) ? Math.min(n, FORMULA_MAX_ML) : 0;
+      // render() updates the total numeral + button-disabled state +
+      // onChange. It never touches setToInput.value, so there's no
+      // cursor-jump risk calling it from the input handler.
+      render();
+    });
+
+    addSeg.appendChild(setToBtn);
+    wrap.appendChild(addSeg);
+    wrap.appendChild(wrapSection(setToInput));
+
+    body.append(label("Amount (cc)"), wrap);
+    render();
+
+    return {
+      getVolume: () => (total > 0 ? total : null),
+      setOnChange: (cb) => { changeCb = cb; },
+    };
+  }
+
   async function openFormulaModal(prefill) {
     const backdrop = makeModalShell("🍼 Log formula");
     const body = backdrop.querySelector(".modal-body");
@@ -373,62 +585,12 @@
     body.append(brandLabel, wrapSection(brandSeg));
     body.append(wrapSection(customBrandInput));
 
-    // volume chips
-    const volLabel = label("Amount (cc)");
-    const volSeg = document.createElement("div"); volSeg.className = "segmented-wrap";
-    let volume = defaultVolume;
-    // Volume chips. Increment is fine at 30cc once you're past ~60cc, but
-    // newborns drink in much smaller pours (20-50cc) — finer-grained
-    // chips below 60 keep them off the CUSTOM input for the most common
-    // cases. Two rows of chips wrap on phones via .segmented-wrap.
-    // Full chip set. The 70 + 80 chips fill the ~newborn-to-bottle-feed
-    // transition gap (40-80 cc is the common range for the first month).
-    // The cap from app_settings.formula_chip_max_ml hides everything above
-    // the operator-set ceiling — CUSTOM is always present so any value
-    // is still loggable. See settings.html "Feeding" section.
-    const ALL_VOL_CHOICES = [20, 30, 40, 50, 60, 70, 80, 90, 120, 150, 180, 210, 240];
-    const cap = (window.NBIO_APP_SETTINGS && window.NBIO_APP_SETTINGS.formula_chip_max_ml) || null;
-    const volChoices = cap ? ALL_VOL_CHOICES.filter((v) => v <= cap) : ALL_VOL_CHOICES;
-    const customVolInput = document.createElement("input");
-    customVolInput.type = "number";
-    customVolInput.min = "1"; customVolInput.max = "500"; customVolInput.placeholder = "cc";
-    customVolInput.style.display = "none";
-    if (volume != null && !volChoices.includes(volume)) {
-      customVolInput.value = String(volume);
-      customVolInput.style.display = "";
-    }
-    for (const v of volChoices) {
-      const btn = document.createElement("button");
-      btn.className = "seg";
-      btn.textContent = `${v}`;
-      btn.dataset.vol = String(v);
-      if (v === volume) btn.classList.add("selected");
-      btn.addEventListener("click", () => {
-        haptic(8);
-        volSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === btn));
-        customVolInput.style.display = "none";
-        volume = v;
-      });
-      volSeg.appendChild(btn);
-    }
-    const customVolBtn = document.createElement("button");
-    customVolBtn.className = "seg";
-    customVolBtn.textContent = "CUSTOM";
-    if (volume != null && !volChoices.includes(volume)) customVolBtn.classList.add("selected");
-    customVolBtn.addEventListener("click", () => {
-      haptic(8);
-      volSeg.querySelectorAll(".seg").forEach((x) => x.classList.toggle("selected", x === customVolBtn));
-      customVolInput.style.display = "";
-      volume = parseInt(customVolInput.value, 10) || null;
-      setTimeout(() => customVolInput.focus(), 0);
-    });
-    volSeg.appendChild(customVolBtn);
-    customVolInput.addEventListener("input", () => {
-      const n = parseInt(customVolInput.value, 10);
-      volume = (isNaN(n) || n < 1) ? null : n;
-    });
-    body.append(volLabel, wrapSection(volSeg));
-    body.append(wrapSection(customVolInput));
+    // Volume picker — dispatch on per-device mode from localStorage.
+    const isEdit = !!(prefill && prefill.id);
+    const pickerMode = readFormulaPickerMode();
+    const picker = (pickerMode === "addition")
+      ? buildAdditionPicker(body, defaultVolume, isEdit)
+      : buildClassicPicker(body, defaultVolume);
 
     // notes
     const notesLabel = label("Notes (optional)");
@@ -442,8 +604,38 @@
     let holdTimer = null, holdFired = false;
     submit.addEventListener("touchstart", () => { holdFired = false; holdTimer = setTimeout(() => { holdFired = true; haptic(40); }, 700); });
     submit.addEventListener("touchend",   () => { clearTimeout(holdTimer); });
+    // Subscribe to picker state — Submit stays disabled while the
+    // picker has no volume (Addition mode: total=0; Classic mode:
+    // no chip selected + no custom typed). Initial state set once via
+    // the picker's getVolume(), then maintained by the change callback.
+    picker.setOnChange((v) => { submit.disabled = !v; });
+    submit.disabled = !picker.getVolume();
     submit.addEventListener("click", async () => {
+      const volume = picker.getVolume();
+      if (volume == null || volume <= 0) {
+        // Abort a half-built hold sequence too, so the next genuine
+        // submit doesn't inherit a stale holdFired from this aborted tap.
+        clearTimeout(holdTimer);
+        holdFired = false;
+        showToast("Pick an amount first");
+        return;
+      }
       submit.disabled = true;
+      // Persist intent for the next long-press quick-log. We write
+      // BEFORE the await: even if the POST fails / is queued offline,
+      // the parent's most-recent volume+brand is what we want the
+      // next long-press to repeat. iOS PWA localStorage evicts after
+      // ~7 days idle — the long-press will silently fall back to
+      // opening the modal in that case, which is fine.
+      try {
+        localStorage.setItem("nbio.last_formula_ml", String(volume));
+        // Keep brand in lockstep with volume: if this feed had no brand,
+        // CLEAR the stored brand rather than leaving a stale one. Otherwise
+        // a later long-press would pair this volume with a brand from an
+        // unrelated earlier feed.
+        if (brand) localStorage.setItem("nbio.last_formula_brand", brand);
+        else localStorage.removeItem("nbio.last_formula_brand");
+      } catch (_) { /* private browsing */ }
       await submitForm(backdrop, prefill, {
         type: "formula",
         occurred_at: time.getDate().toISOString(),
@@ -1831,6 +2023,37 @@
             const ts = isoNow();
             submitCreate(makeModalShell(""), { type: "wee", occurred_at: ts, skip_dup_check: false });
             submitCreate(makeModalShell(""), { type: "poo", occurred_at: ts, skip_dup_check: false });
+            return;
+          }
+          // Formula long-press repeats the LAST-USED amount + brand from
+          // localStorage (written on every successful formula submit in
+          // openFormulaModal). If either is missing — fresh install, iOS
+          // eviction, private browsing — fall back to opening the modal
+          // so we never log a 0cc no-brand feed silently. Mode-agnostic:
+          // both Classic and Addition write the same keys on submit.
+          if (type === "formula") {
+            let lastMl = null;
+            let lastBrand = null;
+            try {
+              const rawMl = localStorage.getItem("nbio.last_formula_ml");
+              lastMl = rawMl ? parseInt(rawMl, 10) : null;
+              lastBrand = localStorage.getItem("nbio.last_formula_brand");
+            } catch (_) { /* private browsing: both stay null */ }
+            // Volume is the only required field — brand is optional on a
+            // formula event, so a parent who never sets a brand still gets
+            // one-tap repeat. Only fall back to the modal when there's no
+            // remembered volume at all (fresh install / iOS eviction).
+            if (lastMl && lastMl > 0) {
+              submitCreate(makeModalShell(""), {
+                type: "formula",
+                occurred_at: isoNow(),
+                formula_brand: lastBrand || null,
+                formula_volume_ml: lastMl,
+                skip_dup_check: false,
+              });
+            } else {
+              openFormulaModal({ offsetMin: 0 });
+            }
             return;
           }
           submitCreate(makeModalShell(""), {

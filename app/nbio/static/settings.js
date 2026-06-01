@@ -101,6 +101,37 @@
     });
   }
 
+  // ---------- Formula picker mode (per-device) ----------
+
+  /*
+   * The picker mode toggle is deliberately LOCAL to this device — both
+   * parents can pick independently. NOT PATCHed to /api/settings (that
+   * would force both into one mode). localStorage["nbio.formula_picker_mode"]
+   * is the single source of truth, read here and by openFormulaModal in
+   * app.js.
+   *
+   * /recover does not clear localStorage (verified PR #84). iOS PWA
+   * localStorage eviction after ~7 days of idle is the one quiet
+   * failure mode: the toggle silently reverts to default "classic"
+   * and the operator re-picks Addition in one tap. Acceptable trade.
+   */
+  function wirePickerModeRadios() {
+    const radios = $$("input[name=\"formula_picker_mode\"]");
+    if (!radios.length) return;
+    let current = "classic";
+    try { current = localStorage.getItem("nbio.formula_picker_mode") || "classic"; }
+    catch (_) { /* private browsing: leave default */ }
+    for (const r of radios) {
+      if (r.value === current) r.checked = true;
+      r.addEventListener("change", () => {
+        if (!r.checked) return;
+        try { localStorage.setItem("nbio.formula_picker_mode", r.value); }
+        catch (_) { /* private browsing: nothing to do */ }
+        showToast(r.value === "addition" ? "Addition mode" : "Classic mode");
+      });
+    }
+  }
+
   // ---------- Feeding form ----------
 
   function wireFeedingForm() {
@@ -346,6 +377,7 @@
     wireBabyForm();
     wireFeedingForm();
     wireDeviceForm();
+    wirePickerModeRadios();
     wireThemePicker();
     wireServerInfo();
     wireWeightForm();
