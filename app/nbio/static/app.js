@@ -381,7 +381,14 @@
     // newborns drink in much smaller pours (20-50cc) — finer-grained
     // chips below 60 keep them off the CUSTOM input for the most common
     // cases. Two rows of chips wrap on phones via .segmented-wrap.
-    const volChoices = [20, 30, 40, 50, 60, 90, 120, 150, 180, 210, 240];
+    // Full chip set. The 70 + 80 chips fill the ~newborn-to-bottle-feed
+    // transition gap (40-80 cc is the common range for the first month).
+    // The cap from app_settings.formula_chip_max_ml hides everything above
+    // the operator-set ceiling — CUSTOM is always present so any value
+    // is still loggable. See settings.html "Feeding" section.
+    const ALL_VOL_CHOICES = [20, 30, 40, 50, 60, 70, 80, 90, 120, 150, 180, 210, 240];
+    const cap = (window.NBIO_APP_SETTINGS && window.NBIO_APP_SETTINGS.formula_chip_max_ml) || null;
+    const volChoices = cap ? ALL_VOL_CHOICES.filter((v) => v <= cap) : ALL_VOL_CHOICES;
     const customVolInput = document.createElement("input");
     customVolInput.type = "number";
     customVolInput.min = "1"; customVolInput.max = "500"; customVolInput.placeholder = "cc";
@@ -471,6 +478,47 @@
         type: "wee",
         occurred_at: time.getDate().toISOString(),
         notes: notes.value.trim() || null,
+        skip_dup_check: holdFired,
+      });
+    });
+    body.appendChild(submit);
+    document.body.appendChild(backdrop);
+  }
+
+  // ----- "both" modal: log a wee and a poo at the same time, in one tap
+  //
+  // Real-user feedback (v1.2.0): "the baby does both wee and poo, add a
+  // button below wee/poo to log both?" Cheaper than tapping two tiles.
+  // Sends two POSTs back-to-back with the same occurred_at and the same
+  // notes (poo quality is omitted — use the dedicated tile if you care
+  // about Bristol stool detail). A single undo toast covers both rows.
+  async function openBothModal(prefill) {
+    const backdrop = makeModalShell("💦💩 Log wee + poo");
+    const body = backdrop.querySelector(".modal-body");
+    const time = buildTimeChips(prefill?.offsetMin || 0);
+    body.appendChild(time.el);
+    const notesLabel = label("Notes (optional, applies to both)");
+    const notes = document.createElement("input"); notes.type = "text"; notes.placeholder = "blowout, leaked, …";
+    body.append(notesLabel, wrapSection(notes));
+    const submit = document.createElement("button");
+    submit.className = "btn-primary"; submit.textContent = "Save Both";
+    let holdFired = false, holdTimer = null;
+    submit.addEventListener("touchstart", () => { holdTimer = setTimeout(() => { holdFired = true; haptic(40); }, 700); });
+    submit.addEventListener("touchend",   () => clearTimeout(holdTimer));
+    submit.addEventListener("click", async () => {
+      submit.disabled = true;
+      const occurred_at = time.getDate().toISOString();
+      const n = notes.value.trim() || null;
+      await submitCreate(backdrop, {
+        type: "wee",
+        occurred_at,
+        notes: n,
+        skip_dup_check: holdFired,
+      });
+      await submitCreate(makeModalShell(""), {
+        type: "poo",
+        occurred_at,
+        notes: n,
         skip_dup_check: holdFired,
       });
     });
@@ -1524,6 +1572,15 @@
     sse.addEventListener("event.deleted",   handle("deleted"));
     sse.addEventListener("event.undeleted", handle("undeleted"));
     sse.addEventListener("device.updated", () => { /* future: recolour rows */ });
+    // settings.updated payload includes the full row, so we can apply
+    // it without a follow-up GET. Falls back to refreshAppSettings on
+    // any parse trouble — the source-of-truth fetch is one round-trip.
+    sse.addEventListener("settings.updated", (msg) => {
+      try {
+        const data = JSON.parse(msg.data);
+        window.NBIO_APP_SETTINGS = data;
+      } catch (_) { refreshAppSettings(); }
+    });
   }
   const SYNC_LABELS = {
     connecting: "Connection: connecting",
@@ -1736,6 +1793,7 @@
       formula: openFormulaModal,
       wee: openWeeModal,
       poo: openPooModal,
+      both: openBothModal,
     };
     // Hold-to-quick-log: 3-second timer, cancelled the moment the finger
     // moves more than MOVE_THRESHOLD px (so page-scroll never accidentally
@@ -1764,6 +1822,17 @@
         else if (e.clientX !== undefined) { startX = e.clientX; startY = e.clientY; }
         pressTimer = setTimeout(() => {
           longFired = true; haptic(40);
+          // The "both" tile fires two events back-to-back at the same
+          // instant — long-press skips the modal exactly like the
+          // single-event tiles. Each POST gets its own optimistic row
+          // and own undo toast (which is fine: real-world undo of a
+          // both-tap is rare and the events are independent).
+          if (type === "both") {
+            const ts = isoNow();
+            submitCreate(makeModalShell(""), { type: "wee", occurred_at: ts, skip_dup_check: false });
+            submitCreate(makeModalShell(""), { type: "poo", occurred_at: ts, skip_dup_check: false });
+            return;
+          }
           submitCreate(makeModalShell(""), {
             type,
             occurred_at: isoNow(),
@@ -1827,9 +1896,26 @@
     });
   }
 
+  // ----- app_settings bootstrap
+  // Fetch the singleton app_settings row at boot and store on window
+  // so feature-specific code (e.g. the formula chip cap) can read it
+  // synchronously when the next user interaction happens. Refreshed
+  // by an SSE `settings.updated` listener (see connectSSE). When the
+  // fetch fails (offline), the previous value is kept; on first boot
+  // the default is null which disables capping.
+  async function refreshAppSettings() {
+    try {
+      const r = await fetch("/api/settings", { headers: { "Accept": "application/json" } });
+      if (!r.ok) return;
+      const data = await r.json();
+      window.NBIO_APP_SETTINGS = data.settings || data;
+    } catch (_) { /* offline: keep last known */ }
+  }
+
   // ----- init
   document.addEventListener("DOMContentLoaded", async () => {
     await ensureOnboarded();
+    await refreshAppSettings();
     wireTiles();
     wireExistingRows();
     wireCopySummary();

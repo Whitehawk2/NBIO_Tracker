@@ -654,7 +654,7 @@ def growth_undelete(conn: sqlite3.Connection, growth_id: int) -> dict[str, Any] 
 def app_settings_read(conn: sqlite3.Connection) -> dict[str, Any]:
     """Return the singleton app_settings row. Never None — seeded by migration 002."""
     r = conn.execute(
-        "SELECT id, tz, notes_md, updated_at FROM app_settings WHERE id = 1"
+        "SELECT id, tz, notes_md, formula_chip_max_ml, updated_at FROM app_settings WHERE id = 1"
     ).fetchone()
     assert r is not None, "app_settings id=1 missing — migration 002 didn't run?"
     return dict(r)

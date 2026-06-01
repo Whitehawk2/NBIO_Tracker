@@ -46,6 +46,28 @@
     </div>
   </details>
 
+  <details name="settings-tab" class="settings-section" data-section="feeding">
+    <summary>Feeding</summary>
+    <form id="feeding-form" autocomplete="off" novalidate>
+      <div class="field">
+        <label class="modal-label" for="formula-chip-max-ml">
+          Cap the formula amount chips (cc)
+        </label>
+        <input id="formula-chip-max-ml" name="formula_chip_max_ml" type="number"
+               min="10" max="500" step="10" inputmode="numeric"
+               placeholder="No cap"
+               value="{{ app_settings.formula_chip_max_ml or '' }}">
+        <p class="muted small">
+          Hides chips above this value on the formula quick-log row.
+          E.g. 80 if the baby usually takes 40&ndash;80 cc. Leave blank
+          to show all chips (20 to 240). CUSTOM is always available so
+          any amount is still loggable.
+        </p>
+      </div>
+      <button type="submit" class="btn-primary">Save</button>
+    </form>
+  </details>
+
   <details name="settings-tab" class="settings-section" data-section="device">
     <summary>This device</summary>
     <form id="device-form" autocomplete="off" novalidate>

@@ -35,10 +35,18 @@ os.environ.setdefault("DB_PATH", str(Path(tempfile.gettempdir()) / "nbio-test-li
 
 
 def _apply_schema(conn: sqlite3.Connection) -> None:
-    """Apply the production schema to a connection and seed baby id=1."""
+    """Apply the production schema + pending migrations and seed baby id=1.
+
+    Migrations run after SCHEMA so the test fixture matches what
+    `db.init_db()` produces in prod — otherwise SCHEMA-only fixtures
+    would lack columns added by ALTER-style migrations that aren't
+    duplicated into SCHEMA (e.g. formula_chip_max_ml from migration 007).
+    """
     from nbio.db import SCHEMA
+    from nbio.migrations import apply_pending
 
     conn.executescript(SCHEMA)
+    apply_pending(conn)
     row = conn.execute("SELECT id FROM babies LIMIT 1").fetchone()
     if row is None:
         conn.execute("INSERT INTO babies (id, name) VALUES (1, 'Test Baby')")

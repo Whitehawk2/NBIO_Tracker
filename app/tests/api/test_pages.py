@@ -223,14 +223,15 @@ def test_settings_baby_section_includes_weight_subsection_populated(client):
     assert "Update weight" in r.text
 
 
-def test_settings_page_has_five_sections(client):
-    """Five `<details>` tabs: Baby / This device / Display / Data / System."""
+def test_settings_page_has_six_sections(client):
+    """Six `<details>` tabs: Baby / Feeding / This device / Display / Data /
+    System. Feeding was added in v1.2.0 for the formula chip cap."""
     r = client.get("/settings")
     assert r.status_code == 200
-    for label in ("Baby", "This device", "Display", "Data", "System"):
+    for label in ("Baby", "Feeding", "This device", "Display", "Data", "System"):
         assert f">{label}</summary>" in r.text, f"missing settings tab: {label}"
-    # Five `<details>` elements total, all in the same exclusive-open group.
-    assert r.text.count('<details name="settings-tab"') == 5
+    # Six `<details>` elements total, all in the same exclusive-open group.
+    assert r.text.count('<details name="settings-tab"') == 6
 
 
 def test_settings_display_has_three_theme_cards(client):

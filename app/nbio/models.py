@@ -68,6 +68,12 @@ class AppSettingsUpdate(BaseModel):
     # overrides for bucketing + display until cleared.
     tz: str | None = Field(default=None)
     notes_md: str | None = Field(default=None, max_length=2000)
+    # Caps the top amount on the formula quick-log chip row. None = no
+    # cap (full 20/30/.../240 set). Set this to e.g. 80 when the baby
+    # currently takes 40-80 cc so the larger chips don't crowd the row.
+    # CUSTOM is always present, so any value above the cap is still
+    # loggable. ge/le bracket the sane range for a phone tile.
+    formula_chip_max_ml: int | None = Field(default=None, ge=10, le=500)
 
     @field_validator("tz")
     @classmethod
