@@ -43,6 +43,16 @@ async function postEvent(ev) {
   return r.json();
 }
 
+async function postGrowth(g) {
+  const r = await fetch(`${BASE_URL}/api/growth`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ created_by_device: "seed-parent-a", ...g }),
+  });
+  if (!r.ok) throw new Error(`seed growth -> ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
 // An ISO-8601 UTC timestamp at hour `h` *today*. Daytime hours keep each seed
 // clear of a local-midnight boundary so its own day bucket is stable. NOTE: the
 // reactivity spec asserts these land in "today" relative to its OWN runtime
@@ -66,10 +76,15 @@ module.exports = async () => {
   // than the 3-day window — the #93 trap).
   const seeds = [
     { type: "breast", feed_side: "both", feed_duration_min: 15, occurred_at: todayAtUTC(8), idempotency_key: "seed-breast-0800" },
+    { type: "vitd", occurred_at: todayAtUTC(7), idempotency_key: "seed-vitd-0700" },
     { type: "formula", formula_volume_ml: 60, formula_brand: "Materna", occurred_at: todayAtUTC(9), idempotency_key: "seed-formula-0900" },
     { type: "wee", occurred_at: todayAtUTC(10), idempotency_key: "seed-wee-1000" },
     { type: "poo", poo_quality: 4, occurred_at: todayAtUTC(11), idempotency_key: "seed-poo-1100" },
     { type: "formula", formula_volume_ml: 60, formula_brand: "Materna", occurred_at: todayAtUTC(12), idempotency_key: "seed-formula-1200" },
   ];
   for (const s of seeds) await postEvent(s);
+
+  // A baseline weight so the header chip renders; the G1 growth-SSE gap spec
+  // reads this value then asserts a partner update reaches it. measured_at is a DATE.
+  await postGrowth({ weight_g: 3420, measured_at: new Date().toISOString().slice(0, 10), idempotency_key: "seed-growth-w0" });
 };
