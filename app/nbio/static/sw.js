@@ -24,6 +24,7 @@ const SHELL = [
   "/",
   "/static/app.css",
   "/static/app.js",
+  "/static/apply-event.js",
   "/static/idb.js",
   "/static/manifest.webmanifest",
   "/static/icons/icon-192.png",

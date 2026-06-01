@@ -84,6 +84,10 @@
      code missing). sw.js's fetch handler uses `ignoreSearch: true` on
      caches.match so offline still resolves to the precached bare URL. #}
   <script src="/static/idb.js?v={{ static_assets_hash() }}"></script>
+  {# apply-event.js (the reactivity dispatch seam) must load BEFORE app.js so
+     window.NBIO_APPLY exists when app.js registers its DOM updaters. Non-defer,
+     like idb.js, so it runs ahead of the deferred app.js. #}
+  <script src="/static/apply-event.js?v={{ static_assets_hash() }}"></script>
   <script src="/static/app.js?v={{ static_assets_hash() }}" defer></script>
   {# Service worker registration happens inside app.js. `version`
      above is compared with /api/version at boot to force a one-shot
