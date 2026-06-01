@@ -469,7 +469,12 @@ def test_open_edit_for_dispatches_vitd_to_its_own_modal():
     src = _src()
     idx = src.find("async function openEditFor(")
     assert idx >= 0, "openEditFor() function not found in app.js"
-    block = src[idx : idx + 1500]
+    # Bound to openEditFor's own body (its 2-space-indented closing brace) so the
+    # assertions below match the dispatch CALL inside the function, never the
+    # `function openVitdModal(` definition further down — and so this test needs
+    # no re-tuning as openEditFor grows.
+    end = src.find("\n  }", idx)
+    block = src[idx : end if end > idx else idx + 2000]
     assert 'full.type === "vitd"' in block, (
         "openEditFor must branch on `full.type === 'vitd'` so vit D rows don't "
         "open the poo modal (production bug: tapping a vit D row showed the poo "
