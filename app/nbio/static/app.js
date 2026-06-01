@@ -1925,7 +1925,13 @@
   async function bumpPending() {
     const n = await IDB.countOutbox();
     updatePendingBadge(n);
-    setSyncState("offline");
+    // Only claim "offline" when something is actually queued. bumpPending runs
+    // at init (right after connectSSE) and its `await countOutbox()` can resolve
+    // AFTER the SSE onopen sets "connected" — an unconditional setState here
+    // clobbered that back to a misleading "offline" until the next state change
+    // (stuck on slow first connects; flaked the e2e SSE barrier). Mirrors
+    // flushOutbox, which also only goes offline when items remain.
+    if (n > 0) setSyncState("offline");
   }
   function updatePendingBadge(n) {
     const el = $("#sync-pending");
