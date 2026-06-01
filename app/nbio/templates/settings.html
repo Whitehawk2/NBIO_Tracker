@@ -63,6 +63,11 @@
           to show all chips (20 to 240). CUSTOM is always available so
           any amount is still loggable.
         </p>
+        <p class="muted small">
+          Applies to <b>Classic mode only</b>. Addition mode ignores
+          the cap. Mode is set in the &ldquo;This device&rdquo; section
+          below.
+        </p>
       </div>
       <button type="submit" class="btn-primary">Save</button>
     </form>
@@ -83,6 +88,39 @@
       </div>
       <button type="submit" class="btn-primary">Save</button>
     </form>
+
+    {# Formula amount picker mode is per-device — each parent picks
+       independently. Lives in localStorage["nbio.formula_picker_mode"];
+       changes are NOT PATCHed to /api/settings (that would force both
+       parents into the same mode). Sits in "This device" alongside
+       name/colour because that's the home for per-device prefs. #}
+    <div class="field" id="formula-picker-mode-field">
+      <p class="modal-label">Formula amount picker</p>
+      <div class="picker-mode-options" role="radiogroup"
+           aria-label="Formula amount picker mode">
+        <label class="picker-mode-option">
+          <input type="radio" name="formula_picker_mode" value="classic">
+          <span class="picker-mode-name">Classic</span>
+          <span class="picker-mode-blurb muted small">
+            Tap one of 20&ndash;240 cc chips, or CUSTOM. Honours the
+            cap above.
+          </span>
+        </label>
+        <label class="picker-mode-option">
+          <input type="radio" name="formula_picker_mode" value="addition">
+          <span class="picker-mode-name">Addition</span>
+          <span class="picker-mode-blurb muted small">
+            Running total. Tap +5, +10, +20, +30, +60, +120 to build
+            up. Reset to zero, SET TO&hellip; for exact values. Ignores
+            the cap.
+          </span>
+        </label>
+      </div>
+      <p class="muted small">
+        Saved on <b>this phone only</b>. Mum and Dad can pick
+        differently.
+      </p>
+    </div>
   </details>
 
   <details name="settings-tab" class="settings-section" data-section="display">
