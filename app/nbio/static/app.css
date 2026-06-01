@@ -664,7 +664,7 @@ a.chip { text-decoration: none; color: var(--ink); display: inline-flex; align-i
 /* Addition picker (per-device Formula amount mode) */
 .addition-picker { display: flex; flex-direction: column; gap: 10px; }
 .addition-total {
-  display: flex; align-items: baseline; justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
   padding: 8px 12px;
   background: var(--bg-elev);
@@ -683,7 +683,13 @@ a.chip { text-decoration: none; color: var(--ink); display: inline-flex; align-i
 }
 .addition-reset:active { transform: scale(.96); }
 .addition-add-row .seg:disabled { opacity: .4; }
-.addition-setto-btn { font-weight: 600; }
+/* SET TO… visually distinct from the +N adders — it REPLACES, not adds,
+   so it shouldn't read as just another increment in the grid. */
+.addition-setto-btn {
+  font-weight: 600;
+  grid-column: 1 / -1;
+  border-style: dashed;
+}
 
 /* Picker-mode radio group in Settings -> This device */
 .picker-mode-options { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }

@@ -127,7 +127,7 @@
         if (!r.checked) return;
         try { localStorage.setItem("nbio.formula_picker_mode", r.value); }
         catch (_) { /* private browsing: nothing to do */ }
-        showToast("Picker mode: " + r.value);
+        showToast(r.value === "addition" ? "Addition mode" : "Classic mode");
       });
     }
   }

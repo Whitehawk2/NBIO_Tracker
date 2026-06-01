@@ -308,22 +308,18 @@
 
   // ----- formula modal (bottle)
   // Mirrors openFeedModal — same time chips + notes + 700ms-hold-to-skip-dup,
-  // but with brand chips (Materna / Nutrilon / Custom) and volume chips
-  // (30…240 cc + Custom) instead of side + duration. Smart-defaults pull
-  // the last formula brand+volume from /api/feeds/last.
-  /*
-   * Formula amount pickers — Classic (chip set + cap) vs Addition
-   * (running total). The mode lives per-device in
-   * localStorage["nbio.formula_picker_mode"] (read by readFormulaPickerMode
-   * below). Each builder appends its UI to `body` and returns an API:
-   *   { getVolume(): number|null, setOnChange(cb): void }
-   * The submit button in openFormulaModal subscribes to setOnChange to
-   * disable itself when getVolume() returns null/0.
-   *
-   * IMPORTANT: the server caps formula_volume_ml at le=500 (models.py).
-   * Both pickers clamp client-side to avoid producing 422-on-POST after
-   * an optimistic row already landed in the DOM.
-   */
+  // plus brand chips and a volume picker. Smart-defaults pull the last
+  // formula brand+volume from /api/feeds/last.
+  //
+  // The volume picker has two per-device modes (Classic chip set vs
+  // Addition running total). Mode lives in
+  // localStorage["nbio.formula_picker_mode"] (read by readFormulaPickerMode).
+  // Each builder appends its UI to `body` and returns an API:
+  //   { getVolume(): number|null, setOnChange(cb): void }
+  // The submit button subscribes to setOnChange to disable itself while
+  // getVolume() is null/0. Both pickers clamp client-side at FORMULA_MAX_ML
+  // because the server rejects formula_volume_ml > 500 — clamping avoids a
+  // 422-on-POST after an optimistic row already landed in the DOM.
   const FORMULA_MAX_ML = 500;
   const ADDITION_BTNS_ML = [5, 10, 20, 30, 60, 120];
 
@@ -337,15 +333,11 @@
   }
 
   function buildClassicPicker(body, defaultVolume) {
-    // Volume chips. Increment is fine at 30cc once you're past ~60cc, but
-    // newborns drink in much smaller pours (20-50cc) — finer-grained
-    // chips below 60 keep them off the CUSTOM input for the most common
-    // cases. Two rows of chips wrap on phones via .segmented-wrap.
-    // Full chip set. The 70 + 80 chips fill the ~newborn-to-bottle-feed
-    // transition gap (40-80 cc is the common range for the first month).
-    // The cap from app_settings.formula_chip_max_ml hides everything above
-    // the operator-set ceiling — CUSTOM is always present so any value
-    // is still loggable. See settings.html "Feeding" section.
+    // Finer-grained chips below 60cc keep newborn small-pour feeds
+    // (20-80cc, the common first-month range) off the CUSTOM input.
+    // The operator-set cap hides chips above the ceiling; CUSTOM is
+    // always present so any value stays loggable. See settings.html
+    // "Feeding" section.
     const ALL_VOL_CHOICES = [20, 30, 40, 50, 60, 70, 80, 90, 120, 150, 180, 210, 240];
     const cap = (window.NBIO_APP_SETTINGS && window.NBIO_APP_SETTINGS.formula_chip_max_ml) || null;
     const volChoices = cap ? ALL_VOL_CHOICES.filter((v) => v <= cap) : ALL_VOL_CHOICES;
@@ -400,7 +392,16 @@
     volSeg.appendChild(customVolBtn);
     customVolInput.addEventListener("input", () => {
       const n = parseInt(customVolInput.value, 10);
-      volume = (isNaN(n) || n < 1) ? null : Math.min(n, FORMULA_MAX_ML);
+      if (isNaN(n) || n < 1) {
+        volume = null;
+      } else if (n > FORMULA_MAX_ML) {
+        // Reflect the clamp so the user isn't silently submitting 500
+        // while the field still reads e.g. 600.
+        volume = FORMULA_MAX_ML;
+        customVolInput.value = String(FORMULA_MAX_ML);
+      } else {
+        volume = n;
+      }
       fire();
     });
     body.append(volLabel, wrapSection(volSeg));
@@ -414,16 +415,19 @@
 
   function buildAdditionPicker(body, defaultVolume, isEdit) {
     // Running-total UX: every add button ADDS, Reset clears to 0,
-    // SET TO… replaces the total outright. SET TO… is the relabel of
-    // CUSTOM in Addition mode to disambiguate the verb — agent-flagged
-    // footgun: in additive context "CUSTOM" reads as ADD, but the
-    // input REPLACES, so a user typing "5" after building to 90 would
-    // log a 5cc feed.
+    // SET TO… replaces the total outright. SET TO… (not "CUSTOM") is
+    // deliberate: in an additive context "CUSTOM" reads as ADD, but the
+    // input REPLACES — a user typing "5" after building to 90 would log
+    // a 5cc feed. The verb belongs in the label.
     //
-    // Edit prefill: opening an existing 75cc event sets total=75 and
-    // labels the widget "Editing" instead of "Total" so the user knows
-    // the value is loaded, not a partial build-up.
-    let total = (defaultVolume != null && defaultVolume > 0) ? defaultVolume : 0;
+    // Prefill ONLY on a real edit (existing event id). Smart-default
+    // (last-feed lookup) is intentionally NOT used here: a running
+    // total pre-seeded to 75 reads as "the user already tapped to 75",
+    // which is misleading. In Addition mode the equivalent convenience
+    // is long-press (repeat last feed), so smart-default is redundant.
+    // On edit, the widget label flips to "Editing:" so a loaded value
+    // is never mistaken for a partial build-up.
+    let total = (isEdit && defaultVolume != null && defaultVolume > 0) ? defaultVolume : 0;
     let changeCb = null;
 
     const wrap = document.createElement("div");
@@ -470,7 +474,7 @@
       btn.dataset.add = String(v);
       btn.addEventListener("click", () => {
         if (total + v > FORMULA_MAX_ML) return;
-        haptic(6);
+        haptic(8);
         total += v;
         render();
       });
@@ -499,15 +503,11 @@
     });
     setToInput.addEventListener("input", () => {
       const n = parseInt(setToInput.value, 10);
-      if (!isNaN(n) && n >= 0) total = Math.min(n, FORMULA_MAX_ML);
-      else total = 0;
-      // Re-render but don't recurse into the input value (avoid cursor jumps)
-      totalNum.textContent = `${total} cc`;
-      for (const btn of addBtns) {
-        const v = parseInt(btn.dataset.add, 10);
-        btn.disabled = (total + v > FORMULA_MAX_ML);
-      }
-      if (changeCb) changeCb(total > 0 ? total : null);
+      total = (!isNaN(n) && n >= 0) ? Math.min(n, FORMULA_MAX_ML) : 0;
+      // render() updates the total numeral + button-disabled state +
+      // onChange. It never touches setToInput.value, so there's no
+      // cursor-jump risk calling it from the input handler.
+      render();
     });
 
     addSeg.appendChild(setToBtn);
@@ -613,6 +613,10 @@
     submit.addEventListener("click", async () => {
       const volume = picker.getVolume();
       if (volume == null || volume <= 0) {
+        // Abort a half-built hold sequence too, so the next genuine
+        // submit doesn't inherit a stale holdFired from this aborted tap.
+        clearTimeout(holdTimer);
+        holdFired = false;
         showToast("Pick an amount first");
         return;
       }
@@ -625,7 +629,12 @@
       // opening the modal in that case, which is fine.
       try {
         localStorage.setItem("nbio.last_formula_ml", String(volume));
+        // Keep brand in lockstep with volume: if this feed had no brand,
+        // CLEAR the stored brand rather than leaving a stale one. Otherwise
+        // a later long-press would pair this volume with a brand from an
+        // unrelated earlier feed.
         if (brand) localStorage.setItem("nbio.last_formula_brand", brand);
+        else localStorage.removeItem("nbio.last_formula_brand");
       } catch (_) { /* private browsing */ }
       await submitForm(backdrop, prefill, {
         type: "formula",
@@ -2030,11 +2039,15 @@
               lastMl = rawMl ? parseInt(rawMl, 10) : null;
               lastBrand = localStorage.getItem("nbio.last_formula_brand");
             } catch (_) { /* private browsing: both stay null */ }
-            if (lastMl && lastMl > 0 && lastBrand) {
+            // Volume is the only required field — brand is optional on a
+            // formula event, so a parent who never sets a brand still gets
+            // one-tap repeat. Only fall back to the modal when there's no
+            // remembered volume at all (fresh install / iOS eviction).
+            if (lastMl && lastMl > 0) {
               submitCreate(makeModalShell(""), {
                 type: "formula",
                 occurred_at: isoNow(),
-                formula_brand: lastBrand,
+                formula_brand: lastBrand || null,
                 formula_volume_ml: lastMl,
                 skip_dup_check: false,
               });

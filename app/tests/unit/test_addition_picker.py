@@ -33,6 +33,7 @@ QA checklist.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -235,20 +236,25 @@ def test_app_js_long_press_handler_has_formula_branch(app_js):
 
 
 def test_app_js_formula_submit_writes_last_used(app_js):
-    """On every successful formula submit (either mode) the volume and
-    brand must be persisted to localStorage so the next long-press has
-    something to read. Pin the setItem calls' presence on the same key
-    names the long-press reads."""
-    # The persistence helper / inline code must call setItem with both
-    # keys. We pin both setItem calls AND the key names.
-    assert "localStorage.setItem" in app_js, (
-        "app.js must call localStorage.setItem for the last-used cache"
+    """On a successful formula submit the volume must be persisted to
+    localStorage so the next long-press has something to repeat. Pin
+    the actual setItem call on the ml key (not just that setItem
+    appears somewhere in the 2000-line file)."""
+    assert re.search(r"""setItem\(\s*["']nbio\.last_formula_ml["']""", app_js), (
+        "app.js must call localStorage.setItem('nbio.last_formula_ml', ...) "
+        "on formula submit so long-press can repeat the last amount"
     )
-    # Both keys must appear in a setItem context. We do a softer check:
-    # the keys exist (we asserted that elsewhere) and setItem is called.
-    # The combined invariant is that some setItem call uses these keys,
-    # which is hard to pin via regex without false negatives. We rely
-    # on the QA checklist for behavioural validation.
+
+
+def test_app_js_formula_submit_keeps_brand_in_lockstep(app_js):
+    """Brand must track volume: set when present, REMOVED when absent.
+    Otherwise a no-brand feed leaves a stale brand that the next
+    long-press would wrongly pair with the new volume."""
+    assert re.search(r"""removeItem\(\s*["']nbio\.last_formula_brand["']""", app_js), (
+        "app.js must removeItem('nbio.last_formula_brand') when a formula "
+        "is logged without a brand — otherwise long-press pairs the new "
+        "volume with a stale brand from an earlier feed"
+    )
 
 
 # --- client-side cap clamp + last-used eviction note -----------------------
@@ -271,4 +277,19 @@ def test_app_js_addition_picker_respects_server_volume_cap(app_js):
     body = app_js[add_idx : add_idx + 3000]
     assert "FORMULA_MAX_ML" in body, (
         "buildAdditionPicker must reference FORMULA_MAX_ML to clamp the running total at 500cc"
+    )
+
+
+def test_app_js_addition_picker_ignores_cap(app_js):
+    """The operator-set chip cap (formula_chip_max_ml) is a Classic-mode
+    concept only — the Addition picker must NOT reference it. This is the
+    headline behavioural promise of the mode split, so pin that the cap
+    field never appears inside buildAdditionPicker."""
+    add_idx = app_js.find("function buildAdditionPicker")
+    assert add_idx > 0
+    next_fn = app_js.find("\n  function ", add_idx + 1)
+    body = app_js[add_idx : next_fn if next_fn > 0 else add_idx + 3000]
+    assert "formula_chip_max_ml" not in body, (
+        "buildAdditionPicker must not read formula_chip_max_ml — the cap "
+        "applies to Classic mode only. Addition mode ignores it by design."
     )
