@@ -448,10 +448,19 @@ v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/
 - ⚠️ [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78) **P1** ·
   Test audit — replace hardcoded dates that depend on wall-clock proximity
   *(S)*. Time-delayed flake risk; CLAUDE.md convention added.
+- 🆕 [#94](https://github.com/Whitehawk2/NBIO_Tracker/issues/94) **P2** ·
+  E2E test foundation: containerized Playwright harness + seeded app +
+  gated CI *(M)*. Chromium mobile-emulation; host never installs Playwright
+  (container in CI, MCP plugin for dev). The base #62 builds on.
 - 🆕 [#62](https://github.com/Whitehawk2/NBIO_Tracker/issues/62) **P2** ·
-  Playwright E2E: happy-path + offline-flush + SSE *(M)*.
-- 🆕 [#63](https://github.com/Whitehawk2/NBIO_Tracker/issues/63) **P2** ·
-  Vitest JS unit tests: idb.js, helpers, optimistic dict *(S)*.
+  Playwright E2E: happy-path + offline-flush + SSE *(M)* — the three
+  scenarios that run on the #94 harness.
+- 🆕 [#95](https://github.com/Whitehawk2/NBIO_Tracker/issues/95) **P3** ·
+  Real-device E2E tier: Playwright `_android` / AVD smoke for SW + install
+  fidelity *(M)*. Parked follow-up to #94 — real-device byte-cache class.
+- ✅ [#63](https://github.com/Whitehawk2/NBIO_Tracker/issues/63) **P2** ·
+  Vitest JS unit tests: idb.js, helpers, optimistic dict *(S)* — shipped via
+  PR #92 (Vitest + jsdom + fake-indexeddb harness).
 - 🆕 [#64](https://github.com/Whitehawk2/NBIO_Tracker/issues/64) **P3** ·
   Move `sse.broker` singleton onto `app.state` *(S)*.
 - 🆕 [#68](https://github.com/Whitehawk2/NBIO_Tracker/issues/68) **P3** ·

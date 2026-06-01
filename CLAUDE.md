@@ -151,17 +151,38 @@ TODO.md                     live roadmap, linked to GitHub issues
 
 ## Dev quickstart
 
+Python env — use whichever installer your machine has. Real `pip` (this is
+what CI and the web sandbox use):
+
 ```bash
 pip install -e ./app[dev]
+```
+
+…or, if `pip` is unavailable or aliased to something that can't do an
+editable library install (e.g. `pipx`), provision the same deps with `uv` —
+it creates a project-local `app/.venv`:
+
+```bash
+cd app && uv venv && source .venv/bin/activate && uv pip install -e '.[dev]'
+```
+
+Then run the suites:
+
+```bash
 cd app
-TZ=UTC python -m pytest                   # full suite (212 tests, ~30s)
+TZ=UTC python -m pytest                   # full suite (785 tests, ~50s)
 TZ=UTC python -m pytest --cov-report=html # drill into coverage misses
 ruff check nbio tests
 ruff format --check nbio tests
 mypy nbio --ignore-missing-imports
+
+cd ..                                     # repo root
+npm install && npm test                   # JS/PWA suite — Vitest, 8 tests
 ```
 
 `TZ=UTC` matters — the timezone-dependent helpers read the process tz.
+The 5 `tests/shell/*shellcheck*` tests **skip** unless `shellcheck` is on
+PATH; install it to run the full 785 (otherwise it's 780 passed + 5 skipped).
 
 Stack ops (any time):
 

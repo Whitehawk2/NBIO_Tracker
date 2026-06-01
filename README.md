@@ -917,14 +917,19 @@ Should not happen with WAL + `busy_timeout=5000` and two writers. If it does:
   ```bash
   cd app
   pip install -e .[dev]
+  # If your `pip` can't do an editable install (e.g. it's aliased to pipx),
+  # use uv instead — same deps, project-local venv:
+  #   uv venv && source .venv/bin/activate && uv pip install -e '.[dev]'
   DB_PATH=/tmp/nbio.db TZ=Europe/London \
     uvicorn nbio.main:app --reload --host 0.0.0.0 --port 8000
   ```
 - The schema is created on first boot from `app/nbio/db.py`. No migrations
   framework in v1 — additive changes are safe; destructive changes need a
   manual `ALTER`.
-- **Tests**: full suite at `app/tests/` — `cd app && TZ=UTC python -m pytest`.
-  Coverage gate is **90%+** (current: 100%). See
+- **Tests**: Python suite at `app/tests/` — `cd app && TZ=UTC python -m pytest`
+  (785 tests; the 5 `tests/shell/` shellcheck tests skip without `shellcheck`
+  on PATH). JS/PWA suite via Vitest — `npm install && npm test` from the repo
+  root (8 tests). Coverage gate is **90%+** (current: 100%). See
   [`CONTRIBUTING.md`](CONTRIBUTING.md) for the TDD policy and the layout.
 - **CI**: GitHub Actions runs lint (ruff), type (mypy), test (pytest
   matrix 3.12 + 3.13), shell (shellcheck + setup.sh dry-run), js
