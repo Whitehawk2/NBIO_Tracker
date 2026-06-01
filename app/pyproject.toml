@@ -37,6 +37,15 @@ filterwarnings = [
     "ignore::DeprecationWarning:starlette.*",
     "ignore::DeprecationWarning:httpx.*",
     "ignore::DeprecationWarning:websockets.*",
+    # Starlette 1.x raises a custom StarletteDeprecationWarning (subclass
+    # of UserWarning, NOT DeprecationWarning) telling users to migrate
+    # from httpx to httpx2 with the TestClient. The warn() call uses
+    # stacklevel=2, so the warning is attributed to fastapi.testclient
+    # (the importer), not starlette.testclient — a module filter on
+    # starlette.* doesn't catch it. Match by message instead so we don't
+    # depend on the attributed module or on the class being importable
+    # in older starlette environments.
+    "ignore:Using .httpx. with .starlette\\.testclient. is deprecated",
 ]
 
 [tool.coverage.run]

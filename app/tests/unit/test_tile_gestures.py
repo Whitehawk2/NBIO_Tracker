@@ -362,17 +362,25 @@ def test_formula_volume_chips_cover_newborn_small_pours():
     Pin the smaller chips so they don't silently get dropped.
     """
     src = _src()
-    m = re.search(r"volChoices\s*=\s*\[([^\]]+)\]", src)
-    assert m, "volChoices array literal not found in app.js"
+    # v1.2.0 renamed the unfiltered literal from `volChoices` to
+    # `ALL_VOL_CHOICES` (with `volChoices` now a filtered view honouring
+    # the operator-set `formula_chip_max_ml` cap). Same role, same
+    # contract — the unfiltered set must include every useful pour.
+    m = re.search(r"ALL_VOL_CHOICES\s*=\s*\[([^\]]+)\]", src)
+    assert m, "ALL_VOL_CHOICES array literal not found in app.js"
     values = [int(v.strip()) for v in m.group(1).split(",") if v.strip()]
     # All three newborn-pour values must be in the chip set.
     for n in (20, 40, 50):
         assert n in values, f"formula chip {n}cc missing — newborn quick-log lacks granularity"
+    # 70 + 80 were added in v1.2.0 to cover the 40-80 newborn range
+    # without forcing CUSTOM entry on every feed.
+    for n in (70, 80):
+        assert n in values, f"v1.2.0 chip {n}cc missing — newborn 40-80 range crowded out"
     # Existing useful values must remain.
     for n in (30, 60, 90, 120, 150, 180, 210, 240):
         assert n in values, f"existing chip {n}cc must remain"
     # Chips must be sorted ascending so they render in a natural order.
-    assert values == sorted(values), f"volChoices must be sorted ascending: got {values}"
+    assert values == sorted(values), f"ALL_VOL_CHOICES must be sorted ascending: got {values}"
 
 
 def test_app_js_has_wire_vitd_banner():

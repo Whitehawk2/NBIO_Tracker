@@ -101,6 +101,24 @@
     });
   }
 
+  // ---------- Feeding form ----------
+
+  function wireFeedingForm() {
+    const form = $("#feeding-form");
+    if (!form) return;
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = form.querySelector("#formula-chip-max-ml");
+      const raw = (input?.value || "").trim();
+      // Empty input clears the cap (null in DB = show all chips). A
+      // numeric value goes through as int; validation lives server-side
+      // in AppSettingsUpdate (ge=10, le=500).
+      const payload = { formula_chip_max_ml: raw === "" ? null : parseInt(raw, 10) };
+      const out = await submitJson("/api/settings", "PATCH", payload);
+      if (out) showToast("Feeding saved");
+    });
+  }
+
   // ---------- Device form ----------
 
   const COLORS = ["#4F8BFF", "#9B6BFF", "#3AB974", "#E08AAE", "#E0A040", "#E25D5D"];
@@ -326,6 +344,7 @@
   document.addEventListener("DOMContentLoaded", () => {
     wireSettingsTabs();
     wireBabyForm();
+    wireFeedingForm();
     wireDeviceForm();
     wireThemePicker();
     wireServerInfo();

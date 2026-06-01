@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS app_settings (
     notes_md    TEXT,
     updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+-- formula_chip_max_ml added by migration 007 (not here): there is no
+-- table-rebuild migration on app_settings to strip the SCHEMA-added
+-- column back out the way migration 001 does for events, so adding
+-- it here would clash with migration 007's ALTER ADD COLUMN on fresh
+-- installs. Source of truth is migration 007.
 INSERT OR IGNORE INTO app_settings (id) VALUES (1);
 
 CREATE TABLE IF NOT EXISTS growth (

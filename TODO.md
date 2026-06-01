@@ -7,15 +7,27 @@ when done, and tick the item here. The two views are kept in sync manually.
 
 ---
 
-> 🎯 **v1.1.2 in flight (2026-05-22).** PWA self-heal fixes (PR #84:
+> 🎯 **v1.2.0 in flight (2026-06-01).** First post-v1.1.2 iteration
+> driven by real-user feedback from production:
+> (a) tile-grid reorder — formula above breast since current parents
+> formula-feed primarily;
+> (b) formula chip set gains 70 + 80 cc (the 40-80 newborn range was
+> previously CUSTOM-only) and a new `app_settings.formula_chip_max_ml`
+> setting caps the top amount shown so 120-240 cc chips don't crowd
+> the row before the baby grows into them (CUSTOM always present);
+> (c) new "Both" tile that logs a wee + a poo with the same
+> `occurred_at` in one tap. Settings page gets a new "Feeding"
+> section for the cap. SSE `settings.updated` propagates the cap
+> change to the other parent's tab without reload. Migration 007
+> adds the column.
+>
+> 🎯 **v1.1.2 shipped (2026-05-22).** PWA self-heal fixes (PR #84:
 > controllerchange auto-reload, network-first SW with `cache: "reload"`,
 > hash-keyed reload flag, `updateViaCache: "none"`, `/recover` escape
-> hatch) — addressed the production-observed "PWA stuck on old chips
-> after deploy" failure mode. Plus
+> hatch). Plus
 > [#56](https://github.com/Whitehawk2/NBIO_Tracker/issues/56)
 > pediatrician handoff PDF (`/reports/print` route, print-stylesheet
-> path, A4 portrait, preset windows 7/14/30 days). Tag and ship after
-> #56 merges.
+> path, A4 portrait, preset windows 7/14/30 days).
 >
 > 🎯 **v1.1.1 shipped (2026-05-19).** Three small follow-ups: tummy time
 > tracking (banner + quick-log + timer), weight tracking (settings UI +

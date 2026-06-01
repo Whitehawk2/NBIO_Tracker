@@ -78,10 +78,13 @@ def post_001_db():
 
 
 def test_migration_002_creates_app_settings_table(post_001_db):
-    """app_settings must exist with the documented columns after running 002."""
+    """app_settings must exist with the documented columns after running
+    the migration chain. `apply_pending` walks ALL migrations, so the
+    final shape includes the columns added by later migrations too
+    (e.g. formula_chip_max_ml from 007)."""
     apply_pending(post_001_db, MIGRATIONS_DIR)
     cols = {row["name"] for row in post_001_db.execute("PRAGMA table_info(app_settings)")}
-    assert cols == {"id", "tz", "notes_md", "updated_at"}, (
+    assert cols == {"id", "tz", "notes_md", "formula_chip_max_ml", "updated_at"}, (
         f"unexpected app_settings columns: {cols}"
     )
 
