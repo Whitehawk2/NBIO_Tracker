@@ -1,0 +1,48 @@
+# Containerized E2E stack. Brings up the app on an ephemeral SQLite DB and runs
+# the Playwright suite against it from a second container. Playwright is never
+# installed on the host — the browsers live in the pinned image.
+#
+#   docker compose -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e
+#   docker compose -f docker-compose.e2e.yml down -v
+services:
+  app:
+    build: ./app
+    environment:
+      # Ephemeral DB on the container's own tmpfs — nothing bind-mounted, so
+      # every run starts from a fresh schema (init_db seeds baby id=1).
+      DB_PATH: /tmp/nbio_e2e.db
+      # One var sets BOTH the process tz and settings.tz, aligning server-day
+      # with the browser-day the spec pins (timezoneId: UTC).
+      TZ: UTC
+      # Disable the 120s duplicate window so seeds + the test POST never return
+      # created_possible_duplicate (which would fire the client's dup prompt).
+      DUP_WINDOW_SECONDS: "0"
+      BABY_NAME: E2E Baby
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      # Cold runner needs time to import FastAPI + run init_db (schema +
+      # migrations + WAL pragmas) before /healthz answers; failures inside the
+      # start_period don't count against retries.
+      start_period: 10s
+    # No host port published: container-to-container over the compose network
+    # is all the e2e service needs, and it avoids host port conflicts.
+
+  e2e:
+    build: ./e2e
+    # Share the app's network namespace so the browser reaches it on
+    # http://localhost:8000. Chrome's HTTPS-Upgrades exempts localhost/IP origins
+    # (but NOT compose hostnames like `app`), so this sidesteps the http->https
+    # auto-upgrade that fails with ERR_SSL_PROTOCOL_ERROR against the plain-HTTP
+    # app — robustly, without depending on Chrome feature-flag names.
+    network_mode: "service:app"
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      BASE_URL: http://localhost:8000
+      CI: "1"
