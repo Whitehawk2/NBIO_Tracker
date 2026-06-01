@@ -93,7 +93,16 @@ self.addEventListener("fetch", (event) => {
           caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
         return r;
-      }).catch(() => caches.match(req).then((cached) => cached || caches.match("/")))
+      }).catch(() =>
+        // `ignoreSearch: true` so a hash-busted request like
+        // `/static/app.js?v=NEWHASH` still resolves to the
+        // precached `/static/app.js` when offline. Hash-busting
+        // (see base.html) is the durable fix for stale-JS-with-
+        // fresh-HTML; this option keeps offline working with it.
+        caches.match(req, { ignoreSearch: true }).then(
+          (cached) => cached || caches.match("/", { ignoreSearch: true })
+        )
+      )
     );
     return;
   }

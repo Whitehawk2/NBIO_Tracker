@@ -126,12 +126,15 @@ def test_sw_static_assets_use_network_first(client):
     # In network-first form, `fetch(req)` is the first call inside
     # event.respondWith, and `caches.match(req)` only appears inside a
     # `.catch(...)` continuation. Pin both halves:
-    assert ".catch(" in block and "caches.match(req)" in block, (
-        "static-asset handler must keep a cache.match fallback in its "
+    # Match `caches.match(req)` or `caches.match(req, { ignoreSearch: true })`
+    # — both are valid network-first offline fallbacks. v1.2.0 added the
+    # ignoreSearch variant to support hash-busted /static/*?v=<hash> URLs.
+    assert ".catch(" in block and "caches.match(req" in block, (
+        "static-asset handler must keep a caches.match fallback in its "
         ".catch() so offline still works"
     )
     fetch_pos = block.find("fetch(req")
-    cache_pos = block.find("caches.match(req)")
+    cache_pos = block.find("caches.match(req")
     assert fetch_pos >= 0, (
         "static-asset handler must call fetch(req) (network-first), not caches.match() first"
     )

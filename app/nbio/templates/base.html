@@ -12,7 +12,7 @@
   <link rel="manifest" href="/static/manifest.webmanifest">
   <link rel="apple-touch-icon" href="/static/icons/apple-touch.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/static/icons/icon-192.png">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ static_assets_hash() }}">
   <script>
     // Bootstrap theme + dark mode before paint to avoid flash.
     // Theme is per-device (localStorage); dark is per-clock + system pref.
@@ -73,8 +73,18 @@
       version: "{{ static_assets_hash() }}"
     };
   </script>
-  <script src="/static/idb.js"></script>
-  <script src="/static/app.js" defer></script>
+  {# Hash-bust the script/style URLs with the current static hash so a
+     stale SW that caches `/static/app.js` (bare URL) doesn't continue
+     serving yesterday's JS after a deploy. Each deploy bumps the hash,
+     the URL changes, and any cache anywhere (SW caches.match, browser
+     HTTP cache) misses → falls through to network → fresh JS. This is
+     the durable fix for the PR-#84 self-heal blind spot: that self-heal
+     only catches fresh-JS-with-stale-HTML; this catches the symmetric
+     fresh-HTML-with-stale-JS failure mode (UI partial visible, handler
+     code missing). sw.js's fetch handler uses `ignoreSearch: true` on
+     caches.match so offline still resolves to the precached bare URL. #}
+  <script src="/static/idb.js?v={{ static_assets_hash() }}"></script>
+  <script src="/static/app.js?v={{ static_assets_hash() }}" defer></script>
   {# Service worker registration happens inside app.js. `version`
      above is compared with /api/version at boot to force a one-shot
      reload when the loaded HTML is older than the server. #}

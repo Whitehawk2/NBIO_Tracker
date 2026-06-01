@@ -288,6 +288,21 @@ was never re-verified between fixes.
   hash (`nbio.sw_reloaded.<hash>`) — iOS standalone PWA sessions
   survive for weeks, and an unkeyed flag permanently disarms the
   self-heal after any single prior reload.
+- **The version-mismatch self-heal has a blind spot: fresh-HTML-
+  with-stale-JS.** PR-#84's `checkVersionAndMaybeReload()` compares
+  `window.NBIO_CONFIG.version` (baked into HTML when rendered)
+  against `/api/version`. When the SW serves *fresh HTML* (network-
+  first) but *stale JS* (cached), both hashes are the current server
+  hash — the comparison succeeds and the page does NOT reload. Symptom:
+  new UI partials are visible but their JS handlers do nothing
+  (v1.2.0 "Both" tile incident). Fix: hash-bust the script/style
+  URLs (`/static/app.js?v={{ static_assets_hash() }}`). Each deploy
+  bumps the hash, the URL changes, and every cache layer misses on
+  the new URL → forced network fetch → fresh JS. `sw.js` uses
+  `caches.match(req, { ignoreSearch: true })` on the offline-fallback
+  path so precached bare URLs still satisfy hash-busted requests.
+  Existing PWAs that were wedged *before* the hash-bust shipped need
+  one `/recover` per phone to escape; from then on, deploys "just work".
 - **Don't ship multiple speculative fixes in series.** Each one
   costs trust. Verify the symptom resolves between fixes — and
   if the user reports "still broken", treat their next message
