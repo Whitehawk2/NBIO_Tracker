@@ -97,14 +97,21 @@ jobs:
           grep -q '^APP_BIND=127.0.0.1$' .env
 
   js:
-    name: js (node --check)
+    name: js (vitest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Syntax-check every static JS file
+          cache: npm
+      - name: Install JS dev deps
+        run: npm install
+      - name: Syntax-check every production static JS file
+        # node --check is cheap; keep it as a fast pre-check before the
+        # heavier vitest run. Catches mis-edits that vitest's parser
+        # would also catch, but reports them per-file with clearer
+        # output before the test runner spins up.
         run: |
           set -e
           shopt -s nullglob
@@ -112,6 +119,8 @@ jobs:
             echo "checking $f"
             node --check "$f"
           done
+      - name: Vitest (jsdom + fake-indexeddb)
+        run: npm test
 
   docker:
     name: docker (buildx amd64 + compose)
