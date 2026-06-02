@@ -4,7 +4,7 @@
       <span class="emoji" aria-hidden="true">🍼</span>
       <span class="label">FORMULA</span>
     </div>
-    <div class="tile-ago" id="ago-formula">
+    <div class="tile-ago" id="ago-formula"{% if today.last.formula %} data-last-id="{{ today.last.formula.id }}"{% endif %}>
       {% if today.last.formula %}
         <span data-rel="{{ today.last.formula.occurred_at }}">{{ today.last.formula.occurred_at | relative }}</span>
         {% if today.last.formula.formula_brand %}
