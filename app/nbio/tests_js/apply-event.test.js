@@ -233,3 +233,78 @@ describe("NBIO_APPLY.isNewerGrowth", () => {
     expect(window.NBIO_APPLY.isNewerGrowth({ measured_at: "2026-06-01", id: 6 }, last)).toBe(false);
   });
 });
+
+// ----- G4: last-of-each today-card cells (upsert-only; #93 owns delete-recompute)
+describe("NBIO_APPLY.laneForType", () => {
+  it("maps both feed types to the combined 'feed' lane", () => {
+    expect(window.NBIO_APPLY.laneForType("breast")).toBe("feed");
+    expect(window.NBIO_APPLY.laneForType("formula")).toBe("feed");
+  });
+  it("maps wee/poo to their own lane", () => {
+    expect(window.NBIO_APPLY.laneForType("wee")).toBe("wee");
+    expect(window.NBIO_APPLY.laneForType("poo")).toBe("poo");
+  });
+  it("has no lane for banner-only or unknown types", () => {
+    expect(window.NBIO_APPLY.laneForType("vitd")).toBe(null);
+    expect(window.NBIO_APPLY.laneForType("tummy_time")).toBe(null);
+    expect(window.NBIO_APPLY.laneForType("nope")).toBe(null);
+  });
+});
+
+describe("NBIO_APPLY.lastCellWins", () => {
+  it("accepts any candidate into an empty cell (no current key)", () => {
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T10:00:00Z", id: 1 }, null)).toBe(true);
+  });
+  it("accepts a strictly newer occurred_at, rejects an older one", () => {
+    const cur = { occurred_at: "2026-06-02T10:00:00Z", id: 5 };
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T10:05:00Z", id: 2 }, cur)).toBe(true);
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T09:55:00Z", id: 9 }, cur)).toBe(false);
+  });
+  it("same occurred_at: accepts same-or-higher id (re-render / newer same-instant), rejects lower", () => {
+    const cur = { occurred_at: "2026-06-02T10:00:00Z", id: 7 };
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T10:00:00Z", id: 7 }, cur)).toBe(true);
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T10:00:00Z", id: 8 }, cur)).toBe(true);
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T10:00:00Z", id: 6 }, cur)).toBe(false);
+  });
+  it("same occurred_at with a fresh server cell (id absent): accepts (re-render)", () => {
+    const cur = { occurred_at: "2026-06-02T10:00:00Z", id: null };
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T10:00:00Z", id: 3 }, cur)).toBe(true);
+  });
+  it("same occurred_at: an optimistic 'local:' current id ACCEPTS the real server echo (unsticks the cell — a raw >= would compute 42 >= NaN => false)", () => {
+    const at = "2026-06-02T10:00:00Z";
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: at, id: 42 }, { occurred_at: at, id: "local:abc" })).toBe(true);
+    // ...and an optimistic incoming id over a real current id also accepts (our own render is harmless).
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: at, id: "local:x" }, { occurred_at: at, id: 42 })).toBe(true);
+  });
+  it("same occurred_at: real ids compare numerically across string/number (dataset attrs stringify ids)", () => {
+    const at = "2026-06-02T10:00:00Z";
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: at, id: 43 }, { occurred_at: at, id: "42" })).toBe(true);
+    expect(window.NBIO_APPLY.lastCellWins({ occurred_at: at, id: 41 }, { occurred_at: at, id: "42" })).toBe(false);
+  });
+  it("is idempotent for the same event (own-echo re-apply is a no-op render)", () => {
+    const ev = { occurred_at: "2026-06-02T10:00:00Z", id: 4 };
+    expect(window.NBIO_APPLY.lastCellWins(ev, { occurred_at: ev.occurred_at, id: ev.id })).toBe(true);
+  });
+});
+
+describe("NBIO_APPLY.lastSuffix (PLAIN TEXT — caller renders via textContent, never innerHTML)", () => {
+  it("feed: ' · side · N min', dropping absent parts", () => {
+    expect(window.NBIO_APPLY.lastSuffix("feed", { feed_side: "left", feed_duration_min: 12 })).toBe(" · left · 12 min");
+    expect(window.NBIO_APPLY.lastSuffix("feed", { feed_side: "both" })).toBe(" · both");
+    expect(window.NBIO_APPLY.lastSuffix("feed", {})).toBe("");
+  });
+  it("wee: notes only", () => {
+    expect(window.NBIO_APPLY.lastSuffix("wee", { notes: "big one" })).toBe(" · big one");
+    expect(window.NBIO_APPLY.lastSuffix("wee", {})).toBe("");
+  });
+  it("poo: ' · type Q · notes'", () => {
+    expect(window.NBIO_APPLY.lastSuffix("poo", { poo_quality: "4", notes: "soft" })).toBe(" · type 4 · soft");
+    expect(window.NBIO_APPLY.lastSuffix("poo", { poo_quality: "4" })).toBe(" · type 4");
+    expect(window.NBIO_APPLY.lastSuffix("poo", {})).toBe("");
+  });
+  it("returns RAW text (markup chars not escaped) — proving it's data, not HTML", () => {
+    // The cell is built with createTextNode/textContent, so escaping happens at
+    // render. lastSuffix must NOT pre-escape (that would double-encode).
+    expect(window.NBIO_APPLY.lastSuffix("wee", { notes: "a<b & c" })).toBe(" · a<b & c");
+  });
+});
