@@ -42,13 +42,11 @@ when done, and tick the item here. The two views are kept in sync manually.
 > Recommended shortlist: **#54** Sleep tracking + **#63** Vitest JS tests
 > + **#65** GHCR pre-built images, optionally adding **#56** Pediatrician PDF.
 >
-> ⚠️ **P1 next-up**: [#81](https://github.com/Whitehawk2/NBIO_Tracker/issues/81)
-> Reactivity — centralized client router for write requests + SSE echoes.
-> Pi-test surfaced that some POSTs only update part of the screen because
-> every view has its own optimistic-update branch and any new surface has to
-> remember to plug in. Proposed direction: one router on the client where
-> every write + SSE event lands, dispatching to per-page-registered refresh
-> handlers. **Discuss the design before coding.**
+> ✅ **#81 reactivity DONE** (Milestone B, 2026-06): the `applyEvent` dispatch
+> seam IS the "centralized client router" — every write + SSE echo lands in one
+> fan-out to registered updaters. Audit #97 → seam #99 → G3 #100 → badge #101 →
+> G1 #102 → G4 #103 → tile captions #104, plus offline-flush (this PR). Remaining
+> reactivity threads tracked separately: hybrid event store #93, tz-skew #105.
 >
 > ⚠️ **P1 hygiene work**: [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78)
 > Test audit — replace hardcoded dates that drift with wall clock. Surfaced
@@ -421,8 +419,10 @@ v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/
 
 - 🆕 [#54](https://github.com/Whitehawk2/NBIO_Tracker/issues/54) **P1** ·
   Sleep tracking — 6th event type with start/stop sessions *(M)*.
-- 🆕 [#55](https://github.com/Whitehawk2/NBIO_Tracker/issues/55) **P2** ·
-  Growth log: weight / length / head-circ with WHO percentile overlay *(M)*.
+- ✅ [#55](https://github.com/Whitehawk2/NBIO_Tracker/issues/55) **P2** ·
+  Growth log: weight / length / head-circ with WHO percentile overlay *(M)* —
+  issue closed (weight tracking shipped v1.1.1; length / head_circ + WHO
+  percentiles, if wanted, would be a fresh issue).
 - ✅ [#56](https://github.com/Whitehawk2/NBIO_Tracker/issues/56) **P2** ·
   Pediatrician handoff: printable PDF / print-stylesheet report *(S)* —
   shipping in v1.1.2 via `/reports/print?days={7|14|30}` (Android
@@ -441,10 +441,17 @@ v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/
 
 ### Engineering quality
 
-- ⚠️ [#81](https://github.com/Whitehawk2/NBIO_Tracker/issues/81) **P1** ·
-  Reactivity: centralized client router for write requests + SSE echoes
-  *(M)*. Pi-test gap: some POSTs only update part of the screen. Discuss
-  the design before coding.
+- ✅ [#81](https://github.com/Whitehawk2/NBIO_Tracker/issues/81) **P1** ·
+  Reactivity: centralized client router for write requests + SSE echoes *(M)* —
+  DONE via the Milestone B `applyEvent` seam (#99) + the verified gap fixes
+  (G3 #100, G1 #102, G4 #103, tile captions #104) + offline-flush (this PR).
+  Issue closed. Follow-on threads: hybrid store #93, tz-skew #105.
+- 🆕 [#105](https://github.com/Whitehawk2/NBIO_Tracker/issues/105) **P2** ·
+  Reactivity: tz-skew day-bucketing + server tz inconsistency *(M)*. Client
+  buckets event-days in browser tz; server `data-day` keys use process tz while
+  counts use `settings.tz` (equal only by deploy `TZ`); runtime `app_settings.tz`
+  override is dead. Unify server bucketing first, then expose tz to the client.
+  Deferred from the B5 offline/tz work (offline half shipped separately).
 - ⚠️ [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78) **P1** ·
   Test audit — replace hardcoded dates that depend on wall-clock proximity
   *(S)*. Time-delayed flake risk; CLAUDE.md convention added.

@@ -828,7 +828,9 @@
       if (!r.ok) throw new Error("HTTP " + r.status);
       resp = await r.json();
     } catch (_) {
-      // queue for later flush
+      // queue for later flush. Mark the idem optimistic-this-session so the flush
+      // re-keys ownIdems and the eventual server echo doesn't double-count.
+      pendingOptimistic.add(idem);
       await IDB.enqueue({ idem, method: "POST", url: cfg.eventsUrl, body: fullPayload, ts: Date.now() });
       bumpPending();
       return;
@@ -886,6 +888,15 @@
     ownDeletes.set(String(id), Date.now());
     setTimeout(() => ownDeletes.delete(String(id)), 60 * 1000);
   }
+  // pendingOptimistic: idems we applied OPTIMISTICALLY this session and queued
+  // for a later flush (offline). It is in-memory (NOT persisted) on purpose: a
+  // page reloaded while offline starts empty, so when it flushes a queued item
+  // its own `event.created` echo is NOT suppressed and correctly bumps the count
+  // (the reload's load-time count excluded the still-queued event). For a
+  // SAME-session flush, this set tells flushOutbox to re-key ownIdems so the echo
+  // is suppressed — the ownIdems 60s TTL (set at enqueue) may have lapsed during a
+  // long offline window, which is the double-count root cause.
+  const pendingOptimistic = new Set();
 
   // ----- row insert / update / remove
   function findRow(ev) {
@@ -2039,6 +2050,11 @@
       const items = await IDB.listOutbox();
       for (const it of items) {
         try {
+          // If WE optimistically counted this item this session, suppress its
+          // imminent event.created echo by re-keying ownIdems NOW — before the
+          // POST, so it's in place even if the echo lands before fetch resolves.
+          // (A reloaded session has an empty set, so its echo correctly bumps.)
+          if (pendingOptimistic.has(it.idem)) rememberOwnIdem(it.idem);
           const r = await fetch(it.url, {
             method: it.method,
             headers: { "Content-Type": "application/json" },
@@ -2046,6 +2062,11 @@
           });
           if (!r.ok) continue;
           const data = await r.json();
+          // POST landed -> the event is on the server; drop the session-pending
+          // mark now (before the fallible dequeue await) so a dequeue throw can't
+          // leave it set. A later re-flush of an undequeued item hits already_exists
+          // (no echo), so the re-key isn't needed then.
+          pendingOptimistic.delete(it.idem);
           await IDB.dequeue(it.idem);
           if (data.event) applyEvent(data.event, { action: "reconciled", source: "flush", idem: it.idem });
           if (data.status === "created_possible_duplicate" && data.duplicate_of) {
