@@ -857,7 +857,11 @@
       });
       if (r.ok) {
         const data = await r.json();
-        applyEvent(data.event, { action: "updated", source: "local" });
+        // Capture the pre-edit event LIVE (before applyEvent's rowUpdater
+        // overwrites row.__event) so the count diff removes the OLD contribution
+        // and re-adds the new — that re-renders the vit-D/tummy banner + strip.
+        const prev = findRow({ id: eventId })?.__event;
+        applyEvent(data.event, { action: "updated", source: "local", prev });
       } else {
         showToast("Couldn't save. Try again.");
       }
@@ -1440,7 +1444,10 @@
     }
   }
   function countUpdater(ev, ctx) {
-    if (APPLY.shouldCount(ctx)) bumpOverviews(ev, ctx.delta);
+    // An edit yields two ops (remove old contribution, add new); create/delete/
+    // undelete yield one; reconcile/own-echo yield none. The seam decides; we
+    // just apply each [event, delta] to the count surfaces.
+    for (const [e, d] of APPLY.countOps(ev, ctx)) bumpOverviews(e, d);
   }
   APPLY.registerUpdater(rowUpdater);
   APPLY.registerUpdater(countUpdater);
@@ -1543,7 +1550,13 @@
         const r = await fetch(`${cfg.eventsUrl}/${ev.id}`);
         if (r.ok) {
           const body = await r.json();
-          if (body && body.event) full = body.event;
+          if (body && body.event) {
+            full = body.event;
+            // Cache the full event on the row so a later edit/delete diffs against
+            // complete data (server rows hydrate only a minimal __event).
+            const row = findRow(full);
+            if (row) row.__event = full;
+          }
         }
       } catch (_) { /* keep optimistic prefill if the fetch fails */ }
     }
@@ -1785,7 +1798,12 @@
         // the count effect for our own created echo (delta-0 updated and the
         // unguarded undeleted echo behave exactly as before — see #98).
         const suppress = kind === "created" && data.idempotency_key && ownIdems.has(data.idempotency_key);
-        applyEvent(data, { action: kind, source: "sse", suppress });
+        // For a remote edit, capture the pre-edit event LIVE so the count diff
+        // removes the old contribution. Our own echo lands after the local apply
+        // already set row.__event = the new event, so prev === data and the
+        // [-1,+1] diff nets to zero — no own-echo suppression needed for edits.
+        const prev = kind === "updated" ? findRow(data)?.__event : undefined;
+        applyEvent(data, { action: kind, source: "sse", suppress, prev });
       } catch (_) {}
     };
     sse.addEventListener("event.created",   handle("created"));

@@ -72,6 +72,45 @@ describe("NBIO_APPLY.shouldCount", () => {
   });
 });
 
+describe("NBIO_APPLY.countOps", () => {
+  // The count-surface operations an action implies: a list of [event, delta]
+  // pairs the caller applies via bumpOverviews. Pinned here so the DOM-free
+  // decision is proven without the DOM.
+  it("created -> add the new event once", () => {
+    expect(window.NBIO_APPLY.countOps({ id: 1 }, { action: "created", delta: 1, suppress: false }))
+      .toEqual([[{ id: 1 }, 1]]);
+  });
+  it("deleted -> remove the event once", () => {
+    expect(window.NBIO_APPLY.countOps({ id: 1 }, { action: "deleted", delta: -1, suppress: false }))
+      .toEqual([[{ id: 1 }, -1]]);
+  });
+  it("own-echo (suppress) -> no count op, but the row still upserts elsewhere", () => {
+    expect(window.NBIO_APPLY.countOps({ id: 1 }, { action: "created", delta: 1, suppress: true }))
+      .toEqual([]);
+  });
+  it("reconciled / delta 0 -> no count op (flush + edit-reconcile do no bump)", () => {
+    expect(window.NBIO_APPLY.countOps({ id: 1 }, { action: "reconciled", delta: 0, suppress: false }))
+      .toEqual([]);
+  });
+  it("updated with prev -> remove the old contribution, add the new (the edit diff)", () => {
+    const prev = { id: 1, occurred_at: "old" };
+    const next = { id: 1, occurred_at: "new" };
+    expect(window.NBIO_APPLY.countOps(next, { action: "updated", delta: 0, prev }))
+      .toEqual([[prev, -1], [next, 1]]);
+  });
+  it("updated without prev -> add the new contribution only (fallback)", () => {
+    const next = { id: 1 };
+    expect(window.NBIO_APPLY.countOps(next, { action: "updated", delta: 0 }))
+      .toEqual([[next, 1]]);
+  });
+  it("updated ignores suppress — own echoes rely on the live-prev net-zero, not suppression", () => {
+    const prev = { id: 1, occurred_at: "old" };
+    const next = { id: 1, occurred_at: "new" };
+    expect(window.NBIO_APPLY.countOps(next, { action: "updated", delta: 0, suppress: true, prev }))
+      .toEqual([[prev, -1], [next, 1]]);
+  });
+});
+
 describe("NBIO_APPLY.applyEvent dispatch", () => {
   let calls;
   beforeEach(() => {
@@ -104,6 +143,12 @@ describe("NBIO_APPLY.applyEvent dispatch", () => {
 
     window.NBIO_APPLY.applyEvent({ id: 2 }, { action: "created", source: "sse", suppress: true });
     expect(calls[2][2]).toMatchObject({ action: "created", source: "sse", suppress: true, delta: 1 });
+  });
+
+  it("carries ctx.prev through to updaters (the edit diff needs the pre-edit event)", () => {
+    const prev = { id: 9, occurred_at: "old" };
+    window.NBIO_APPLY.applyEvent({ id: 9 }, { action: "updated", prev });
+    expect(calls[0][2].prev).toBe(prev);
   });
 
   it("is a no-op for an unknown action — touches NO updater, so no surface moves", () => {

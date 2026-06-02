@@ -1,17 +1,13 @@
 // @ts-check
-// AUDIT GAP G3 — editing an event refreshes the event row but NOT the banner.
-// `submitEdit` (app.js:856) and the SSE `event.updated` handler (app.js:1763)
-// both call only `insertOrUpdateRow`; neither re-renders the vit-D/tummy banner.
-// Verified by MCP probe 2026-06-01: after editing a vit-D's time, the row moved
-// to the new time while the banner stayed frozen at the original.
-//
-// test.fail(): this asserts the DESIRED post-fix behaviour (the banner follows
-// the edit). It RUNS, fails today (the gap, proven continuously in CI), and
-// ALARMS the moment a fix lands. Fixed in PR-B2.
+// G3 — editing an event must refresh the vit-D/tummy banner, not just the row.
+// Before PR-B2, `submitEdit` and the SSE `event.updated` handler routed through
+// applyEvent as a delta-0 (row-only) update, so the banner stayed frozen at the
+// original time. PR-B2 models an edit as remove-old + add-new contribution
+// (bumpOverviews(prev,-1) + bumpOverviews(new,+1)), which re-renders the vit-D
+// banner with the edited time. This spec asserts that fixed behaviour.
 const { test, expect } = require("@playwright/test");
 
 test("G3: vit-D banner follows an edit of the vit-D event's time", async ({ browser }) => {
-  test.fail();
   const ctx = await browser.newContext({ storageState: "playwright/.auth/parent-a.json" });
   const a = await ctx.newPage();
   try {

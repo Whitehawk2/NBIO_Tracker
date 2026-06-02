@@ -40,10 +40,27 @@
   }
 
   // Whether the count surfaces (today-card cells, last-3-days table, banners)
-  // should move. Skip when the delta is zero (edit / reconcile) or when this is
-  // our own SSE echo (already applied optimistically) — see ctx.suppress.
+  // should move. Skip when the delta is zero (reconcile) or when this is our own
+  // SSE echo (already applied optimistically) — see ctx.suppress.
   function shouldCount(ctx) {
     return ctx.delta !== 0 && !ctx.suppress;
+  }
+
+  // The count-surface operations an action implies, as [event, delta] pairs the
+  // caller applies via bumpOverviews. An edit (updated) is modelled as
+  // remove-the-old-contribution + add-the-new, so every aggregate (counts,
+  // formula cc, vit-D/tummy banners, day buckets) recomputes from the existing
+  // bumpOverviews logic without bespoke per-surface edit code. Own-echo edits
+  // are NOT suppressed: by the time our own SSE echo lands, the live `prev` the
+  // caller captured already equals the new event, so [-1,+1] nets to zero.
+  function countOps(ev, ctx) {
+    if (ctx.action === "updated") {
+      const ops = [];
+      if (ctx.prev) ops.push([ctx.prev, -1]);
+      ops.push([ev, 1]);
+      return ops;
+    }
+    return shouldCount(ctx) ? [[ev, ctx.delta]] : [];
   }
 
   // Ordered registry of `(ev, ctx) => void` updaters. Order is a contract:
@@ -72,6 +89,7 @@
       source: (ctx && ctx.source) || "local",
       idem: ctx && ctx.idem,
       suppress: !!(ctx && ctx.suppress),
+      prev: ctx && ctx.prev,
       delta: DELTA[action],
     };
     for (const fn of updaters) fn(ev, full);
@@ -84,5 +102,6 @@
     deltaFor,
     rowAction,
     shouldCount,
+    countOps,
   };
 })();
