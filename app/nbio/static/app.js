@@ -1769,6 +1769,33 @@
 
   // ----- SSE
   let sse = null, sseLastId = 0, sseBackoff = 1000;
+  // ----- header baby-weight chip (G1). A partner's growth (weight) log reaches
+  // this tab over SSE; keep the chip in sync without a reload. Tracks the latest
+  // measurement applied so a stale edit of an older row can't clobber it. (The
+  // posting device updates its own chip from the settings page; the home page
+  // never posts growth, so there's no own-echo double-update.)
+  let lastGrowthKey = null;
+  function updateHeaderWeight(grams) {
+    if (!grams) return;
+    const text = APPLY.fmtGrams(grams);
+    let el = document.querySelector("[data-baby-weight]");
+    if (el) { el.textContent = text; return; }
+    // Create-if-missing: no weight had been logged when the page rendered.
+    const titleDiv = document.querySelector(".app-header .title");
+    if (!titleDiv) return;
+    el = document.createElement("span");
+    el.className = "baby-weight";
+    el.dataset.babyWeight = "";
+    el.textContent = text;
+    titleDiv.appendChild(el);
+  }
+  function applyGrowthSSE(row) {
+    if (!row || row.weight_g == null) return;
+    if (!APPLY.isNewerGrowth(row, lastGrowthKey)) return;
+    lastGrowthKey = { measured_at: row.measured_at, id: row.id };
+    updateHeaderWeight(row.weight_g);
+  }
+
   function connectSSE() {
     setSyncState("connecting");
     try { sse?.close(); } catch (_) {}
@@ -1820,6 +1847,13 @@
         window.NBIO_APP_SETTINGS = data;
       } catch (_) { refreshAppSettings(); }
     });
+    // growth.* carries the full measurement row; reflect a partner's new weight
+    // in the header chip live (G1). `deleted` is {id}-only so it can't recompute
+    // the latest client-side — the chip self-heals on the next page render.
+    const onGrowth = (msg) => { try { applyGrowthSSE(JSON.parse(msg.data)); } catch (_) {} };
+    sse.addEventListener("growth.created", onGrowth);
+    sse.addEventListener("growth.updated", onGrowth);
+    sse.addEventListener("growth.undeleted", onGrowth);
   }
   const SYNC_LABELS = {
     connecting: "Connection: connecting",

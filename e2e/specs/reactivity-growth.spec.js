@@ -1,12 +1,14 @@
 // @ts-check
-// AUDIT GAP G1 — a partner's weight log never reaches this tab's header chip.
-// connectSSE (app.js:1762-1775) registers NO `growth.*` listener, though the
-// server publishes growth.created (routes/growth.py:38). Only the posting device
-// updates the chip (settings.js refreshHeaderWeight). = #81 bug (b). Fixed in PR-B3.
+// G1 — a partner's weight log must reach this tab's header chip live. PR-B3 adds
+// `growth.*` SSE listeners in connectSSE that update [data-baby-weight] (the
+// server publishes the full growth row; settings.js only updates the poster's
+// own chip and isn't even loaded on the home page). = #81 bug (b).
 //
 // Robust on the shared DB: read the partner's CURRENT chip value, post a DIFFERENT
 // weight from the other parent, assert the partner moves to it (so a stale
-// first-paint value can never make this pass by accident).
+// first-paint value can never make this pass by accident). NOTE: G1 going green
+// also relies on growth NOT being SSE-replayed + seed/POST sharing today's date,
+// so the partner's first growth event is always accepted (see isNewerGrowth).
 const { test, expect } = require("@playwright/test");
 
 const CHIP = "[data-baby-weight]";
@@ -16,7 +18,6 @@ const CHIP = "[data-baby-weight]";
 const grams = async (loc) => parseInt(((await loc.textContent()) || "").replace(/[^0-9]/g, ""), 10);
 
 test("G1: partner header weight chip updates when the other parent logs a weight", async ({ browser }) => {
-  test.fail();
   const ctxA = await browser.newContext({ storageState: "playwright/.auth/parent-a.json" });
   const ctxB = await browser.newContext({ storageState: "playwright/.auth/parent-b.json" });
   const a = await ctxA.newPage();
