@@ -95,6 +95,25 @@
     for (const fn of updaters) fn(ev, full);
   }
 
+  // ----- growth (weight) helpers (G1). Growth is NOT an event-list event (no
+  // row, no count/delta), so it does NOT go through the dispatch registry above
+  // — app.js wires a dedicated growth.* SSE listener to the header-weight chip.
+  // These two pure helpers live here only so they're unit-testable (app.js is a
+  // closed IIFE that exposes nothing).
+  function fmtGrams(grams) {
+    return `${String(grams).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} g`;
+  }
+  // The header chip shows the LATEST weight. Accept an incoming growth row only
+  // if it is at least as recent as the last one applied: a newer measurement
+  // date, or the same date with an id >= the last (an update of the shown row,
+  // or a newer same-day measurement). A null lastKey accepts the first event.
+  function isNewerGrowth(incoming, lastKey) {
+    if (!lastKey) return true;
+    if (incoming.measured_at > lastKey.measured_at) return true;
+    if (incoming.measured_at < lastKey.measured_at) return false;
+    return incoming.id >= lastKey.id;
+  }
+
   window.NBIO_APPLY = {
     applyEvent,
     registerUpdater,
@@ -103,5 +122,7 @@
     rowAction,
     shouldCount,
     countOps,
+    fmtGrams,
+    isNewerGrowth,
   };
 })();

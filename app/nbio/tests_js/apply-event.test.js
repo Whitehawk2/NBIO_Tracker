@@ -200,3 +200,36 @@ describe("call-site scenarios (the review's behavior-preservation traps)", () =>
     expect(scenario({ action: "undeleted" })).toEqual({ row: "upsert", counts: true });
   });
 });
+
+// Growth (weight) helpers — pure, used by app.js's header-weight chip updater
+// (G1). Growth is not an event-list event, so it bypasses the dispatch registry;
+// these live on the seam only so they're unit-testable (app.js is a closed IIFE).
+describe("NBIO_APPLY.fmtGrams", () => {
+  it("comma-groups thousands and appends ' g'", () => {
+    expect(window.NBIO_APPLY.fmtGrams(900)).toBe("900 g");
+    expect(window.NBIO_APPLY.fmtGrams(3420)).toBe("3,420 g");
+    expect(window.NBIO_APPLY.fmtGrams(12345)).toBe("12,345 g");
+  });
+});
+
+describe("NBIO_APPLY.isNewerGrowth", () => {
+  it("accepts the first event (no prior key)", () => {
+    expect(window.NBIO_APPLY.isNewerGrowth({ measured_at: "2026-06-01", id: 5 }, null)).toBe(true);
+  });
+  it("accepts a later measurement date", () => {
+    expect(
+      window.NBIO_APPLY.isNewerGrowth({ measured_at: "2026-06-02", id: 1 }, { measured_at: "2026-06-01", id: 9 }),
+    ).toBe(true);
+  });
+  it("rejects an earlier date (don't clobber the chip with a stale weight)", () => {
+    expect(
+      window.NBIO_APPLY.isNewerGrowth({ measured_at: "2026-05-30", id: 99 }, { measured_at: "2026-06-01", id: 1 }),
+    ).toBe(false);
+  });
+  it("same date: accepts same-or-higher id (update or newer row), rejects lower", () => {
+    const last = { measured_at: "2026-06-01", id: 7 };
+    expect(window.NBIO_APPLY.isNewerGrowth({ measured_at: "2026-06-01", id: 7 }, last)).toBe(true);
+    expect(window.NBIO_APPLY.isNewerGrowth({ measured_at: "2026-06-01", id: 8 }, last)).toBe(true);
+    expect(window.NBIO_APPLY.isNewerGrowth({ measured_at: "2026-06-01", id: 6 }, last)).toBe(false);
+  });
+});
