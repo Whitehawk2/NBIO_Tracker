@@ -114,6 +114,70 @@
     return incoming.id >= lastKey.id;
   }
 
+  // ----- last-of-each (G4) pure helpers. The today-card "last feed/wee/poo"
+  // cells show the ALL-TIME most-recent non-deleted event of each lane (feed =
+  // breast OR formula), so app.js wires a dedicated last-of-each updater that
+  // re-renders a cell when an incoming event is at least as recent as the one it
+  // shows. UPSERT-ONLY by design: created/undeleted/updated compare the passed
+  // `ev` against the cell's current key — never reading DOM rows, honouring the
+  // seam's "MUST NOT read the live event row by id" contract above. Delete-
+  // recompute of the displayed-last needs the full event set (older than the
+  // event-list's ~2-day window), so it's deferred to #93's hybrid store. These
+  // helpers are pure so they're unit-testable; app.js owns the DOM glue.
+
+  // event type -> today-card last-of-each lane key, or null for types with no
+  // such cell (vitd / tummy_time live in their own banners). Mirrors countKey's
+  // breast+formula -> "feed" combining, but keyed to the data-last cells.
+  function laneForType(type) {
+    if (type === "breast" || type === "formula") return "feed";
+    if (type === "wee" || type === "poo") return type;
+    return null;
+  }
+
+  // An optimistic, not-yet-reconciled event id ("local:uuid"), as minted by the
+  // create path before the server assigns a real integer id.
+  function isLocalId(id) {
+    return typeof id === "string" && id.startsWith("local:");
+  }
+
+  // Whether `incoming` should replace the event a last-of-each cell currently
+  // shows. The cell shows the latest by (occurred_at, id); accept a strictly
+  // newer measurement, or an equal occurred_at with id >= current (a newer
+  // same-instant event, or a re-render of the shown one). A null currentKey
+  // (empty "never" cell) or a missing current id (fresh server render) accepts.
+  // Optimistic "local:" ids are NOT comparable to server integers, so an
+  // optimistic value on EITHER side accepts: this is what unsticks the cell when
+  // an optimistic create's own server echo (real id) lands at the SAME instant —
+  // a raw `>=` would compute `42 >= "local:.."` => `42 >= NaN` => false and
+  // reject the real event forever. Real ids compare numerically (dataset
+  // attributes stringify them). Same tie-break spirit as isNewerGrowth.
+  function lastCellWins(incoming, currentKey) {
+    if (!currentKey) return true;
+    if (incoming.occurred_at > currentKey.occurred_at) return true;
+    if (incoming.occurred_at < currentKey.occurred_at) return false;
+    if (currentKey.id == null) return true;
+    if (isLocalId(currentKey.id) || isLocalId(incoming.id)) return true;
+    return Number(incoming.id) >= Number(currentKey.id);
+  }
+
+  // The PLAIN-TEXT detail suffix for a last-of-each cell, mirroring the
+  // today_card.html template's per-lane fields. Returns text only (with leading
+  // " · " separators) — NO markup — so the caller injects it via textContent and
+  // free-text notes can never become HTML. Pre-escaping here would double-encode.
+  function lastSuffix(lane, ev) {
+    const parts = [];
+    if (lane === "feed") {
+      if (ev.feed_side) parts.push(ev.feed_side);
+      if (ev.feed_duration_min) parts.push(`${ev.feed_duration_min} min`);
+    } else if (lane === "wee") {
+      if (ev.notes) parts.push(ev.notes);
+    } else if (lane === "poo") {
+      if (ev.poo_quality) parts.push(`type ${ev.poo_quality}`);
+      if (ev.notes) parts.push(ev.notes);
+    }
+    return parts.map((p) => ` · ${p}`).join("");
+  }
+
   window.NBIO_APPLY = {
     applyEvent,
     registerUpdater,
@@ -124,5 +188,8 @@
     countOps,
     fmtGrams,
     isNewerGrowth,
+    laneForType,
+    lastCellWins,
+    lastSuffix,
   };
 })();

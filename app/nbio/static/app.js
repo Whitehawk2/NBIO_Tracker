@@ -1449,8 +1449,51 @@
     // just apply each [event, delta] to the count surfaces.
     for (const [e, d] of APPLY.countOps(ev, ctx)) bumpOverviews(e, d);
   }
+
+  // ----- last-of-each today-card cells (#today-card [data-last]) — G4.
+  // Re-render a lane's "last feed/wee/poo" cell when an incoming event is at
+  // least as recent as the one it shows. UPSERT-ONLY: the seam decides the
+  // candidate from the passed `ev` alone (no DOM-row reads — honours the seam
+  // contract), so a delete of the displayed-last is intentionally NOT handled
+  // here (the all-time previous event can be older than the event-list's ~2-day
+  // window; #93's store will recompute it). Idempotent under optimistic +
+  // own-echo SSE (rendering the same event twice is a no-op), so suppression is
+  // irrelevant and deliberately ignored.
+  function currentLastKey(li) {
+    const b = li.querySelector("b[data-rel]");
+    if (!b) return null; // empty "never" cell — any candidate wins
+    const id = li.dataset.lastId;
+    return { occurred_at: b.dataset.rel, id: id == null ? null : id };
+  }
+  function renderLastCell(li, lane, ev) {
+    const span = document.createElement("span");
+    const b = document.createElement("b");
+    b.dataset.rel = ev.occurred_at;
+    b.textContent = fmtRel(ev.occurred_at);
+    span.appendChild(b);
+    const suffix = APPLY.lastSuffix(lane, ev); // plain text — inject as a text node
+    if (suffix) span.appendChild(document.createTextNode(suffix));
+    const lbl = li.querySelector(".lbl");
+    // textContent="" (not innerHTML) clears children while keeping the value
+    // injection markup-free — see the XSS guard pinned in test_last_of_each.
+    li.textContent = ""; // drop the old value span (or the muted "never")
+    if (lbl) li.appendChild(lbl);
+    li.appendChild(span);
+    li.dataset.lastId = ev.id;
+  }
+  function lastOfEachUpdater(ev, ctx) {
+    if (APPLY.rowAction(ctx.action) !== "upsert") return; // delete deferred to #93
+    const lane = APPLY.laneForType(ev.type);
+    if (!lane) return;
+    const li = document.querySelector(`#today-card [data-last="${lane}"]`);
+    if (!li) return;
+    if (!APPLY.lastCellWins(ev, currentLastKey(li))) return;
+    renderLastCell(li, lane, ev);
+  }
+
   APPLY.registerUpdater(rowUpdater);
   APPLY.registerUpdater(countUpdater);
+  APPLY.registerUpdater(lastOfEachUpdater);
 
   // ----- row gestures: tap = edit, swipe-left = delete, ⋯ = action sheet
   function attachRowGestures(row) {

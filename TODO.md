@@ -448,10 +448,11 @@ v1.2.0 scope tracked in [#76](https://github.com/Whitehawk2/NBIO_Tracker/issues/
 - ⚠️ [#78](https://github.com/Whitehawk2/NBIO_Tracker/issues/78) **P1** ·
   Test audit — replace hardcoded dates that depend on wall-clock proximity
   *(S)*. Time-delayed flake risk; CLAUDE.md convention added.
-- 🆕 [#94](https://github.com/Whitehawk2/NBIO_Tracker/issues/94) **P2** ·
+- ✅ [#94](https://github.com/Whitehawk2/NBIO_Tracker/issues/94) **P2** ·
   E2E test foundation: containerized Playwright harness + seeded app +
-  gated CI *(M)*. Chromium mobile-emulation; host never installs Playwright
-  (container in CI, MCP plugin for dev). The base #62 builds on.
+  gated CI *(M)* — shipped via PR #96 (Chromium mobile-emulation, host never
+  installs Playwright: container in CI + MCP plugin for dev; gated `e2e` job).
+  The base the reactivity audit (#97) and Milestone B fixes build on.
 - 🆕 [#62](https://github.com/Whitehawk2/NBIO_Tracker/issues/62) **P2** ·
   Playwright E2E: happy-path + offline-flush + SSE *(M)* — the three
   scenarios that run on the #94 harness.
