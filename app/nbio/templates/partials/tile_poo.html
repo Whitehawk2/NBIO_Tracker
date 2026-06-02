@@ -4,7 +4,7 @@
       <span class="emoji" aria-hidden="true">💩</span>
       <span class="label">POO</span>
     </div>
-    <div class="tile-ago" id="ago-poo">
+    <div class="tile-ago" id="ago-poo"{% if today.last.poo %} data-last-id="{{ today.last.poo.id }}"{% endif %}>
       {% if today.last.poo %}
         <span data-rel="{{ today.last.poo.occurred_at }}">{{ today.last.poo.occurred_at | relative }}</span>
         {% if today.last.poo.actor_color %}

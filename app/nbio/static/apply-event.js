@@ -134,6 +134,16 @@
     return null;
   }
 
+  // event type -> its OWN tile-caption id suffix (#ago-<type>), or null for types
+  // with no logging tile. PER-TYPE, deliberately NOT laneForType: breast and
+  // formula have SEPARATE tiles, so they must NOT collapse to a shared "feed"
+  // key (that would cross-update the two tiles). The "both" tile is a static
+  // caption (it emits a wee + a poo, which drive #ago-wee / #ago-poo on their own).
+  function tileCaptionType(type) {
+    if (type === "breast" || type === "formula" || type === "wee" || type === "poo") return type;
+    return null;
+  }
+
   // An optimistic, not-yet-reconciled event id ("local:uuid"), as minted by the
   // create path before the server assigns a real integer id.
   function isLocalId(id) {
@@ -189,6 +199,7 @@
     fmtGrams,
     isNewerGrowth,
     laneForType,
+    tileCaptionType,
     lastCellWins,
     lastSuffix,
   };

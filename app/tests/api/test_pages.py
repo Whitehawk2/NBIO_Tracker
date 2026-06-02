@@ -1345,7 +1345,7 @@ def test_tile_no_recent_absent_when_recent_event_exists(client):
     import re
 
     m = re.search(
-        r'<div class="tile-ago" id="ago-wee">(.*?)</div>',
+        r'<div class="tile-ago" id="ago-wee"[^>]*>(.*?)</div>',
         r.text,
         flags=re.DOTALL,
     )
@@ -1356,7 +1356,7 @@ def test_tile_no_recent_absent_when_recent_event_exists(client):
     # Other tiles still show it (no breast/formula/poo logged).
     for tile_id in ("ago-breast", "ago-formula", "ago-poo"):
         m = re.search(
-            rf'<div class="tile-ago" id="{tile_id}">(.*?)</div>',
+            rf'<div class="tile-ago" id="{tile_id}"[^>]*>(.*?)</div>',
             r.text,
             flags=re.DOTALL,
         )
@@ -1403,7 +1403,7 @@ def test_formula_tile_shows_recent_when_breast_is_more_recent(client):
     import re
 
     m = re.search(
-        r'<div class="tile-ago" id="ago-formula">(.*?)</div>',
+        r'<div class="tile-ago" id="ago-formula"[^>]*>(.*?)</div>',
         r.text,
         flags=re.DOTALL,
     )
@@ -1417,7 +1417,7 @@ def test_formula_tile_shows_recent_when_breast_is_more_recent(client):
 
     # Symmetric: the breast tile must also still show its own recent.
     m = re.search(
-        r'<div class="tile-ago" id="ago-breast">(.*?)</div>',
+        r'<div class="tile-ago" id="ago-breast"[^>]*>(.*?)</div>',
         r.text,
         flags=re.DOTALL,
     )
@@ -1455,7 +1455,7 @@ def test_breast_tile_shows_recent_when_formula_is_more_recent(client):
     import re
 
     m = re.search(
-        r'<div class="tile-ago" id="ago-breast">(.*?)</div>',
+        r'<div class="tile-ago" id="ago-breast"[^>]*>(.*?)</div>',
         r.text,
         flags=re.DOTALL,
     )

@@ -251,6 +251,27 @@ describe("NBIO_APPLY.laneForType", () => {
   });
 });
 
+describe("NBIO_APPLY.tileCaptionType (per-TYPE tile, NOT the combined feed lane)", () => {
+  it("returns the type itself for the four logging tiles", () => {
+    expect(window.NBIO_APPLY.tileCaptionType("breast")).toBe("breast");
+    expect(window.NBIO_APPLY.tileCaptionType("formula")).toBe("formula");
+    expect(window.NBIO_APPLY.tileCaptionType("wee")).toBe("wee");
+    expect(window.NBIO_APPLY.tileCaptionType("poo")).toBe("poo");
+  });
+  it("keeps breast and formula SEPARATE — unlike laneForType which combines them", () => {
+    // The tiles are per-type; laneForType collapses both to "feed". A regression
+    // that re-points tileCaptionType at laneForType would cross-update tiles.
+    expect(window.NBIO_APPLY.tileCaptionType("breast")).not.toBe(window.NBIO_APPLY.laneForType("breast"));
+    expect(window.NBIO_APPLY.laneForType("breast")).toBe("feed");
+  });
+  it("has no tile for the static 'both' caption, banner-only, or unknown types", () => {
+    expect(window.NBIO_APPLY.tileCaptionType("both")).toBe(null);
+    expect(window.NBIO_APPLY.tileCaptionType("vitd")).toBe(null);
+    expect(window.NBIO_APPLY.tileCaptionType("tummy_time")).toBe(null);
+    expect(window.NBIO_APPLY.tileCaptionType("nope")).toBe(null);
+  });
+});
+
 describe("NBIO_APPLY.lastCellWins", () => {
   it("accepts any candidate into an empty cell (no current key)", () => {
     expect(window.NBIO_APPLY.lastCellWins({ occurred_at: "2026-06-02T10:00:00Z", id: 1 }, null)).toBe(true);

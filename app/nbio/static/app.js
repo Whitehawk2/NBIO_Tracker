@@ -1491,9 +1491,53 @@
     renderLastCell(li, lane, ev);
   }
 
+  // ----- per-type tile-button "last X ago" captions (#ago-<type>). Same bug
+  // class and same UPSERT-ONLY design as the today-card cells above, a DIFFERENT
+  // surface: each logging tile shows its OWN type's last event (breast and
+  // formula are separate tiles, not the combined "feed"). Reuses lastCellWins /
+  // isLocalId via the seam; delete-recompute deferred to #93.
+  function currentTileKey(agoEl) {
+    const rel = agoEl.querySelector("span[data-rel]");
+    if (!rel) return null; // empty "no recent" caption — any candidate wins
+    const id = agoEl.dataset.lastId;
+    return { occurred_at: rel.dataset.rel, id: id == null ? null : id };
+  }
+  function renderTileCaption(agoEl, ev) {
+    const rel = document.createElement("span");
+    rel.dataset.rel = ev.occurred_at;
+    rel.textContent = fmtRel(ev.occurred_at);
+    agoEl.textContent = ""; // drop the old rel span / "no recent" (markup-free rebuild)
+    agoEl.appendChild(rel);
+    // Brand detail is formula-only (mirrors tile_formula.html); never on breast/wee/poo.
+    if (ev.type === "formula" && ev.formula_brand) {
+      const brand = document.createElement("span");
+      brand.className = "muted";
+      brand.textContent = ` · ${ev.formula_brand}`;
+      agoEl.appendChild(brand);
+    }
+    if (ev.actor_color) {
+      const dot = document.createElement("span");
+      dot.className = "actor-dot";
+      dot.style.background = ev.actor_color; // CSS-context property, not markup
+      dot.title = ev.actor_name || ""; // attribute property, not markup
+      agoEl.appendChild(dot);
+    }
+    agoEl.dataset.lastId = ev.id;
+  }
+  function tileCaptionUpdater(ev, ctx) {
+    if (APPLY.rowAction(ctx.action) !== "upsert") return; // delete deferred to #93
+    const t = APPLY.tileCaptionType(ev.type);
+    if (!t) return;
+    const ago = document.getElementById(`ago-${t}`);
+    if (!ago) return;
+    if (!APPLY.lastCellWins(ev, currentTileKey(ago))) return;
+    renderTileCaption(ago, ev);
+  }
+
   APPLY.registerUpdater(rowUpdater);
   APPLY.registerUpdater(countUpdater);
   APPLY.registerUpdater(lastOfEachUpdater);
+  APPLY.registerUpdater(tileCaptionUpdater);
 
   // ----- row gestures: tap = edit, swipe-left = delete, ⋯ = action sheet
   function attachRowGestures(row) {
